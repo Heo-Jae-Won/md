@@ -2464,7 +2464,188 @@ function login() {
 	confirmModal('로그인에 성공했습니다.', redirectIndexPage)
 }
 ```
-	
 
 
+## <span style="color:#802548">_14. 순수함수_</span>	
+```javascript
+let num1 = 10;
+let num2 = 20;
+function impureSum1() {
+	return num1 + num2;
+}
+
+function impureSum2(newNum) {
+	return num1 + newNum;
+}
+
+impureSum1(); //30
+
+num1 = 100;
+impureSum2(30); //130. 누가 저 변수를 변경하면 값이 변화해버림.
+
+function pureSum(num1, num2) { //인자로 넣어서 외부 변화를 신경쓰지 않고 진행하게 변경. 이건 원시형에만 해당
+	return num1 + num2;
+}
+
+pureSum(10, 20); //30
+num1 = 100;
+pureSum(10, 20); //30
+num1 = 50;
+pureSum(10, 20); //30
+```
+
+- 객체의 property는 parameter로 받고 조작하면 바뀐다.
+- 따라서 아예 새로운 객체를 return해야한다.
+```javascript
+const obj = { one: 1};
+function changeObj(targetObj) { //객체는 원시형처럼 바꾼다고 하면 바뀌어 버림.
+	targetObj.one = 100;
+
+	return targetObj;
+}
+changeObj(obj); 
+console.log(obj); // {one: 100}
+
+function makeNewObj(targetObj) { //새로운 객체를 반환하게 변경
+	return {...targetObj, one: 100};
+}
+
+makeNewObj(obj); //{one: 100}
+console.log(obj); //{one: 1}
+```
+
+## <span style="color:#802548">_15. 클로저_</span>
+- 클로저는 외부의 context를 기억한다. parameter도 기억한다는 뜻이다.
+```javascript
+function add(num1) {
+	return function sum(num2) {
+		return num1 + num2;
+	}
+}
+
+const addOne = add(1);
+const addTwo = add(2);
+
+addOne(3); //add(1)으로 add()에 1을 넘긴 상태에서 3을 sum()에 넣은 것. 4
+add(1)(3); //addOne(3)과 동일
+```
+
+- 3개로 겹쳐있어도 closure는 잘 돌아간다.
+```javascript
+function add(num1) {
+	return function (num2) {
+		return function (calculateFn) {
+			return calculateFn(num1, num2);
+		}
+	}
+}
+
+function sum(num1, num2) {
+	return num1 + num2;
+}
+
+function multiple(num1, num2) {
+	return num1 * num2;
+}
+ 
+const addOne = add(1)(2);
+const addTwo = add(5)(2);
+const sumAddOne = addOne(sum); //3
+const sumAddOne = add(1)(2)(sum); //3
+const sumMultipleOne = addOne(multiple); //2
+const sumAddTwo = addTwo(sum); //7
+const sumMultipleTwo = addTwo(multiple); //10
+const sumMultipleTwo = add(5)(2)(multiple); //10
+```
+
+- if문 떡칠 혹은 switch문을 아래와 같이 closure를 활용해 바꿀 수도 있다.
+```javascript
+function log(value, level) {
+	switch(level) {
+		case "log":
+			console.log(value);
+			break;
+		case "info":
+			console.info(value);
+			break;
+		case "warn":
+			console.warn(value);
+			break;
+		case "error":
+			console.error(value);
+			break;
+	}
+}
+
+
+function log(value) {
+	return function (fn) {
+		fn(value);
+	}
+}
+
+const logFoo = log('foo');
+
+logFoo((v) => console.log(v));
+logFoo((v) => console.info(v));
+logFoo((v) => console.warn(v));
+logFoo((v) => console.error(v));
+```
+
+- closure를 활용하는 것은 고차함수에도 쓰일 수 있다.
+```javascript
+const arr = [1,2,3,'A','B','C'];
+const isNumber = (value) => typeof value === 'number';
+const isString = (value) => typeof value === 'string';
+arr.filter(isNumber);
+
+function isTypeOf(type, value) {
+	return typeof value === type;
+}
+const isNumber = (value) => isTypeOf('number', value);
+const isString = (value) => isTypeOf('string', value);
+arr.filter(isNumber);
+
+function isTypeOf(type) {
+	return function (value) {
+		return typeof value === type;
+	}
+}
+function isTypeOf(type) {
+	return (value) => typeof value === type;
+}
+const isNumber = isTypeOf('number');
+const isString = isTypeOf('string');
+arr.filter(isNumber); //[1,2,3]
+arr.filter(isString);//['A','B','C']
+```
+
+- fetch api에서도 쓰일 수 있다.
+```javascript
+function fetcher(endpoint) {
+	return function(url, options) {
+		return fetch(endpoint + url, options)
+			.then((res) => {
+				if(res.ok) {
+					return res.json();
+				} else {
+					throw new Error(res.error);
+				}
+			})
+			.catch((err) => console.log(err))
+	}
+}
+
+const naverApi = fetcher('http://naver.com');
+const daumApi = fetcher('http://daum.net');
+ 
+ daumApi('/webtoon').then((res) => res);
+ nvaerApi('/webtoon').then((res) => res);
+```
+
+- DOM eventListener에도 쓰일 수 있다.
+```javascript
+someElement.addEventListener('click',debounce(handleClick, 500));
+someElement.addEventListener('click',throttle(handleClick, 500));
+```
 
