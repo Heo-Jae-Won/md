@@ -1815,17 +1815,155 @@ async function foo() {
 foo(); //3초 걸림
 ```
 
+- 계속 이어서 동기적인 처리가 필요하다. 이전의 promise 값을 받아서 진행하고 있다.
 ```javascript
 async function bar(n) {
     const a = await new Promise(resolve => setTimeout(() => resolve(n) ,3000));
     const b = await new Promise(resolve => setTimeout(() => resolve(a+1),2000));
     const c = await new Promise(resolve => setTimeout(() => resolve(b + 1), 1000));
 
-    
+    console.log([a,b,c]);
 }
 
+bar(1);
+```
 
+## <span style="color:#802548">_8. Set과 Map_</span>
+- Set객체는 중복되지 않는 값의 집합이다.
 
+```javascript
+const set1 = new Set([1,2,2,3]);
+console.log(set1); //{1,2,3}
+
+const set2 = new Set('hello');
+console.log(set2) //{"h","e","l","o"}
+```
+
+- 따라서 set으로 만들면 filter를 걸 필요가 없다.
+
+```javascript
+const uniq = array => array.filter((v, i, self) => self.indexOf(v) === i);
+console.log(uniq(2,1,1,3,2,4));// [2,1,3,4]
+
+const uniq = array => [...new Set(array)]; //set이 아니라 array이다.
+console.log(uniq(2,1,1,3,2,4));// [2,1,3,4]
+```
+
+- Set의 size property는 readonly기 때문에 변경이 불가능하다.
+```javascript
+const set = new Set([1,2,3])
+set.size = 10;
+console.log(set.size); //3
+```
+
+- set에 element를 넣을 때는 add로 넣는다.
+```javascript
+const set = new Set();
+set.add(1); //1이 추가된 새로운 Set을 반환
+set.add(1).add(2);//1이 추가된 새로운 Set에 또 2를 추가한 새로운 Set을 반환
+console.log(set); 
+```
+
+- set이 요소를 포함하고 있는지 보려면 has로 본다.
+```javascript
+const set = new Set([1,2,3]);
+console.log(set.has(2)); //true
+console.log(set.has(4)); //false
+```
+
+- set이 요소를 제거하려면 delete다.
+- 존재하지 않는 요소를 제거해도 에러가 나지 않고 무시된다.
+- delete는 연속 호출이 불가능하다. return 값이 boolean이다.
+```javascript
+const set = new Set([1,2,3]);
+set.delete(2);
+console.log(set); //{1,3}
+set.delete(2).delete(1) //TypeError:delete is not a function
+```
+
+- 요소를 일괄 삭제하려면 clear다.
+```javascript
+const set = new Set([1,2,3]);
+set.clear(); //return은 undefined
+```
+
+- 요소를 순회하려면 forEach를 사용한다.
+```javascript
+const set = new Set([1,2,3]);
+set.forEach((v) => console.log(v)); // 1 2 3
+```
+
+- set으로 집합 연산을 구현할 수 있다.
+- 아래는 교집합이다.
+```javascript
+Set.prototype.intersection = function(set) {
+    const result = new Set();
+
+    for(const value of set) {
+        if(this.has(value)){
+            result.add(value);
+        }
+    }
+
+    return result;
+}
+
+Set.prototype.intersection = function (set) {
+    return new Set([...this].filter(v => set.has(v)));
+}
+
+const setA = new Set([1,2,3,4]);
+const setB = new Set([2,4]);
+
+console.log(setA.intersection(setB)); //{2,4};
+console.log(setB.intersection(setA)); //{2,4};
+```
+
+- 아래는 합집합이다.
+```javascript
+Set.prototype.union = function(set) {
+    const result = new Set(this);
+
+    for(const value of set) {
+        result.add(value);
+    }
+
+    return result;
+}
+
+Set.prototype.union = function (set) {
+    return new Set([...this, ...set]);
+};
+
+const setA = new Set([1,2,3,4]);
+const setB = new Set([2,4]);
+
+console.log(setA.union(setB)); // {1,2,3,4}
+console.log(setB.union(setA));// {2,4,1,3}
+```
+
+- 아래는 차집합이다.
+```javascript
+Set.prototype.difference = function(set) {
+    const result = new Set(this);
+
+    for(const value of set) {
+        result.delete(value);
+    }
+
+    return result;
+}
+
+Set.prototype.difference = function (set) {
+    return new Set([...this].filter(v => !set.has(v)));
+};
+
+const setA = new Set([1,2,3,4]);
+const setB = new Set([2,4]);
+
+console.log(setA.difference(setB)); // {1,3}
+console.log(setB.difference(setA));// {}
+```
 
 
 
