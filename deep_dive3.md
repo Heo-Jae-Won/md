@@ -1231,4 +1231,609 @@ textarea.addEventListener("input", function () {
 });
 ```
 
+## <span style="color:#802548">_7. 비동기_</span>
+- setTimeout은 비동기처리로 동작한다.
+- setInterval은 비동기처리로 동작한다.
+
+```javascript
+setTimeout(() => console.log('Hi!')/*,0*/); 
+setTimeout(() => console.log('Hi!'), 1000); 
+setTimeout((name) => console.log(`${name}`), 1000, 'Lee'); 
+
+const timer = setTimeout(() => console.log('Hi!',1000));
+clearTimeout(timer);
+
+let count = 1;
+const timeoutId = setInterval(() => {
+    console.log(count)
+    if(count === 5){
+        clearInterval(timeoutId);
+    }
+    count = count + 1;
+    },1000); //
+```
+
+- scroll, resize, input, mousemove는 짧은 시간에 연속 발생한다.
+- 따라서 이벤트 핸들러가 과도하게 노출되지 않게 디바운스와 스로틀 처리를 해주면 좋다.
+
+```html
+<!DOCTYPE html>
+<html>
+<body>
+    <button>click me</button>
+    <pre>일반 클릭 이벤트 카운터
+        <span class="normal-msg">0</span>
+    </pre>
+     <pre>디바운스 클릭 이벤트 카운터
+        <span class="debounce-msg">0</span>
+    </pre>
+     <pre>스로틀 클릭 이벤트 카운터
+        <span class="throttle-msg">0</span>
+    </pre>
+    <script>
+        const $button = document.querySelector('button');
+        const $normalMsg = document.querySelector('normal-msg');
+        const $debounceMsg = document.querySelector('debounce-msg');
+        const $throttleMsg = document.querySelector('throttle-msg');
+    
+    const debounce = (callback, delay) => {
+        let timerId;
+        return (...args) => {
+            if(timerId) {
+                clearTimeout(timerId);
+            }
+            timerId = setTimeout(callback, delay, ...args);
+        }
+    }
+
+    const throttle = (callback, delay) => {
+        let timerId;
+        return (...args) => {
+            if(timerId) {
+                return;
+            }
+            timerId = setTimeout(() => {
+                callback(...args);
+                timerId = null;
+            }, delay)
+        }
+    }
+
+    $button.addEventListener('click',() => {
+        $normalMsg.textContent = +$normalMsg.textCont + 1;
+    })
+
+    $button.addEventListener('click', debounce(() => {
+        $debounceMsg.textContent = +$debounceMsg.textCont + 1;
+    }, 500))
+
+    $button.addEventListener('click',throttle(() => {
+        $throttleMsg.textContent = +$throttleMsg.textContent + 1;
+    },500))
+    </script>
+</body>
+</html>
+```
+
+- input에 0.3초 내 입력이 없으면 debounce 내의 callback이 발동된다.
+- 0.3초 내에 입력이 생기면 새로운 타이머를 재설정한다.
+- 따라서 이벤트핸들러 자체는 1번만 호출되는 셈이다.
+- 다만 이거보다는 lodash의 debounce 함수를 사용하는 것이 좋다. 아래는 단순하게 만들어진 예시다.
+```html
+<!DOCTYPE html>
+<html>
+<body>
+    <input type="text">
+    <div class="msg"></div>
+    <script>
+        const $input = document.querySelector('input');
+        const $msg = document.querySelector('.msg');
+        
+        const debounce = (callback, delay) => {
+            let timerId;
+            return (...args) => {
+                if(timerId) {
+                    clearTimeout(timerId);
+                }
+                timerId = setTimeout(callback,delay, ...args);
+            }
+        }
+
+        $input.oninput = debounce((e) => {
+            $msg.textContent = e.target.value;
+        },300)
+
+    </script>
+</body>
+</html>
+```
+
+- scroll 이벤트는 연속발생하는데, 일정 시간 단위로 이벤트 핸들러가 호출되도록 한다.
+- delay 시간 간격으로 콜백 함수가 호출된다.
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .container {
+            width: 300px,
+            height: 300px,
+            background-color: rebeccapurple;
+            overflow: scroll;
+        }
+
+        .content {
+            width: 300px;
+            height: 1000vh;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content"></div>
+    </div>
+    <div>
+        일반 이벤트 핸들러가 scroll 이벤트를 처리한 횟수:
+        <span class="normal-count">0</span>
+    </div>
+    <div>
+        스로틀 이벤트 핸들러가 scroll 이벤트를 처리한 횟수:
+        <span class="throttle-count">0</span>
+    </div>
+
+    <script>
+        const $container = document.querySelector('.container');
+        const $normalCount = document.querySelector('.normal-count');
+        const $throttleCount = document.querySelector('.throttle-count');
+
+        const throttle = (callback, delay) => {
+            let timerId;
+            return (...args) => {
+                if(timerId) {
+                    return;
+                }
+                timerId = setTimeout(() => {
+                    callback(...args);
+                    timerId = null;
+                }, delay);
+            }
+        }
+
+        let normalCount = 0;
+        $container.addEventListener('scroll', () => {
+            $normalCount.textContent = ++normalCount;
+        });
+
+        let throttleCount = 0;
+        $container.addEventListener('scroll',throttle(() => {
+            $throttleCount.textContent = ++throttleCount; 
+        }, 100));
+    </script>
+</body>
+</html>
+```
+
+- JS 엔진은 단 하나의 call stack을 가진다. 최상위 요소인 실행 중인 실행 컨텍스트만 실행된다.
+- 실행 대기 중인 태스크를 제외하면 모두 대기중이다. 현재 실행중인 함수가 종료되어야만 다른 함수가 실행된다.
+- 이를 회피하려면 비동기로 처리하는 setTimeout, setInterval을 실행해야 한다.
+```
+JS엔진은 싱글 스레드로 동작하지만 브라우저는 멀티 스레드로 동작한다.
+브라우저는 JS엔진 외에도 렌더링 엔진과 Web API를 제공한다.
+timeout 설정과 timeout태스트 큐에 등록하는 처리는 JS 엔진이 아니라 브라우저가 실행한다.
+```
+- 브라우저 환경이 task queue안에 비동기 함수의 콜백 함수, 이벤트 핸들러를 일시로 보관한다.
+- 콜 스택이 비어있다면 이벤트 루프가 task queue 안에 함수들을 call stack으로 이동시킨다.
+
+- 아래와 같이 진행한다면, 0초를 준다고 해도, foo함수가 task queue에 등록된다. 
+- 즉 bar가 먼저 call stack에 push되고, bar가 pop되면 이벤트 루프가 task queue에서 foo를 가져와 call stack에 push한다.
+- promise의 후속처리(then)은 task queue보다 우선순위가 높은 microtask queue에 저장된다. 
+```javascript
+function foo() {
+    console.log('foo');
+}
+
+function bar() {
+    console.log('bar');
+}
+
+setTimeout(foo,0);
+bar();
+```
+
+- 비동기 통신의 최초는 XMLHttpRequest다.
+
+```javascript
+const xhr = new XMLHttpRequest();
+xhr.open('GET','/users'); //초기화
+xhr.setRequestHeader('content-type','application/json')//request 헤더 설정
+xhr.send(); //request send
+
+const xhr = new XMLHttpRequest();
+xhr.open('POST','/users');
+xhr.setRequestHeader('content-type','application/json');
+xhr.send(JSON.stringify({id: 1, content: 'HTML', completed: false})) 
+xhr.onreadystatechange = () => { 
+    if(xhr.readState !== XMLHttpRequest.DONE) { //요청 상태 확인
+        return;
+    }
+
+    if(xhr.status === 200) { //성공
+        console.log(JSON.parse(xhr.response));
+    } else { // 실패
+        console.error('Error', xhr.status, xhr.statusText);
+    }
+}
+```
+
+- 비동기 처리를 위한 콜백 패턴의 단점은, 비동기 함수가 종료될 때까지 기다리지 않고 반환해버린다는 점이다.
+```javascript
+let g;
+setTimeout(() => {
+    g = 100;
+}, 0);
+console.log(g); //undefined
+```
+```javascript
+let g;
+let g;
+setTimeout(() => {
+    g = 100;
+}, 0);
+setTimeout(() => {
+    console.log(g); //100
+}, 0);
+```
+
+- 비동기로 보낸 함수의 return을 보면, undefined다.
+```javascript
+const get = url => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.send();
+
+    xhr.onload = () => {
+        if(xhr.status === 2000) {
+            return JSON.parse(xhr.response);
+        }
+        console.error(`${xhr.status} ${xhr.statusText}`);
+    };
+}
+
+const response = get('https://jsonplaceholder.typicode.com/posts/1');
+console.log(response)//undefined
+```
+
+- 상위 스코프의 변수에 할당한다음에 바꿔도 똑같이 undefined다.
+```javascript
+let todos;
+
+const get = url => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET',url);
+    xhr.send();
+
+    xhr.onload = () => {
+        if(xhr.status === 200) {
+            todos = JSON.parse(xhr.response); //onload event는 밑의 console.log보다 더 늦는다. 비동기 event라서 task queue에 들어갔기 때문이다. 
+        } else {
+            console.error(`${xhr.status} ${xhr.statusText}`);
+        }
+    }
+}
+
+get('https://jsonplaceholder.typicode.com/posts/1');
+console.log(todos); //undefined. onload가 아직 실행되지 않았기 때문이다. console.log가 끝나야 xhr이 task queue에서 call stack으로 push되어 todos가 값을 갖게 된다. 그럼 그 때는 todos가 할당되게 된다.
+```
+
+```javascript
+const get = (url, successCallback, failureCallback) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.send();
+
+    xhr.onload = () => {
+        if(xhr.status === 200) {
+            successCallback(JSON.parse(xhr.response));
+        } else {
+            failureCallback(xhr.status);
+        }
+    }
+}
+
+get('https://jsonplaceholder.typicode.com/posts/1', console.log, console.error); // data 정상 넘어옴.
+```
+
+- 위에서 보았듯, callback은 함수를 넘겨 받아서 계속 이어나가야 한다.
+- 변수를 할당하는 것으로는 문제 해결이 안된다.
+- 그러다보니 아래와 같이 callback 안의 callback으로 계속 이어져버린다.
+```javascript
+const get = (url, callback) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url);
+    xhr.send();
+
+    xhr.onload = () => {
+        if(xhr.status === 200) {
+            callback(JSON.parse(xhr.response));
+        } else {
+            console.error(`${xhr.status} ${xhr.statusText}`);
+        }
+    }
+}
+
+const url = 'https://jsonplaceholder.typicode.com';
+get(`${url}/posts/1`, ({userId}) => {
+    console.log(userId);
+
+    get(`${url}/users/${userId}`, userInfo => {
+        console.log(userInfo);
+    })
+})
+```
+
+- callback의 다른 문제는 error catch가 안 된다는 점이다.
+- setTimeout이 호출 -> setTimeout은 비동기 함수라서 콜백함수 호출되는 것 기다리지 않고 종료
+- setTimeout의 callback 함수는 task queue로 push
+- 문제는 setTimeout은 이미 종료된 함수라서 callback함수를 호출한 것은 브라우저라는 점
+
+- 따라서 콜백함수에서 난 error가 setTimeout으로 전파되지 않고, error가 catch되지 않는다.
+- catch되지 않은 error가 있어 프로그램이 강제 종료된다.
+```javascript
+try { 
+    setTimeout(() => {
+        throw new Error('Error!');
+    }, 1000)
+} catch(err) {
+    console.error('캐치한 에러',err);
+}
+```
+
+- 이런 문제점을 해결하려고 Promise가 도입됐다.
+
+```javascript
+const promise = new Promise((resolve, reject) => {
+    if(/* 비동기 처리 성공 */) {
+        resolve('result');
+    } else { /* 비동기 처리 실패 */
+        reject('failure reason');
+    }
+})
+
+const promiseGet = url => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.send();
+
+        xhr.onload = () => {
+            if(xhr.status === 200) {
+                resolve(JSON.parse(xhr.response));
+            } else {
+                reject(new Error(xhr.status));
+            }
+        }
+    })
+}
+
+promiseGet('https://jsonplaceholder.typicode.com/posts/1');
+```
+
+```javascript
+new Promise(resolve => resolve('fulfilled'))
+    .then(v => console.log(v) , e => console.error(e)); // 비동기 처리 성공시 console.log('fulfilled')
+
+new Promise((_, reject) => reject(new Error('rejected')))
+    .then(undefined, e => console.error(e))   // 비동기 처리 실패시 console.error(new Error('rejected'))
+```
+
+```javascript
+const promiseGet = url => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest():
+        xhr.open('GET', url);
+        xhr.send();
+
+        xhr.onload = () => {
+            if(xhr.status === 200) {
+                resolve(JSON.parse(xhr.response));
+            } else {
+                reject(new Error(xhr.status));
+            }
+        }
+    })
+}
+
+//처음 cb fn에서 err 뜬 것을 두번째  fn에서 인지 못함.
+promiseGet('https://jsonplaceholder.typicode.com/posts/1').then(
+    res => console.log(res),
+    err => console.error(err)
+)
+
+//catch 대신에 then으로 쓰면 아래와 같음. 성공 callback은 undefined로 설정
+promiseGet('https://jsonplaceholder.typicode.com/posts/1')
+    .then(res => console.log(res))
+    .then(undefined, err => console.error(err));
+
+// then 대신에 catch문으로 넣으면 undefined를 굳이 주지 않아도 된다. 더 편하다.
+promiseGet('https://jsonplaceholder.typicode.com/posts/1')
+    .then(res => console.log(res))
+    .catch(err => console.error(err))
+    .finally(() => console.log('Bye!'));
+```
+
+- 아까 썼던 callback 지옥을 promise로 바꿔보자
+- 여전히 계쏙 이어 써야 하는 점은 변하지 않는다.
+
+```javascript
+const url = 'https://jsonplaceholder.typicode.com';
+
+promiseGet(`${url}/posts/1`)
+    .then(({userId}) => promiseGet(`${url}/users/${userId}`))
+    .then(useInfo => console.log(userInfo))
+    .catch(error => console.error(error));
+```
+
+- 아래는 다른 방식으로 동일한 Promise를 생성한 것이다.
+```javascript
+const resolvedPromise = new Promise(resolve => resolve([1,2,3]));
+const resolvedPromise = Promise.resolve([1,2,3]);
+resolvedPromise.then(console.log); //[1,2,3]
+
+const rejectedPromise = new Promise((_, reject) => reject(new Error('Error!')));
+const rejectedPromise = Promise.reject(new Error('Error!'));
+rejectedPromise.catch(console.log); //Error: error!
+```
+
+- 아래는 순차적으로 promise를 chaining한 것이다.
+- 그래서 6초가 걸린다.
+```javascript
+const requestData1 = () => new Promise(resolve => setTimeout(() => resolve(1), 3000));
+const requestData2 = () => new Promise(resolve => setTimeout(() => resolve(2), 2000));
+const requestData3 = () => new Promise(resolve => setTimeout(() => resolve(3), 1000));
+
+const rest = [];
+requestData1()
+    .then(data => {
+        res.push(data);
+        return requestData2();
+    })
+    .then(data => {
+        res.push(data);
+        return requestData3();
+    })
+    .then(data => {
+        res.push(data);
+        console.log(res); //[1,2,3] 6초 소요
+    })
+    .catch(console.error);
+```
+
+- 하지만 아래와 같이 all로 걸면 비동기로 진행되어 3초면 된다.
+```javascript
+Promise.all([requestData1(), requestData2(), requestData3()])
+    .then(console.log) //[1,2,3] 3초 소요
+    .catch(console.error);
+```
+
+- all로 걸었을 때 Promise가 하나라도 rejected가 되는 경우, 나머지 프로미스가 fulfilled가 되는 것을 기다리지 않고 즉시 종료한다.
+```javascript
+Promise.all([
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 1'), 3000))),
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 2'), 2000))),
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 3'), 1000)))
+])
+    .then(console.log)
+    .catch(console.log); //Error: Error 3. 맨마지막 promise가  제일 빨리 실행됐고, rejected되었으므로 다른 promise들의 결과상태를 보지 않고 catch문으로 빠진다.
+
+Promise.all([
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 1'), 1000))),
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 2'), 2000))),
+    new Promise((_,reject) => setTimeout(() => reject(new Error('Error 3'), 3000)))
+])
+    .then(console.log)
+    .catch(console.log); //Error: Error 3. 맨마지막 promise가  제일 빨리 실행됐고, rejected되었으므로 다른 promise들의 결과상태를 보지 않고 catch문으로 빠진다.
+```
+
+- 깃허브 아이디 정보를 가져온다.
+```javascript
+const promiseGet = url => {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.send();
+
+        xhr.onload = () => {
+            if(xhr.status === 200) {
+                resolve(JSON.parse(xhr.response));
+            } else {
+                reject(new Error(xhr.status));
+            }
+        }
+    })
+}
+
+const githubIds = ['jeresig', 'ahejlsberg', 'ungmo2'];
+
+Promise.all(githubIds.map(id => promiseGet(`https://api.github.com/users/${id}`)))
+    .then(users => users.map(user => user.name))
+    .then(console.log)
+    .catch(console.error);
+```
+
+- fetch는 웹서버와 소통하는 api인데, 내부에서 Promise를 활용한다.
+- 다만 HTTP error code는 reject하지 않기 때문에 그러한 에러는 then에서 잡아줘야 한다.
+
+
+```javascript
+const request = {
+    get(url){
+        return fetch(url);
+    },
+    post(url, payload) {
+        return fetch(url,{
+            method: 'POST',
+            headers: {'content-type' : 'application/json'},
+            body: JSON.stringify(payload)
+        })
+    },
+    patch(url, payload) {
+        return fetch(url, {
+            method: 'PATCH',
+            headers: {'content-type' : 'application/json'},
+            body: JSON.stringify(payload)
+        })
+    },
+    delete(url) {
+        return fetch(url, {method: 'DELETE'});
+    }
+}
+
+request.get('https://jsonplaceholder.typicode.com/todos/1')
+    .then(response => {
+        if(!response.ok) {
+            throw new Error(response.statusText); // 서버에러는 catch가 아니라 여기서 잡힘
+            //fetch의 promise는 404, 500 등의 에러에 대해 에러를 reject하지 않고 ok를 false로 잡고 resolve하기 때문
+        }
+
+        return response.json();
+    })
+    .then(todos => console.log(todos))  // response.json()을 받은게 todos
+    .catch(err => console.error(err)); //오프라인 네트워크 장애, CORS 설정만 잡힘
+```
+
+```javascript
+async function foo() {
+    const res= await Promise.all([
+        new Promise(resolve => setTimeout(() => resolve(1), 3000)),
+        new Promise(resolve => setTimeout(() => resolve(2), 2000)),
+        new Promise(resolve => setTimeout(() => resolve(3), 1000))
+    ]);
+
+    console.log(res); //[1,2,3]
+}
+
+foo(); //3초 걸림
+```
+
+```javascript
+async function bar(n) {
+    const a = await new Promise(resolve => setTimeout(() => resolve(n) ,3000));
+    const b = await new Promise(resolve => setTimeout(() => resolve(a+1),2000));
+    const c = await new Promise(resolve => setTimeout(() => resolve(b + 1), 1000));
+
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
