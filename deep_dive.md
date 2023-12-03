@@ -594,7 +594,7 @@ let logOdds = function(i){
   }
 }
 
-repeat(5,lodOdds); //1,3,
+repeat(5,logOdds); //1,3,
 
 let arr = arr.filter((element) => element ! == data);
 ```

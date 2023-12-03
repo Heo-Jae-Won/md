@@ -1,21 +1,21 @@
 ## <span style="color:#802548">_1.JS의 변수_</span>
-- 변수의 키워드를 선언하면 변수에 메모리 공간이 확보된다.
+- 변수의 키워드를 선언하면 변수의 메모리 공간이 확보된다.
 - 선언만 하는 경우에는 undefined로 초기화된다.
 
 - null을 할당해줘야 GC가 수거해간다. undefined로 할당하지 않도록 하자.
 
 ```javascript
-var str;    //선언. var str = undefined;와 동일
+let str;    //선언. var str = undefined;와 동일
 str = 'abc' //할당.
 
-var foo; //GC 수행 X
+let foo; //GC 수행 X
 foo = null; //GC 수행
 ```
 
 - var, function 등 몇개의 keyword는 hoisting이 된다.
 - hoisting이라는 건 코드가 실행 전에 코드 최상위로 끌어올려지는 것을 의미한다.
 
-- 변수를 할당할 때는 생성자보다는 리터럴을 많이 사용하게 된다.
+- 변수를 할당할 때는 생성자, 리터럴이 있다.
 ```javascript
 const str = new String("B"); //생성자 방식
 const str = "B";            //literal 방식
