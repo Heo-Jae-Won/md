@@ -1503,7 +1503,7 @@ const response = get('https://jsonplaceholder.typicode.com/posts/1');
 console.log(response)//undefined
 ```
 
-- 상위 스코프의 변수에 할당한다음에 바꿔도 똑같이 undefined다.
+- 상위 스코프의 변수에 할당한 다음에 바꿔도 똑같이 undefined다.
 ```javascript
 let todos;
 
