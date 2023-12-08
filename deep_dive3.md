@@ -1762,8 +1762,6 @@ Promise.all(githubIds.map(id => promiseGet(`https://api.github.com/users/${id}`)
 
 - fetch는 웹서버와 소통하는 api인데, 내부에서 Promise를 활용한다.
 - 다만 HTTP error code는 reject하지 않기 때문에 그러한 에러는 then에서 잡아줘야 한다.
-
-
 ```javascript
 const request = {
     get(url){

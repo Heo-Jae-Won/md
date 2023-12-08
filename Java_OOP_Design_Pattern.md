@@ -1448,15 +1448,461 @@ public void shouldRunSuccessFully() {
 }
 ```
 
-- 만약 DI 없이 ServiceLocator를 사용했다고 해보자.
+- 주요 디자인 패턴
+
+### strategy
+
+- 아래와 같이 구현된 코드가 있다. target에 따른 if - else 분기문이다.
+```java
+public class Calculator {
+    public int calculate(boolean firstGuest, List<Item> items) {
+        int sum = 0;
+        for (Item item: items) {
+            if (firstGuest) {
+                sum += (int) (item.getPrice() * 0.9); //첫 손님 10% 할인
+            } else if (! item.isFresh()) {
+                sum += (int) (item.getPrice() * 0.8); //덜 신선한 것 20% 할인
+            } else {
+                sum += item.getPrice();
+            }
+        }
+    }
+}
+```
+
+- ui 코드는 아래와 같이 될 것이다.
+```java
+public void onCalculationButtonClick() {
+    Calculator cal = new Calculator();
+    int price = cal.calculate(firstGuest, items);
+}
+```
+
+
+- if - else문의 가장 큰 단점은 추가될 때마다 늘어난다는 점,
+- 로직이 같이 추가되면 분석이 너무 어려워진다는 점이다.
+
+```
+서로 다른 계산 정책이 한 코드에 섞여 있다.
+가격 정책이 추가될 때마다 calculate method 수정이 어려워진다.
+```
+
+- 할인과 관련된 책임은 할인 interface를 구현한 class에 맡긴다.
+```java
+public class Calculator {
+    private DiscountStrategy discountStrategy;
+
+    public Calculator(DiscountStrategy discountStrategy) {
+        this.discountStrategy = discountStrategy;
+    }
+
+    public int calculate(List<Item> items) {
+        int sum = 0;
+        for (Item item: items) {
+            sum += discountStrategy.getDiscountPrice(item);
+        }
+    }
+}
+```
+
+- 하나의 할인정책에 전체금액과 아이템 할인 정책을 method로 가져올 수도 있다. 
+```java
+public interface DiscountStrategy {
+    int getDiscountPrice(Item item);        //아이템 별 할인 정책
+    int getDiscountPrice(int totalPrice);   //전체 금액 할인 정책
+}
+```
+
+- 전체금액 할인 정책과 아이템 별 할인 정책을 분리할 수도 있다.
+```java
+public interface ItemDiscountStrategy {
+    int getDiscountPrice(Item item);
+}
+
+public interface TotalPriceDiscountStrategy {
+    int getDiscountPrice(int totalPrice);
+}
+```
 
 ```java
-public abstract class JobQueue {
-    public static JobQueue getInstance() {
+public class FirstGuestDiscountStrategy implements DiscountStrategy {
+
+    @Override
+    public int getDiscountPrice(Item item) {
+        return (int) (item.getPrice() * 0.9);
+    }
+}
+```
+
+- ui 코드는 아래와 같다.
+```java
+private DiscountStrategy strategy;
+
+public void onFirstGuestButtonClick() {
+    strategy = new FirstGuestDiscountStrategy();
+}
+
+public void onLastGuestButtonClick() {
+    strategy = new LastGuestDiscountStrategy();
+}
+
+//firstGuest버튼을 누르면 해당 할인 정책이 적용된다.
+public void onCalculationButtonClick() {
+    Calculator cal = new Calculator(strategy);
+    int price = cal.calculate(items);
+}
+```
+
+### template
+
+- 일부를 빼고 동일한 절차를 가진 코드를 작성하기도 한다. 게시판에 파일을 insert하거나 update할 때, 특히 그러하다.
+```java
+public class DbAuthenticator {
+    public Auth authenticate(String id, String pw) {
+        User user = userDao.selectById(id);
+        boolean auth = user.equalPassword(pw);
+        if (!auth) {
+            throw createException();
+        }
+
+        return new Auth(id,user.getName());
+    }
+
+    private AuthException createException() {
+        
+        return new AuthException();
+    }
+}
+
+public class LdapAuthenticator {
+    public Auth authenticate(String id, String pw) {
+        boolean lauth = ldapClient.authenticate(id, pw);
+        if(!auth) {
+            throw createException();
+        }
+
+        LdapContext ctx = ldapClient.find(id);
+            
+        return new Auth(id, ctx.getAttribute("name"));
+    }
+
+    private AuthException createException() {
+        
+        return new AuthException();
+    }
+}
+```
+
+- template method는 하위 class가 아닌 상위 class가 기능 사용 여부를 결정한다.
+```java
+public abstract Authenticator {
+    public Auth authenticate(String id, String pw) {
+        if (!doAuthenticate(id, pw)) {
+            throw createException();
+        }
+
+        return createAuth();
+    }
+
+    protected abstract boolean doAuthenticate(String id, String pw);
+
+    private RuntimeException createException() {
+        throw new AuthException();
+    }
+
+    protected abstract Auth createAuth(String id);
+}
+
+public class LdapAuthenticator extends Authenticator {
+    @Override
+    protected boolean doAuthenticate(String id, String pw) {
+        return ldapClient.authenticate(id, pw); 
+    }
+
+    @Override
+    protected Auth createAuth(String id) {
+        LdapContext ctx = ldapClient.find(id);
+        
+        return new Auth(id, ctx.getAttribute("name"));
+    }
+}
+```
+
+- 템플릿 메서드와 전략 패턴을 함께 사용할 수도 있다.
+
+```java
+public <T> T execute(TransactionCallback<T> action) throws TransactionException {
+    TransactionStatus status = this.transactionManager.getTransaction(this);
+    T result;
+
+    try {
+        result = action.doInTransaction(status);
+    } catch (RuntimeException ex) {
+        rollbackOnException(status, ex);
+        throw ex;
+    }
+
+    this.transactionManager.commit(status);
+    return result;
+}
+
+transactionTemplate.execute(new TransactionCallback<String>() {
+    public String doInTransaction(TransactionStatus status) {
+        //트랜잭션 범위 안에서 실행될 코드
+    }
+})
+```
+
+### state
+- 아래와 같은 요구가 있다고 가정해보자.
+
+```
+동작        조건            실행               결과
+동전넣음    동전X           금액증가            제품선택가능하게변경
+동전넣음    제품선택가능     금액증가            제품선택가능
+제품선택    동전X           동작X               동전없음유지
+제품선택    제품선택가능     제품주고잔액감소     잔액있으면제품선택가능,잔액없으면동전없음상태로 변경   
+```
+
+```java
+public class VendingMachine {
+    public static enum State {NOCOIN, SELECTABLE}
+
+    private State state = State.NOCOIN;
+
+    public void insertCoin(int coin) {
+        switch (state) {
+            case NOCOIN:
+                increaseCoin(coin);
+                state = State.SELECTABLE;
+                break;
+            case SELECTABLE:
+                increaseCoin(coin);
+        }
+
+        public void select(int productId) {
+            switch (state) {
+                case NOCOIN:
+                    break;
+                case SELECTABLE:
+                    provideProduct(productId);
+                    decreaseCoin();
+                    if (hasNoCoin()) {
+                        state = State.NOCOIN;
+                    }
+            }
+        }
+    }
+}
+```
+
+- 그러다가 자판기에 제품이 없는 경우에 동전을 넣으면 바로 동전을 되돌려달라는 요구가 들어왔다.
+- 그럼 아래와 같이 state가 추가된다.
+```java
+public class VendingMachine {
+    public static enum State {NOCOIN, SELECTABLE, SOLDOUT}
+
+    private State state = State.NOCOIN;
+
+    public void insertCoin(int coin) {
+        switch (state) {
+            case NOCOIN:
+                increaseCoin(coin);
+                state = state.SELECTABLE;
+                break;
+            case SELECTABLE:
+                increaseCoin(coin);
+                break;
+           /* case SOLDOUT:
+                returnCoin(); */
+        }
+    }
+
+    public void seleect(int productId) {
+        switch(state) {
+            case NOCOIN:
+                break;
+            case SELECTABLE:
+                provideProduct(productId);
+                decreaseCoin();
+                if (hasNoCoin()) {
+                    state = state.NOCOIN;
+                }
+           /* case SOLDOUT: */
+        }
+    }
+}
+```
+
+- 상태에 따라 동일한 기능 요청의 처리를 다르게 한다는 의미가 담겨있다.
+- 이를 state 패턴으로 구현한다.
+```java
+public class VendingMachine {
+    private State state;
+
+    public VendingMachine() {
+        state = new NoCoinState();
+    }
+
+    public void insertCoin(int coin) {
+        state.increaseCoin(coin, this); //상태 객체에 위임
+    }
+
+    public void select(int productId) {
+        state.select(productId, this); //상태 객체에 위임
+    }
+
+    public void changeState(State newState) {
+        this.state = newState;  
+    }
+}
+
+public class NoCoinState implements State {
+
+    @Override
+    public void increaseCoin(int coin, VendingMachine vm) {
+        vm.increaseCoin(coin);
+        vm.changeState(new SelectableState());
+    }
+
+    @Override
+    public void select(int productId, VendingMachine vm) {
+        SoundUtil.beep();
+    }
+}
+
+public class SelectableState implements State {
+
+    @Override
+    public void increaseCoin(int coin, VendingMachine vm) {
+        vm.increaseCoin(coin);
+    }
+
+    @Override
+    public void select(int productId, VendingMachine vm) {
+        vm.provideProduct(productId);
+        vm.decreaseCoin();
+
+        if (vm.hasNoCoin())  {
+            vm.changeState(new NoCoinState());
+        }
+    }
+}
+
+```
+
+- State 패턴의 장점은 class는 증가해도, if - else 조건문이 늘어나진 않아 본 코드가 복잡해지지 않는다는 점이다.
+- 그리고 상태 별 class가 따로 존재하므로 해당 상태별 코드 수정을 건드리려면 해당 class만 건들면 된다는 점이다. 흩뿌려진 method를 수정하지 않아도 된다.
+- 위에서는 State 객체에서 상태를 변경했다.
+- 아래에서는 컨텍스트에서 상태를 변경해보자.
+
+```java
+public class VendingMachine {
+    private State state;
+
+    public VendingMachine() {
+        state = new NoCoinState();
+    }
+
+    public void insertCoin(int coin) {
+        state.increaseCoin(coin, this); //상태 객체에 위임
+        if (hasCoin()) {
+            changeState(new SelectableState());
+        }
+    }
+
+    public void select(int productId) {
+        state.select(productId, this); //상태 객체에 위임
+        if (state.isSelectable() && hasNoCoin()) {
+            changeState(new NoCoinState());
+        } 
+    }
+
+    private void changeState(State newState) {
+        this.state = newState;  
+    }
+
+    private boolean hasCoin() {
+
+    }
+
+    private boolean hasNoCoin() {
+        return !hasCoin();
+    }
+}
+
+public class SelectableState implements State {
+
+    @Override
+    public void increaseCoin(int coin, VendingMachine vm) {
+        vm.increaseCoin(coin);
+    }
+
+    @Override
+    public void select(int productId, VendingMachine vm) {
+        vm.provideProduct(productId);
+        vm.decreaseCoin();
+    }
+}
+```
+
+### 데코레이터
+- 상속으로만 하면 여러 기능을 함께 제공할 때 계층 구조가 복잡해진다.
+- 따라서 상속이 아닌 위임을 사용하는 decorator 패턴으로 바꾼다.
+
+```java
+public abstract class Decorator implements FileOut {
+    private FileOut delegate; //위임 대상
+    public Decorator(FileOut delegate) {
+        this.delegate = delegate;
+    }
+
+    protected void doDelegate(byte[] data) {
+        delegate.writer(data); //delegate에 쓰기 위임
+    }
+}
+
+public class EncryptionOut extends Decorator {
+    public EncryptionOut(FileOut delegate) {
+        super(delegate);
+    }
+
+    public void write(Byte[] byte) {
+        byte[] encryptedData = encrypt(data);
+        super.doDelegate(encryptedData);
+    }
+
+    private byte[] encrypt(byte[] data) {
 
     }
 }
 ```
+
+- 데코레이터는 조합할 수 있다는 데 장점이 있다.
+- 압축을 한 뒤 암호화를 해서 파일에 쓰고 싶다면 아래와 같이 Zipout class를 넣어주면 된다.
+```java
+FileOut delegate = new FileOutImpl();
+FileOut fileOut = new EncryptionOut(delegate);
+fileOut.write(data);
+
+FileOut delegate = new FileOutImpl();
+FileOut fileOut = new EncryptionOut(new ZipOut(delegate));
+fileOut.write(data);
+```
+
+- 기능 적용 순서 변경도 쉽다.
+
+```java
+FileOut fileOut = new BufferedOut(EncryptionOut(new ZipOut(delegate))); // 버퍼 -> 암호화 -> 압축 -> 파일쓰기
+FileOut fileOut = new EncryptionOut(new ZipOut(new BufferedOut(delegate))); //암호화 -> 압축 -> 버퍼 -> 파일 쓰기
+```
+
+- 다만 decorator 패턴은 기능 갯수가 적을 때 쓰는 게 좋다. 기능이 많으면 너무 복잡해진다
+- 또한 데코레이션 객체가 비정상으로 동작할 때 어떻게 처리할 지 정해야 한다. 보통은 throw Exception보다는 로그를 남긴다.
+
+
+### proxy 
+
 
 
 
