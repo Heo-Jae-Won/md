@@ -596,3 +596,200 @@ const bike1 = new Bike("red");
 const jacket1 = new Jacket("prada", "black")
 ```
 
+```javascript
+function doThing(thing: number | string) : number | string {
+
+}
+```
+
+
+```javascript
+const nums: number[] = [];
+const nums: Array<number> = [];
+
+const inputEl = document.querySelector("#username");
+console.log(inputEl);
+inputEl.value = 'Hacked!' ; //error. querySelector로 가져온 것은 그저 Element고 value라는 property가 없음.
+
+//그럴 때 어떤 type이 method에서 반환되는 지 generics로 알려줌.
+const inputEl = document.querySelector<HTMLInputElement>("#username"); //<input id="username">
+inputEl.value = 'Hacked!';
+
+const btn = document.querySelector<HTMLButtonElement>(".btn"); //<button class="btn">
+```
+
+```javascript
+function numberIdentity(item: number): number {
+    return item;
+}
+
+function stringIdentity(item: string): string {
+    return item;
+}
+
+function booleanIdentity(item: boolean): boolean {
+    return item;
+}
+
+function Identity(item: any): any {
+    return item;
+}
+```
+
+```javascript
+function identity<Type>(item: Type): Type {
+    return item;
+}
+
+identity<boolean>(6) // error. true나 false가 들어와야함.
+identity<string>
+identity<number>
+identity<any>
+identity<Cat>([]) //Cat에 맞는 형태가 와야함.
+
+
+function identity<T>(item: T): T {
+    return item;
+}
+
+
+function getRandomNumberElement(list: number[]) {
+
+}
+
+function getRandomStringElement(list: string[]) {
+
+}
+
+function getRandomBooleanElement(list: boolean[]) {
+
+}
+
+function getRandomNCatElement(list: Cat[]) {
+
+}
+
+function getRandomNAnyElement(list: any[]) {
+
+}
+
+
+function getRandomTypeElement<T>(list: T[]) : T {
+    const randIdx = Math.fllor(Math.random() * list.length);
+
+    return list[randIdx];
+}
+
+console.log(getRandomElement<string>  (["a","b","c"]));
+console.log(getRandomElement<number>  ([1,2,3,4,5,6]));
+
+console.log(getRandomElement(["a","b","c"])); //확실하면 <>로 type 알려주지 않아도 됨. ts가 추론 가능
+console.log(getRandomElement([1,2,3,4,5,6])); //확실하면 <>로 type 알려주지 않아도 됨. ts가 추론 가능
+```
+
+
+```javascript
+function getRandomTypeElement<T>(list: T[]) : T {
+    const randIdx = Math.fllor(Math.random() * list.length);
+
+    return list[randIdx];
+}
+
+//Tsx파일에서 화살표 함수로 generics를 쓸 떄는 Type뒤에 무조건 ,를 붙여줘야 한다.
+//아니면 html로 생각해서 오류가 난다.
+const getRandomTypeElement = <T,>(list: T[]) T => {
+    const randIdx = Math.fllor(Math.random() * list.length);
+
+    return list[randIdx];
+}
+
+function merge(object1, object2) {
+    return {
+        ...object1,
+        ...object2
+    }
+}
+
+const comboObj = merge({name: 'colt'}, {pets: ['blue', 'elton']});
+
+function merge<T, U>(object1: T, object2: U) { // T 다음은 U, U 다음은 V
+    return {
+        ...object1,
+        ...object2
+    }
+}
+merge<{name: string}, {pets:string[]}>({name: 'colt'}, {pets: ["blue", "elton"]}) //이렇게 할 필요 없음.
+const comboObj = merge({name: 'colt'}, {pets: ["blue", "elton"]}); //자동추론 가능하니 이렇게 쓰면 됨.
+```
+
+```javascript
+function merge<T extends object, U extends object>(object1: T, object2: U) {}
+merge({name: 'Colt'}, 9); //error. object가 들어와야함.
+merge({name: 'Colt'}, {num: 9});  //객체로 만드니까 잘 됨.
+```
+
+```javascript
+function printDoubleLength<T>(thing: T): number {
+    return thing.length * 2; //error. 그냥 T는 length라는 properties가 없음.
+}
+
+//length라는 property를 가지게끔 interface를 만듦.
+interface length {
+    length: number;
+}
+
+function printDoubleLength<T extends Lengthy>(thing: T): number {
+    return thing.length * 2;
+}
+printDoubleLength('ABCD'); // 4
+printDoubleLength(1234) //error. T로 들어오는 type에는 length 속성이 있어야 하기 때문.
+
+
+function printDoubleLength(thing: Lengthy): number {
+    return thing.length * 2;
+} //이것도 가능함. 
+```
+
+```javascript
+function makeEmptyList<T>(): T[] {
+    return [];
+}
+
+const strings =  makeEmptyList<string>();
+strings.push('sth');
+
+const strings =  makeEmptyList(); //strings는 unknown type이 된다.
+
+function makeEmptyList<T = number>(): T[] {
+    return [];
+}
+
+const nums = makeEmptyList(); //nums는 number type이다. unknown type이 아니다. T는 number로 기본값을 주었기 때문이다.
+const strings = makeEmptyList<string>(); //type 값을 제공하면 default값은 무시된다.
+```
+
+
+```javascript
+interface Song {
+    title: string;
+    artist: string;
+}
+
+interface Video {
+    title: string;
+    creator: string;
+    resolution: string;
+}
+
+class PlayList<T> {
+    public queue: T[] = [];
+    add(el: T) {
+        this.queue.push(el);
+    }
+}
+
+const songs = new PlayList<Song>();
+const videos = new PlayList<Video>();
+videos.add(); //video type만 넣을 수 있음.
+songs.add(); //Song type만 넣을 수 있음.
+```
