@@ -243,4 +243,306 @@ public class TcpIpServer4 implements Runnable {
             }
         }
     }
+
+    static String getTime() {
+        String name = Thread.currentThread().getName();
+        SimpleDateFormat sdf = new SimpleDateFormat("[hh:mm:ss]");
+
+        return sdf.format(new Date()) + name; 
+    }
 }
+```
+
+```java
+public class TcpIpServer5 {
+    public static void main(String[] args) {
+        ServerSocket serverSocket = null;
+        Socket socket = null;
+
+        try {
+            serverSocket = new ServerSocket(7777);
+            System.out.println("서버가 준비되었습니다.");
+
+            socket = serverSocket.accept();
+
+            Sender sender = new Sender(socket);
+            Receiver receiver = new Receiver(socket);
+
+            sender.start();
+            receiver.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+class Sender extends Thread {
+    Socket socket;
+    DataOutputStream out;
+    String name;
+
+    Sender(Socket socket) {
+        this.socket = socket;
+        try {
+            out = new DataOutputStream(socket.getOutputStream());
+            name = "[" + socket.getInetAddress() + ":" + socket.getPort() + "]";
+        } catch (Exception e) {}
+    }
+    
+    @Override
+    public void run() {
+        Scanner scanner = new Scanner(System.in);
+        while( out != null) {
+            try {
+                out.writeUTF(name + scanner.nextLine());
+            } catch (IOException e) {}
+        }
+    }
+}
+
+class Receiver extends Thread {
+    Socket socket;
+    DataInputStream in;
+
+    Receiver(Socket socket) {
+        this.socket = socket;
+        try {
+            in = new DataInputStream(socket.getInputStream());
+        } catch (IOException e) {}
+    }
+    
+    @Override
+    public void run() {
+        while(in != null) {
+            try {
+                System.out.println(in.readUTF());
+            } catch (IOException e) {}
+        }
+    }
+}
+
+
+```
+
+```java
+public class TcpIpMultichatServer {
+    HashMap clients;
+
+    TcpIpMultichatServer() {
+        clients = new HashMap();
+        Collections.synchronizedMap(clients);
+    }
+
+    public void start() {
+        ServerSocket serverSocket = null;
+        Socket socket = null;
+
+        try {
+            serverSocket = new ServerSocket(7777);
+            System.out.println("서버가 시작되었습니다.");
+
+            while(true) {
+                socket = serverSocket.accept();
+                System.out.println("[" + socket.getInetAddres() + ":" + socket.getPort() + "]" +"에서 접속하였습니다.");
+                ServerReceiver thread = new ServerReceiver(socket);
+                thread.start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    void sendToAll(String msg) {
+        Iterator it = clients.keySet().iterator();
+
+        while(it.hasNext()) {
+            try {
+                DataOutputStream out = (DataOutputStream) clients.get(it.next());
+                out.writeUTF(msg);
+            } catch (IOException e) {}
+        }
+    }
+
+    public static void main(String[] args) {
+        new TcpIpMultichatServer().start();
+    }
+
+    class ServerReceiver extends Thread {
+        Socket socket;
+        DataInputStream in;
+        DataOutputStream out;
+
+        ServerReceiver(Socket socket) {
+            this.socket = socket;
+            try {
+                in = new DataInputStream(socket.getInputStream());
+                out = new DataOutputStream(socket.getOutputStream());
+            } catch (IOException e) {}
+        }
+
+        @Override
+        public void run() {
+            String name = "";
+
+            try {
+                name = in.readUTF();
+                sendToAll("#" + name +"님이 들어오셨습니다.");
+
+                clients.put(name,out);
+                System.out.println("현재 서버 접속자 수는 " +  clients.size() + "입니다.");
+
+                while(in != null) {
+                    sendToAll(in.readUTF());
+                }
+            } catch (IOException e) {
+
+            } finally {
+                sendToAll("#" + name + "님이 나가셨습닌다.");
+                clients.remove(name);
+                System.out.println("[" + socket.getInetAddress() + ":" + socket.getPort() + "]" + "에서 접속을 종료하였습니다.");
+                System.out.println("현재 서버접속자 수는 " + clients.size() + "입니다.");
+            }
+        }
+    }
+}
+```
+
+```java
+public class TcpIpMultichatClient {
+    public static void main(String[] args) {
+        if(args.length != 1) {
+            System.out.println("USAGE: java TcpIpMultichatClient 대화명");
+            System.exit(0);
+        }
+
+        try {
+            String serverIp = "127.0.0.1";
+            Socket socket = new Socket(serverIp, 7777);
+            System.out.println("서버에 연결되었습니다.");
+            Thread Sender = new Thread(new ClientSender(socket, args[0]));
+            Thread receiver = new Thread(new ClientSender(socket));
+
+            sender.start();
+            receiver.start();
+        } catch (ConnectionException ce) {
+            ce.printStackTrace();
+        } catch(Exception e) {}
+    }
+
+    static class ClientSender extends Thread {
+        Socket socket;
+        DataOutputStream out;
+        String name;
+
+        ClientSender(Socket socket, String name) {
+            this.socket = socket;
+            try {
+                out = new DataOutputSTream(socket.getOutputStream());
+                this.name = nmae;
+            } catch(Exception e) {}
+        }
+
+        @Override
+        public void run() {
+            Scanner scanner = new Scanner(System.in);
+            try {
+                if(out!=null) {
+                    out.writeUTF(name);
+                }
+
+                while(out != null) {
+                    out.writeUTF("[" + name + "]" + scanner.nextLine());
+                }
+            } catch (IOException e) {}
+        }
+    }
+
+    static class ClientReceiver extends Thread {
+        SOcket socket;
+        DataInputStream in;
+
+        ClientReceiver(Socket socket) {
+            this.socket = socket;
+            try {
+                in = new DataInputStream(socket.getInputStream());
+            } catch (IOException e) {}
+        }
+
+        @Override
+        public void run() {
+            while(in != null) {
+                try {
+                    System.out.println(in.readUTF());
+                } catch (IOException e) {}
+            }
+        }
+    }
+}
+```
+
+- UDP
+- UDP는 연결지향 프로토콜이 아니다. 따라서 ServerSocket이 필요 없다.
+- UDP는 DatagramSocket class를 사용하며, 데이터는 DatagramPacket에 담아 전송한다.
+```java
+public class UdpClient {
+    public void start() throws IOException, UnknownHostException {
+        DatagramSocket datagramSocket = new DatagramSocket();
+        InetAddress serverAddress = InetAddress.getByName("127.0.0.1");
+
+        byte[] msg = new byte[100];
+
+        DatagramPacket outPacket = new DatagramPacket(msg, 1, serverAddress, 7777);
+        DatagramPacket inPacket = new DatagramPacket(msg, msg.length);
+
+        datagramSocket.send(outPacket);
+        datagramSocket.receive(inPacket);
+
+        System.out.println("current server time :" + new String(inPacket.getData()));
+
+        datagramSocket.close();
+    }
+
+    public static void main(String[] args) {
+        try {
+            new UdpClient().start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+public class UdpServer {
+    public void start() throws IOException {
+        DatagramSocket socket = new DatagramSocket(7777);
+        DatagramPacket inPacket;
+        DatagramPacket outPacket;
+
+        byte[] inMsg = new byte[10];
+        byte[] outMsg;
+
+        while(true) {
+            inPacket = new DatagramPacket(inMsg, inMsg.length);
+
+            socket.receive(inPacket);
+
+            InetAddress address = inPacket.getAddress();
+            int port = inPacket.getPort();
+
+            SimpleDateFormat sdf = new SimpleDateFormat("[hh:mm:ss]");
+            String time = sdf.format(new Date());
+            outMsg = time.getBytes();
+
+            outPacket = new DatagramPacket(outMsg, outMsg.length, address, port);
+            socket.send(outPacket);
+        }
+    }
+
+    public static void main(String[] args) {
+        try { 
+            new UdpServer().start();
+        } catch( IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
