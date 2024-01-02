@@ -628,8 +628,9 @@ function parseURL(url = ''){
       return {};
     }
 
-    const [protocol,host,path] = parsedURL;
+    const [url1, protocol,host,path] = parsedURL;
     return {
+        url1,
         protocol,
         host,
         path
@@ -638,11 +639,12 @@ function parseURL(url = ''){
 
 const parsedURL = parseURL('https://developer.mozilla.org/ko/docs/Web/JavaScript');
 console.log(parsedURL);
-/*
-protocol: 'https',
-host: 'developer.mozilla.org',
-path: 'ko/docs/Web/JavaScript'
-*/
+{
+  "url1": "https://developer.mozilla.org/ko/docs/Web/JavaScript",
+  "protocol": "https",
+  "host": "developer.mozilla.org",
+  "path": "ko/docs/Web/JavaScript"
+}
 ```
 
 - 이제는 객체의 destructuring의 예시를 살펴보자.

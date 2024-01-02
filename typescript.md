@@ -828,3 +828,405 @@ const videos = new PlayList<Video>();
 videos.add(); //video type만 넣을 수 있음.
 songs.add(); //Song type만 넣을 수 있음.
 ```
+
+- typeof로 type narrowing이 가능하다.
+```javascript
+function triple(value: number | string) {
+    if(typeof value === 'string') {
+        return value.repeat(3); //string인지 확인 안하면 ts는 이게 어떤 type인지 몰라 오류 일으킴.
+        //그래서 typeof guard를 쓴 것.
+    }
+
+    return value * 3; //typeof로 string을 걸렀기 때문에 여기선 무조건 number type으로 확정되는 것을 ts가 암. 따라서 * 연산자에도 오류가 안 남.
+}
+```
+
+- truthy로 type narrowing이 가능하다.
+```javascript
+const el = document.getElementById("idk");
+if (el) {
+    el //el이 truthy기 때문에 절대 null이 아님. 따라서 HTMLElment type이 됨. HTMLElement | null이라는 union type이 아님.
+}
+
+const printLetters = (word: string | null) => {
+    for(let char of word) { // word가 null일 수 있어 error가 나옴.
+        console.log(char);
+    }
+}
+
+const printLetters = (word?: string) => {
+    for(let char of word) { // word가 undefined일 수 있어 error가 나옴.
+        console.log(char);
+    }
+}
+
+const printLetters = (word?: string) => {
+    if(word) {
+        for(let char of word) { //type narrowing을 통과했으므로 word는 그냥 string type임.
+            console.log(char);
+        }
+    } else {
+        //여기서는 word가 빈값, 즉 falsy일 수 있기 때문에 word가 다시 string | undefined union type이 된다.
+        console.log("YOU DID NOT PASS IN A WORD");
+    }
+    
+}
+```
+
+- 객체의 property가 있는지 검사하려면 in을 사용하자.
+```javascript
+function someDemo(x: string | number, y: string | boolean) {
+    if (x===y) {
+        x.toUpperCase();
+    }
+}
+
+interface Movie {
+    title : string,
+    duration: number,
+}
+
+interface TVShow {
+    title: string,
+    numEpisodes: number,
+    episodeDuration: number
+}
+function getRuntime(media: Movie | TVShow) {
+    media.numEpisodes //error. numEpisodes가 Movie에는 없어서 type narrowing 필요.
+}
+
+function getRuntime(media: Movie | TVShow) {
+    if ("numEpisodes" in media) {
+        return media.numEpisodes * media.episodeDuration   //numEpisodes는 TVShow에만 존재.
+        //type narrowing 수행한 것.
+    }
+
+    return media.duration; //if문에서 TVShow가 걸러졌기에 여기는 반드시 Movie type. 
+    //따라서 duration을 오류없이 그냥 가져오는 게 가능함. ts가 추론해줌.
+}
+
+getRuntime({title: "Amadeus", duration: 140})
+getRuntime({title: "Spongebob", numEpisodes: 80, episodeDuration: 30})
+```
+
+- class, built in object에는 instanceof를 쓰자.
+```javascript
+function printFullDate(date: string | Date) {
+    if (date instanceof Date) {
+        console.log(date.toUTCString()); //Date면 toUTCString() 사용 가능
+    } else {
+        console.log(new Date(date).toUTCString()); //Date가 아니면 string이기 때문에 Date로 만들어줘야함.
+    }
+}
+
+
+class User {
+    constructor(public username: string) {}
+}
+class Company {
+    constructor(public name: string) {}
+}
+
+function printName(entity: User | Company) {
+    if (entity instanceof User) {
+        entity //User class의 instance
+    } else {
+        entity //Company class의 instance
+    }
+}
+```
+
+- type predicate function을 만들면 만능이다.
+```javascript
+interface Cat {
+    name: string,
+    numLives: number
+}
+
+interface Dog {
+    name: string;
+    breed: string;
+}
+
+
+function isCat(animal: Cat | Dog): animal is Cat { 
+    //parameter가 animal이기 때문에 : 뒤의 단어도 animal
+    return (animal as Cat).numLives !== undefined //무조건 return하는 값은 boolean type
+}
+
+function isCat(star: Cat | Dog): star is Cat { 
+    //parameter가 star기 때문에 : 뒤의 단어도 star
+    return (star as Cat).numLives !== undefined //무조건 return하는 값은 boolean type
+}
+
+function makeNoise(animal: Cat | Dog): string {
+    if (isCat(animal)) {
+        animal // 위에서 무조건 animal은 Cat이라고 했으므로 Cat임. animal이 뭐가 오든 Cat.
+        return "Meow";
+    } else {
+        animal //여기는 무조건 Dog
+    }
+}
+
+function isCat(animal: Cat | Dog){
+    return (animal as Cat).numLives !== undefined
+}
+
+function makeNoise(animal: Cat | Dog): string {
+    if (isCat(animal)) {
+        animal // 위에서 무조건 animal은 Cat이라고 했으므로 Cat임. animal이 뭐가 오든 Cat.
+        return "Meow";
+    } else {
+        animal //여기는 무조건 Dog
+    }
+}
+
+function isRequired<T>(value: T | undefined | null): value is T {
+  return value !== undefined && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+if (isString(value)) {
+  //value의 type은 string으로 narrowing됩니다
+  console.log(value.toUpperCase()); // value는 string이기 때문에 toUpperCase()를 호출가능
+}
+```
+
+- 다 똑같은 property를 interface가 공유한다면?
+```javascript
+interface Rooster {
+    name: string;
+    weight: number;
+    age: number;
+}
+
+interface Cow {
+    name: string;
+    weight: number;
+    age: number; 
+}
+
+interface Pig {
+    name: string;
+    weight: number;
+    age: number;  
+}
+```
+
+- 그럼 아래와 같이 분별을 위한 property를 추가해준다.
+```javascript
+interface Rooster {
+    name: string;
+    weight: number;
+    age: number;
+    kind: "rooster" //name과 weight와 age가 모두 똑같아 추가된 discriminate(분별)을 위해 추가한 type
+}
+
+interface Cow {
+    name: string;
+    weight: number;
+    age: number; 
+    kind: "cow"   //name과 weight와 age가 모두 똑같아 추가된 discriminate(분별)을 위해 추가한 type
+}
+
+interface Pig {
+    name: string;
+    weight: number;
+    age: number;  
+    kind: "pig"   //name과 weight와 age가 모두 똑같아 추가된 discriminate(분별)을 위해 추가한 type
+}
+```
+
+- 그리고 이를 switch로 꺼내 type narrowing을 한다.
+```javascript
+type FarmAnimal = Pig | Rooster | Cow;  
+function getFarmAnimalSound(animal: FarmAnimal) {
+    switch(animal.kind) { //분별을 위한 property를 통해 type narrowing
+        case "pig":
+            return "Oink!";
+        case "cow":
+            return "Mooo!";
+        case "rooster":
+            return "Cockadoodledoo!";
+    }
+}
+
+    
+const stevie: Rooster = {
+    name: "Stevie Chicks",
+    weight: 2,
+    age: 1.5,
+    kind: "rooster"
+}
+
+console.log(getFarmAnimalSound(stevie)); //Cockadoodledoo!
+```
+
+- 새로운 interface를 추가하고 FarmAnimal에 넣었다고 해보자. 그럼 아래에서는 case가 없어서 return을 하는 게 없다.
+```javascript
+interface Sheep {
+    name: string;
+    weight: number;
+    age: number;  
+    kind: "sheep"
+}
+type FarmAnimal = Pig | Rooster | Cow | Sheep;  
+function getFarmAnimalSound(animal: FarmAnimal) {
+    switch(animal.kind) { //sheep case가 없음.
+        case "pig":
+            return "Oink!";
+        case "cow":
+            return "Mooo!";
+        case "rooster":
+            return "Cockadoodledoo!";
+    }
+}
+```
+
+- 그럴 때 자동으로 error를 던지게끔 하려면 default가 필요하다.
+```javascript
+type FarmAnimal = Pig | Rooster | Cow | Sheep;  
+function getFarmAnimalSound(animal: FarmAnimal) {
+    switch(animal.kind) { //sheep case가 없음.
+        case "pig":
+            return "Oink!";
+        case "cow":
+            return "Mooo!";
+        case "rooster":
+            return "Cockadoodledoo!";
+        default:
+            const _exhaustiveCheck: never = animal; //Type Sheep is not assignable to type 'never'
+    }
+}
+```
+
+- default까지 내려가게 되면 무조건 error가 난다.
+```javascript
+type FarmAnimal = Pig | Rooster | Cow | Sheep;  
+function getFarmAnimalSound(animal: FarmAnimal) {
+    switch(animal.kind) { //sheep case가 없음.
+        case "pig":
+            return "Oink!";
+        case "cow":
+            return "Mooo!";
+        case "rooster":
+            return "Cockadoodledoo!";
+        case "sheep":
+            return "Baaa!";
+        default:
+            const _exhaustiveCheck: never = animal; //Type Sheep is not assignable to type 'never'
+        return  _exhaustiveCheck; //never는 return이 불가능하므로 확실하게 에러가 난다.
+    }
+}
+```
+
+- type declaration file도 있다.
+- 이건 .d.ts files다.
+- lib.dom.d.ts가 대표적이다.
+- 여긴 interface, class, type만 있다.
+- library를 만들 때도 .d.ts.files가 반드시 필요하다.
+- axios는 npm install 시에 index.d.ts를 같이 생성해 ts가 type 해석에 필요한 정보를 제공한다.
+```javascript
+
+
+//generics가 있다. 써서 
+get<T = any, R = AxiosResponse<T>, D =any>(url: string, config?: AxiosRequestConfig<D>) : Promise<R>
+export interface AxiosResponse<T = any, D = any> {
+    data: T,
+    status: number;
+    statusText: string;
+    headers: AxiosResponseHeaders;
+    config: AxiosRequestConfig<D>;
+    request?: any;
+}
+
+axios.get<User> /* return type을 지정할 수 있다. */("https://jsonplaceholder.typicode.com/users/1")
+.then((res) => {
+    const {data} = res;
+    printUser(data);
+})
+
+axios.get<User[]> /* return type을 지정할 수 있다. */("https://jsonplaceholder.typicode.com/users/1")
+.then((res) => {
+    const {data} = res;
+    res.data.forEach(printUser); //배열이면 foreach로.
+})
+
+
+function printUser({user: {name, email, phone} }: User) {
+    console.log(name);
+    console.log(email);
+    console.log(phone);
+}
+```
+
+- Lodash를 깔아보면, package.json에 types가 없다.
+- types가 없다는 것은 type을 규정해줄 ~d.ts가 없다는 의미다.
+- cannot find module 오류는 lodash 자체를 안 깔아서 나는 오류다.
+- types가 없어서 나는 오류는 cannot find a declaration file for module 'lodash'다.
+- 그럼 types를 깔면 된다. npm i --save-dev @types/lodash로 깔아준다.
+
+
+- ts는 export keyword가 없으면 모두 global scope로 간주한다.
+- export를 써야 Module이 작동한다.
+- module을 commonjs로 해두면, 브라우저의 JS 엔진은 modules.exports에 대해 모른다. 그래서 export, import를 지우고 <script src=>로 가져와야 제대로 작동한다.
+- module을 ES6로 해두고, <script type='module' src=>로 바꿔두면 export가 제대로 작동한다.
+
+
+
+```javascript
+import User, {userHelper, sample as randomSample} from "./User.js"; //한꺼번에 export default, export import 가능!
+const sample = 122_342_333; //error. sample이라는 변수명이 이미 있음.
+const randomSample = 122_342_333; //ok. as로 받아온 변수명은 안 겹쳐서 가능!
+```
+
+```javascript
+export default class User {
+    ....
+}
+
+export const userHelper = () => {
+    ....
+}
+```
+
+- type, interface를 import할 때는 그냥 import는 별로다.
+- 아래와 같이 해준다.
+
+```javascript
+import type {Person} from "./types.js"
+```
+
+- webpack을 쓰면 dependency 등이 모두 차례에 맞게 정렬되게끔 모든 js파일과 리소스를 한 js에 묶어준다.
+- 대신 소스코드가 정말 복잡하다.
+```javascript
+const path = require('path'); //path.resolve(__dirname, 'dist')를 위해 필요함.
+module.exports = {
+    entry: "./src/index.ts"; 
+    module: {
+        rules: [
+            {
+                test: /\.tsx?$/, //tsx파일이면 아래 laoder를 사용
+                use: "ts-loader",
+                exclude: /node_modules/ //node_modules은 type이 섞인 경우가 많아 대부분 제외
+            }
+        ]
+    },
+    resolve: {
+        extensions: [".tsx",".ts",'.js'] //webpack이 포함해야 할 js형식
+    },
+    output: {
+        filename: 'bundle.js',
+        path: path.resolve(__dirname, 'dist') //__dirname은 node 설정으로 보인다.
+    }
+}
+```
+
+- webpack을 쓰고 webpack으로 script src를 가져온다면 <script type='module'>을 쓸 필요가 없다.
+- 그냥 <script src="dist/bundle.js">등으로 가져오면 된다.
+
+- webpack에서 source map을 설정해주면 bundling되지 않은 소스코드를 볼 수 있다.
+- webpack_ts쪽에 있다.
