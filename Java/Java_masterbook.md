@@ -517,3 +517,647 @@ TemporalAccessor parsed = DateTimeFormatter.ISO_LOCAL_DATE.parse(strDate);
 LOcalDate date = LocalDate.from(parsed);
 ```
 
+- test를 나중에 하려면 private 가시성보다는, protected가 좋다.
+
+
+## lifeCycle
+- 인스턴스 변수 대신 local 변수를 사용하게 변경
+  - 라이프 사이클을 짧게 하여 사고를 방지
+```java
+@Setter
+public class EmployeeService {
+    private int id; //instance 변수
+    private String name;
+    private LocalDate birth;
+
+    public void create() {
+
+    }
+
+    public void get(int id) {
+
+    }
+}
+
+public class MainService {
+    private EmployeeService employeeService = new employeeService();
+
+    public void register() {
+        this.employeeService.setId(1);
+        this.employeeService.setName("시온");
+        this.employeeService.setBirth(LocalDate.of(1980,2,7));
+        this.employeeService.create();
+    }
+}
+```
+
+- Service가 아니라 model class를 따로 만든다.
+- 그리고 그 class를 parameter로 가져와 local 변수로 만든다.
+```java
+public class Employee {
+    public int id;
+    public String name;
+    public LocalDate birth;
+}
+
+public class EmployeeService {
+    public void create(Employee employee) {
+        //employee.id, 
+        .
+        .
+    }
+
+    public Employee get(int id) {
+
+    }
+}
+
+public class MainService {
+    private EmployeeService employeeService = new EmployeeService();
+
+    public void register() {
+        Empployee employee = new Employee();
+        employee.id = 1;
+        employee.name = "시온";
+        employee.birth = LocalDate.of(1980,2,7);
+        this.employeeService.create(employee);
+    }
+
+}
+```
+
+- 라이플 사이클을 오히려 길게 해서 성능을 높일 수도 있다.
+- 라이프 사이클을 짧게 하면 GC가 발생횟수가 증가한다. GC는 애플리케이션 성능을 악화시키는 주요 요인이다.
+- 특히 변수가 없는 class는 길게 하면 좋다. 그 경우, Utility가 대표적인데, static 변수로 가져오는 것도 좋은 선택이다.
+
+```java
+public class StringUtils {
+    public boolean isEmpty(String text) {
+        return (text == null || text.length() == 0); 
+    }
+}
+
+public class MainService {
+    private static StringUtils stringUtils = new StringUtils();
+    
+    public void execute(String text) {
+        if (StringUtils.isEmpty(text)) {
+            
+        }
+    }
+}
+```
+
+- 아니면 method를 static으로 만들수도 있다.
+```java
+public class StringUtils {
+    public static boolean isEmpty(String text) {
+        return (text == null || text.length() == 0); 
+    }
+}
+
+public class MainService {
+    
+    public void execute(String text) {
+        if (StringUtils.isEmpty(text)) { //대문자. instance 변수 선언 X
+            
+        }
+    }
+}
+```
+
+- abstract class는 향후 Mock 객체로 만들 떄 활용이 불가능하다.
+- 엔간하면 interface로 만들어놓자.
+- interface를 쓰면 Java 8부터는 factory class를 굳이 활용하지 않아도 된다.
+- 만약 factory class를 쓴다면 아래와 같다.
+```java
+public class FooFactory {
+    public static Foo newInstance(String message) {
+        return new DefaultFoo(message);
+    }
+}
+
+public class ApiClient {
+    public staic void main(String ...args) {
+        Foo foo = FooFactory.newInstance("Hello Foo!");
+        System.out.println(foo.say());
+    }
+}
+```
+- Factory class 대신 interface default method를 쓴다면 아래와 같다.
+```java
+public interface Foo {
+    String say();
+
+    static Foo newInstance(String message) {
+        return new DefaultFoo(message);
+    }
+}
+
+class DefaultFoo implements Foo {
+    private String message;
+
+    DefaultFoo(String message) {
+        this.message = message;
+    }
+
+    @Override
+    public String say() {
+        return this.message;
+    }
+}
+
+public class ApiClinet {
+    public static void main(String ...args) {
+        Foo foo = Foo.newInstance("Hello Foo!");
+
+        System.out.println(foo.say());
+    }
+}
+```
+
+## design pattern
+- AbstractFacotry 패턴
+  - 일련의 인스턴스군을 모아서 생성하기
+```
+DBMS를 가져올 때 필요한 instance를 모아둔다.
+```
+```java
+//interface로 만들어 어떤 DBMS든 가져올 수 있게끔 만든다.
+public interface Facotry {
+    Connection getConnection();
+
+    Configuration getConfiguration();
+}
+
+//abstrac class로 만들어 어떤 Connection 방식이든 가능하게 한다.
+public abstract class Connection {
+
+}
+
+//abstrac class로 만들어 어떤 Configuration 방식이든 가능하게 한다.
+public abstract class Configuration {
+
+}
+
+//Factory interface를 구현하여 PostgreSQLFactory와 관련된 connection, configuration을 얻어오게 한다.
+public class PostgreSQLFactory implements Facotry {
+    @Override
+    public Connection getConnection() {
+        return new PostgreSQLConnection();
+    }
+
+    @Override
+    public Confugration getConfiguration() {
+        return new PostgreSQLConfiguration();
+    }
+}
+
+//실제 PostgreConnection을 구현하는 class다.
+public class PostreSQLConnection extends Connection {
+
+}
+
+//실제 PostgreSQLConfiguration을 구현하는 class다.
+public class PostgreSQLConfiguration extends Configuration {
+
+}
+```
+
+- 아래는 Postgre가 아닌 Mysql용으로 만든 것이다.
+```java
+public class MYSQLFactory implements Factory {
+    @Override
+    public Connection getConnection() {
+        return new MYSQLConnection();
+    }
+
+    @Override
+    public Configuration getConfiguration() {
+        return new MYSQLConfiguration();
+    }
+}
+
+public class MYSQLConnection extends Connection {
+
+}
+
+public class MYSQLConfiguration extends Configuration {
+
+}
+```
+
+- 실제 Factory 사용 class는 아래와 같다.
+```java
+public class SampleMain {
+    public static void main(String ...args) {
+        String env = "PostgreSQL";
+
+        Facotry facotry = createFactory(env);
+        Connection connection = facotry.getConnection();
+        Configuration configuration = factory.getConfiguration();
+    }
+
+    private static Factory createFactory(String env) {
+        switch (env) {
+            case "PostgreSQL":
+                return new PostgreSQLFactory();
+            case "MYSQL":
+                return new MySQLFactory();
+            default:
+                throw new IllegalArgumentException(env);
+        }
+    }
+}
+```
+
+- 즉 순서는 아래와 같다.
+
+```
+Factory에 필요한 기능을 확장할 수 있게 abstract class를 만든다. --> abstract class Connection, Configuration
+실게 기능을 구현한 class를 만든다. --> class PostreSQLConnection extends Connection, class PostgreSQLConfiguration extends Configuration
+Facotry용 interface를 만든다. --> Facotry interface
+경우에 맞는 실제 Facotry class를 만든다. --> class MYSQLFactory implements Factory
+실제 Factory를 생성한다 --> Facotry facotry = new PostgreSQLFactory();, new MySQLFactory();
+```
+
+- Builder 패턴
+  - 복합화된 instance의 생성 과정을 은폐한다.
+
+```java
+public interface Builder {
+    void createHeader();
+    
+    void createContents();
+
+    void createFooter();
+
+    Page getResult();
+}
+
+public class Page {
+    private String header;
+
+    private String content;
+
+    private String footer;
+}
+
+public class TopPage extends Page {
+
+}
+
+public class Director {
+    private Builder builder;
+
+    public Director(Builder builder) {
+        this.builder = builder;
+    }
+
+    public Page construct() {
+        builder.createHeader();
+        builder.crateContents();
+        builder.createFooter();
+
+        return builder.getResult();
+    }
+}
+
+public class TopPageBuilder implements Builder {
+    private TopPage page;
+
+    public TopPageBuilder() {
+        this.page = new TopPage();
+    }
+
+    @Override
+    public void createHedaer() {
+        this.page.setHeader("Header");
+    }
+
+    @Override
+    public void createContents() {
+        this.page.setContent("Contents");
+    }
+
+    @Override
+    public void createFooter() {
+        this.page.setFooter("Footer");
+    }
+
+    @Override
+    public Page getResult() {
+        return this.page;
+    }
+}
+```
+
+- 위처럼 Builder를 만들어두면 복잡한 instance를 만드는 과정이 전부 은폐되고 3줄짜리로 instance를 만드는 것처럼 보이게 된다.
+```java
+public class SampleMain {
+    public static void main(String ...args) {
+        Builder builder = new TopPageBuilder();
+        Director director = new Director(builder);
+
+        Page page = director.construct();
+    }
+}
+```
+
+- Adapter 패턴
+  - 인터페이스에 호환성이 없는 클래스들을 조합시키기
+  - 기존 시스템과 새로운 시스템이 완전히 다른 method를 사용하는 경우 사용할 수 있다.
+```java
+public class OldSystem {
+    public void oldProcess() {
+        //기존처리
+    }
+}
+
+public abstract class Target {
+    abstract void process();
+}
+
+public class Adapter extends Target {
+    private OldSystem oldSystem;
+
+    public Adapter() {
+        this.oldSystem = new OldSystem();
+    }
+
+    @Override
+    public void process() {
+        this.oldSystem.oldProcess();
+    }
+}
+
+public class SampleMain {
+    public static void main(String[] args) {
+        Target target = new Adapter();
+        target.process();
+    }
+}
+```
+
+- Composite 패턴
+  - 재귀적 구조 쉽게 처리
+  - 파일 시스템에 쓰기 좋다.
+
+- 아래는 실제 Java의 File, Directory class는 아니다. sudo다.
+```java
+public interface Entry {
+    void add(Entry entry);
+
+    void remove();
+
+    void rename(String name);
+}
+
+public class File implmenets Entry {
+    private String name;
+
+    public File(String name) {
+        this.name = name;
+    }
+
+    @Override
+    public void add(Entry entry) {
+        throw new UnsupportedOpertaionException();
+    }
+
+    @Override
+    public void remove() {
+        System.out.println(this.name + "를 삭제했다.");
+    }
+
+    @Override
+    public void rename(String name) {
+        this.name = name;
+    }
+}
+
+public class Directory implements Entry {
+    private String name;
+
+    private List<Entry> list;
+
+    public Directory(String name) {
+        this.name = name;
+        this.list = new ArrayList<>();
+    }
+
+    @Override
+    public void add(Entry entry) {
+        list.add(entry);
+    }
+
+    @Override
+    public void remove() {
+        Iterator<Entry> itr = list.iterator(); //Entry를 구현한 class는 다 들어올 수 있다. 그게 File과 Directory다.
+        while (itr.hasNext()) {// 한마디로 File인지, Directory인지 신경안쓰고 모두 remove가 가능하다.
+            Entry entry = itr.next();
+            entry.remove();
+        }
+        System.out.println(this.name + "을 삭제했다.");
+    }
+
+    @Override
+    public void rename(String name) {
+        this.name = name;
+    }
+}
+```
+
+- Command 패턴
+  - 명령을 instance로 취급한다.
+  - 할인 정책 같은 곳에 많이 쓰인다.
+
+```java
+@Setter
+public abstract class Command {
+    protected Book book;
+
+public abstract void execute();
+}
+
+@Getter
+@Setter
+@RequiredArgsConstructor
+public class Book {
+    private double amount;
+}
+
+public class DiscountCommand extends Command {
+    @Override
+    public void execute() {
+        double amount = book.getAmount();
+        book.setAmount(amount * 0.9);
+    }
+}
+
+public class SpecialDiscountCommand extends Command {
+    @Override
+    public void execute() {
+        double amount = book.getAmount();
+        book.setAmount(amoutn * 0.7);
+    }
+}
+
+public class SampleMain {
+    public static void main(String... args) {
+        Book comic = new Book(5000);
+
+        Book technicalBook = new DiscountCommand();
+
+        Command discountCommand = new DiscountCommand();
+
+        Command specialDiscountCommand = new SpecialDiscountCommand();
+
+        discountCommand.setBook(comic);
+        discountCommand.execute();
+        System.out.println("할인 후 금액은 " + comic.getAmount() + "원");
+
+        discountCommand.setBook(technicalBook);
+        discountCommand.execute();
+        System.out.println("할인 후 금액은 " + technicalBook.getAmount() + "원");
+
+        speicalDiscountCommand.setBook(technicalBook);
+        speicalDiscountCommand.execute();
+        System.out.println("할인 후 금액은" + technicalBook.getAmount() + "원");
+    }
+}
+```
+
+- Strategy 패턴
+  - 처리 알고리즘(전략)을 간단하게 전환
+  - 처리 조건에 따라 전략을 바꿀 때 좋음. ex) 할인
+
+```java
+public interface Strategy {
+    void discount(Book book);
+}
+
+@RequiredArgsConstructor
+@Setter
+@Getter
+public class Book {
+    private double amount;
+}
+
+public class DiscountStrategy implements Strategy {
+    @Override
+    public void discount(Book book) {
+        double amount = book.getAmount();
+        book.setAmount(amount * 0.9);
+    }
+}
+
+public class SpecialDiscountStrategy implements Strategy {
+    @Override
+    public void discount(Book book) {
+        double amount = book.getAmount();
+        book.setAmount(amount * 0.7);
+    }
+}
+
+public class Shop {
+    private Strategy strategy;
+
+    public Shop(Strategy strategy) {
+        this.strategy = strategy;
+    }
+
+    public void setStrategy(Strategy strategy) {
+        this.strategy = stratgey;
+    }
+
+    public void sell(Book book) {
+        this.stratgey.discount(book);
+    }
+}
+
+public class SampleMain {
+    public static void main(String... args) {
+        Book comic = new Book(5000);
+
+        Book technicalBook = new Book(25_000);
+
+        Strategy discountStrategy = new DiscountStrategy();
+
+        Shop shop = new Shop(discountStrategy);
+        shop.sell(comic);
+        System.out.println("할인 후 금액은 " + comic.getAmount() + "원" );
+
+        shop.setStrategy(specialDiscountStrategy);
+        shop.sell(technicalBook);
+        System.out.println("할인 후 금액은" + technicalBook.getAmount() + "원");
+    }
+}
+```
+
+- Observer pattern
+  - 어떤 인스턴스의 상태가 변화할 때 그 인스턴스 자신이 상태의 변화를 통지하는 구조를 제공한다.
+  - 다른 시스템으로부터 데이터를 수신, 사용자가 버튼을 누름 -> 상태 변화의 계기. 이걸 감지하여 처리하는 프로그램 구현
+  - 상태가 바뀔 때 필요한 처리 호출하면 상태 보관 클래스와 호출 클래스가 결합도가 높아짐. 확장성 떨어짐
+
+```java
+public interface Observer {
+    void update(Subject subject);
+}
+
+public abstract class Subject {
+    private List<Observer> observers = new ArrayList<>();
+
+    public void addObserver(Observer observer) {
+        this.observers.add(observer);
+    }
+
+    public void notifyObservers() {
+        for (Observer observer : observers) {
+            observer.update(this);
+        }
+    }
+    public abstract void execute();
+}
+
+public class Client implements Observer {
+    @Override
+    public void update(Subject subject) {
+        System.out.println("통지를 수신했다.");
+    }
+}
+
+public class DataChanger extends Subject {
+    private int status;
+
+    @Override
+    public void execute() {
+        status++;
+        System.out.println("상태가" + status + "로 바뀌었다.");
+        notifyObservers(); 
+    }
+}
+
+public class SampleMain {
+    public static void main(String... args) {
+        Observer observer = new Client();        // 상태 변경을 감시
+        Subject dataChanger = new DataChanger(); // 상태 변경을 통지
+
+        dataChagnger.addObserver(observer);
+        for (int count = 0; count < 10; count ++){
+            dataChanger.execute();
+
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+```
+
+- 핵심은 Subject는 통지할 Observer를 보관한다.
+- notifyObserver method가 호출되면 Observer에 통지한다. (update method 호출)
+- 정보를 '통지'하는 구조가 Observer interface와 Subject 추상 클래스에서 제공된다.
+- 실제 처리는 각각을 구현하고 상속한 class에서 이뤄진다.

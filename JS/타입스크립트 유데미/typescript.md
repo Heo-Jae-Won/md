@@ -384,7 +384,7 @@ interface Dog {
 }
 //Dog의 속성을 두 번 나눠 기입해도 똑같은 interface의 속성으로 취급. 따라서 4개의 속성이 필요함.
 
-//DOg의 속성이 모두 필요하고 추가로 기입한 속성도 필요. 다중 상속 가능!
+//Dog의 속성이 모두 필요하고 추가로 기입한 속성도 필요. 다중 상속 가능!
 interface ServiceDog extends Dog {
     job : "drug sniffer"
 }
@@ -459,7 +459,7 @@ btn.addEventListener('click',function() {
 const input = document.getElementById("todoinput");
 btn.addEventListener('click',function() {
     alert(input.value); //input does not have a proerty input. 
-    (<HTMLInputElement>input).value = ""; //JSX에선 작동안함. React에선 불가.
+    ( <HTMLInputElement> input).value = ""; //JSX에선 작동안함. React에선 불가.
         //(input).value와 동일.
 })
 ``` 
@@ -468,16 +468,14 @@ btn.addEventListener('click',function() {
 - interface를 ts가 알아서 추론해주어 그 interface의 method를 쓸 수 있다.
 - id나 class를 쓰면 any type이라서 generics로 덮어 써야 method를 쓸 수 있다.
 ```javascript
-const form = document.querySelector('form'); 
 const form = document.querySelector<HTMLFormElement>('#form');
-
 form.addEventListener("submit",function(e){//e가 뭘 의미하는 지 암. submit에 addEventLister기 때문.
     e.preventDefault();
     console.log("SUBMITTED");
 })
 
-const handleSubmit = function(e){ //e가 뭘의미하는 지 ts가 모름. context가 없기 때문. error
-//e: subMitEvent()로 써줘야 함.
+const handleSubmit = function(e /*e: subMitEvent()로 써줘야 함. */){ //e가 뭘의미하는 지 ts가 모름. context가 없기 때문. 따라서 error
+    
     e.preventDefault();
     console.log("SUBMITTED");
 }
@@ -505,8 +503,8 @@ function readTodos() {
 - ts에서는 property를 먼저 기술해야만 this로 사용이 가능하다.
 ```javascript
 class Player {
-    first: string;
-    last: string;
+    first: string; //먼저 기술
+    last: string;  //먼저 기술
     constructor(first: string, last: string) {
         this.first = first;
         this.last = last;
@@ -640,7 +638,7 @@ const btn = document.querySelector<HTMLButtonElement>(".btn"); //<button class="
 ```
 
 
-- generics를 만들면 여러 type에 대해 각자 overloading할 필요가 없어 편하다.
+- generics를 만들지 않을 때는 아래와 같이 일일이 overloading을 해야한다.
 ```javascript
 function numberIdentity(item: number): number {
     return item;
@@ -657,7 +655,10 @@ function booleanIdentity(item: boolean): boolean {
 function Identity(item: any): any {
     return item;
 }
+```
 
+- generics로 만들면 여러 type에 대해 각자 overloading할 필요가 없어 편하다.
+```js
 function identity<Type>(item: Type): Type {
     return item;
 }
@@ -674,8 +675,7 @@ function identity<T>(item: T): T {
 }
 ```
 
-- 배열도 똑같이 generics를 쓸 수 있다.
-- 자동추론이 가능하면 그렇게 맡겨주자. 그게 code가 더 깔끔하다.
+- 배열도 똑같다.
 ```javascript
 function getRandomNumberElement(list: number[]) {
 
@@ -696,8 +696,11 @@ function getRandomNCatElement(list: Cat[]) {
 function getRandomNAnyElement(list: any[]) {
 
 }
+```
 
-
+- 배열도 똑같이 generics를 쓸 수 있다.
+- 자동추론이 가능하면 그렇게 맡겨주자. 그게 code가 더 깔끔하다.
+```js
 function getRandomTypeElement<T>(list: T[]) : T {
     const randIdx = Math.fllor(Math.random() * list.length);
 

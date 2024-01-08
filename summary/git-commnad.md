@@ -6,18 +6,24 @@ https://wayhome25.github.io/git/2017/07/08/git-first-pull-request-story/
 
 - 만약 github clone 시 fatal: repostiroy not found가 뜰 경우
 
-- git clone https://github.com/openobjectnet/open-dashboard-front.git와 같이 했는데 위와 같은 오류가 날 수 있다.
-- 그 경우 git clone https://openobjectnet@github.com/openobjectnet/open-dashboard-front.git와 같이 앞에 username을 붙여준다
-- 그리고나면 해당 유저로 로그인하여 증명하라는 표시가 뜬다. 로그인하여 증명하면 clone이 가능하다.
-- 기본적으로 해당 오류가 나는 것은, 권한을 얻지 못했기 때문이다. private repo에 접근하려는데 권한이 없는 경우 자주 발생한다. 따라서 해당 아이디로 로그인해서 credentials manager를 얻는 것이다.
+- git clone https://github.com/id/reponame.git와 같이 했는데 위와 같은 오류가 날 수 있다.
+- 그 경우 git clone https://userid@github.com/id/reponame.git와 같이 앞에 username을 붙여준다
+- 그리고 나면 해당 유저로 로그인하여 증명하라는 표시가 뜬다. 로그인하여 증명하면 clone이 가능하다.
+- 기본적으로 해당 오류가 나는 것은, 권한을 얻지 못했기 때문이다. 
+- private repo에 접근하려는데 권한이 없는 경우 자주 발생한다. 따라서 해당 아이디로 로그인해서 credentials manager를 얻는 것이다.
 - 만약 git clone을 할 게 master가 아니라 dev라면 아래와 같이 dev를 clone한다.
 ```sh
 git clone -b(--branch) <branchname> <remote-repo-url>
 ```
-- github clone으로 가져온경우, 보통 master밖에 없을 것이다.
+- 혹시 까먹고 master로 가져왔어도 상관없다.
+- 보통 github clone으로 가져온경우, 보통 master밖에 없을 것이다.
 
 - 그럴 때 git branch --all
-- git checkout [원하는 branch]로 원하는 branch를 가져온다
+- git checkout [원하는 branch]로 원하는 branch를 가져온다.
+
+- 혹시 도중에 다른 사람이 branch를 remote에 추가됐다면?
+- git remote update로 remote에 추가된 branch를 내 git file에 인식시킨다.
+- 그 뒤 git checkout [원하는 branch]로 하면 가져올 수 있다.
 
 
 ## <span style="color:#802548">_1. branch 관련 명령어_</span>
@@ -34,8 +40,9 @@ git push origin --delete [branch이름] :
 ## 로컬저장소와 원격저장소 모두에서 branch 삭제.
 ```
 ```sh
-git branch -d [해당 branch이름] : 
+git branch -d [branch이름] : 
 ## 로컬저장소에서 branch를 삭제.
+```
 ```sh
 git branch --move [바꿀branch이름] [바뀐branch이름] : 
 ## branch 이름을 바꿀 수 있는 기능이다. 
@@ -60,8 +67,9 @@ git restore --staged . :
 ```
 
 ```sh
-git add [new file] & git commit --amend -m"Add new File" : 
-## commit을 했는데 빼먹은 파일이 있다면 staging areadp 넣고 다시 commit함. 메시지를 바꿀 생각이 없다면 --amend까지만 하면 됨. 
+git add [file이름] 
+git commit --amend -m "Add new File" : 
+## commit을 했는데 빼먹은 파일이 있다면 staging area에 넣고 다시 commit함. 메시지를 바꿀 생각이 없다면 --amend까지만 하면 됨. 
 ```
 
 ​
@@ -73,7 +81,9 @@ git reset --mixed :
 ```
 ```sh
 git reset --soft : 
-## 커밋이력을 없애면서 여태까지 git add한 것을 보존하면서 소스코드는 유지된다. 커밋 이후에 뭔가 더 추가해야한다면 자주 쓴다. git reset --soft + git add . + git commit -m""의 형태다. 
+## 커밋이력을 없애면서 여태까지 git add한 것을 보존하면서 소스코드는 유지된다. 
+## 커밋 이후에 뭔가 더 추가해야한다면 자주 쓴다. git reset --soft + git add . + git commit -m""의 형태다. 
+# 위처럼 git add [file이름] + git commit --amend -m "commit"과 같다.
 ```
 
 ```sh
@@ -91,7 +101,7 @@ git revert --no-commit [해쉬코드]...[해쉬코드] :
 git revert --no-commit HEAD~3
 ## 여러개를 revert 해도 commit은 1개만 남는다. 각각의 revert commit을 남기지 않는다.
 git push origin master
-```gi
+```
 ​
 
 ## <span style="color:#802548">_5. 혼자 작업 시 원격저장소에서 commit이력을 삭제하는 법_</span>
@@ -103,14 +113,23 @@ git push origin master -f
 ​
 
 ## <span style="color:#802548">_6. git pull 시에 conflict 해결 법_</span>
-
+- 대원칙은 아래와 같다.
+```
+1. 업무가 아닌 함수 단위 commit
+2. 하루 3번 원격 저장소 동기화 - 출근 직후, 점심 먹고, 퇴근하기 1시간 전
+```
 ```sh
+
+# <<<< ---> 이전에 있던 소스
+# ===
+# >>>> --> 새롭게 가져온 소스
 git status : 
 ## unmerged된 파일이 무엇인지 살펴본다.
 ```
 ```sh
 git diff : 
 ## git status로 확인한 문제되는 파일에서 어떤 부분이 문제인지 살펴보고 원하는 방향으로 정리한다.
+## 이 명령어를 bash에서 쓰는 것은 추천되지 않는다. vscode에서 살펴보는게 훨씬 편하다
 ```
 
 ```sh
@@ -127,7 +146,7 @@ git merge --continue :
 ## <span style="color:#802548">_7. 원격저장소 설정_</span>
 ```sh
 git remote add [저장소 alias] [url] :
-## 원격저장소를 설정한다.
+## 원격저장소를 설정한다. 거의 git remote add origin https://~~~ 형태
 ```
 
 ```sh
@@ -242,7 +261,10 @@ git config --global user.email "이메일" :
 # 해당 이메일로 commit이 남게 설정한다.
 
 git config --unset 속성(user.name) : 
-# 해당 속성의 값을 삭제한다.
+# 해당 속성의 값을 삭제한다.\
+
+git config --global init.defaultbranch main :
+# default branch의 이름을 master가 아닌 main으로 한다
 ```
 ​
 
@@ -299,7 +321,7 @@ git push origin master :
 ​
 ```sh
 vim ~/.gitconfig: 
-# git의 설정을 연다. 아래와 같이 alias를 선언하고 쭊 써주면 된다. 참고로 저기 pn은 먹히지 않는다. gitconfig는 git에서 인식 가능한 command만을 alias로 설정할 수 있다. pnpm은 또 다른 system이라서 인식되지 않는다.
+# git의 설정을 연다. 아래와 같이 alias를 선언하고 쭉 써주면 된다. 참고로 저기 pn은 먹히지 않는다. gitconfig는 git에서 인식 가능한 command만을 alias로 설정할 수 있다. pnpm은 또 다른 system이라서 인식되지 않는다.
 ```
 
 - git config --list로 쳐보면 설정한 email, name, alias가 잘 들어온 것을 확인할 수 있다.
@@ -356,4 +378,26 @@ git config --list
 # hist라는 alias가 추가되었는지 확인한다.
 
 git hist
+```
+
+## <span style="color:#802548">_19. 체리픽_</span>
+- git cherry pick 했을 때 cherry pick 순서 지켜서 cherry pick 해야한다.
+
+```
+cderf21
+
+rtqwrr51
+
+```
+- 위와 같이 log 순서가 있다고 해보자.
+- 그럼 아래와 같이 명령어를 써야 한다.
+
+```sh
+git cherry-pick rtqwrr51...cderf21 
+```
+- 거꾸로 하면 git conflict가 나게 된다.
+
+```sh
+git cherry-pick cderf21...rtqwrr51 
+# git conflict
 ```
