@@ -1228,8 +1228,166 @@ module.exports = {
 }
 ```
 
-- webpack을 쓰고 webpack으로 script src를 가져온다면 <script type='module'>을 쓸 필요가 없다.
-- 그냥 <script src="dist/bundle.js">등으로 가져오면 된다.
+- webpack을 쓰고 webpack으로 script src를 가져온다면 아래 구문을 쓸 필요가 없다.
+
+
+```
+<script type='module'>
+```
+
+- 그냥 아래와 같이 가져오면 된다.
+
+
+```
+<script src="dist/bundle.js">
+```
 
 - webpack에서 source map을 설정해주면 bundling되지 않은 소스코드를 볼 수 있다.
 - webpack_ts쪽에 있다.
+
+
+## React
+
+- 옛날엔 아래와 같이 썼는데 이제는 잘 쓰지 않는다.
+
+
+```js
+const Greeter = () : React.FC => {
+    return <h1>hello</h1>
+}
+```
+
+- 이제는 JSX element를 type으로 한다.
+
+
+```js
+function Greeter(): JSX.Element {
+
+}
+```
+
+- React에서 props를 받을 때 아래와 같이 활용할 수 있다.
+
+
+```js
+function Greeter(props : {person: string}): JSX.Element {
+
+}
+```
+
+- 하지만 그러면 props가 길어지는 경우 inline이라 보기 좋지 않다.
+
+
+```js
+interface GreeterProps {
+    person: string
+}
+
+function Greeter(props: GreeterProps) {
+        return <h1>hello, {props.person}</h1>
+}
+```
+
+- 아니면 비구조화할당을 할 수도 있다.
+
+
+```js
+interface GreeterProps {
+    person: string
+}
+
+function Greeter({person} : GreeterProps) {
+    return <h1>{Person}</h1>
+}
+```
+
+
+- Property 'items' does notr exist on type 'IntrinsicAttributes'라는 오류는 아래와 같다.
+
+
+```
+props를 부모에서 보냈지만 자식에서 받는 형태가 없다.
+```
+
+- 즉 아래와 같이 했을 때, ShoppingList에서 props를 꺼내줘야 한다.
+
+
+```js
+const items = [{
+    id: 1,
+    product: '허허허',
+    quantity: 50
+}]
+function App() {
+    return <div>{<ShoppingList items={items} />}</div>;
+}
+
+
+interface Item {
+    id: number;
+    product: string;
+    quantity: number;
+}
+interface ShoppingListProps {
+    items: Item[]
+}
+export default function ShoppingList({items} : ShoppringListProps) {
+    return <div></div>;
+}
+```
+
+- useRef의 초기값이 null인 이유는 아래와 같다.
+
+
+```
+처음 useRef가 먼저 생성될때는 DOM이 없어 초기값이 null이다.
+```
+
+- useRef나 useState는 모두 generics라서 type을 지정하지 않으면 오류가 발생한다.
+- React는 React의 HTML 타입이 있다.
+
+
+
+- form을 다룰 때 useState를 보통 쓰지만, useRef로도 다룰 수 있다.
+- 아래처럼 state를 만든다.
+  - 그 뒤 state를 update하는 child component에 보낸다.
+  - child component에서는 useRef를 사용해 input의 값을 가져온다.
+
+
+```js
+function App() {
+  const [items, setItems] = useState<Item[]>([]);
+  const addItem = (product: string, quantity: number) => {
+    console.log("MADE TO THE APP COMPONENT!");
+    setItems([...items, { id: getId(), product, quantity }]);
+  };
+  return (
+    <div>
+      <ShoppingList items={items} />
+      <ShoppingListForm onAddItem={addItem} />
+    </div>
+  );
+}
+```
+
+```js
+function ShoppingListForm({ onAddItem }: ShoppingListFormProps): JSX.Element {
+  const productInputRef = useRef<HTMLInputElement>(null);
+  const quantityInputRef = useRef<HTMLInputElement>(null);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newProduct = productInputRef.current!.value;
+    const quantity = parseInt(quantityInputRef.current!.value);
+    onAddItem(newProduct, quantity);
+    productInputRef.current!.value = "";
+    quantityInputRef.current!.value = "1";
+  };
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="text" placeholder="Product Name" ref={productInputRef} />
+      <input type="number" min={0} ref={quantityInputRef} />
+      <button type="submit">Add Item</button>
+    </form>
+  );
+}
+```

@@ -166,6 +166,19 @@ git remote remove [저장소 alias] :
 ​
 
 ## <span style="color:#802548">_8. 작업파일 임시 저장_</span>
+- 변화를 가지고 git switch branch하면 되는 경우도 있다.
+  - git add를 안해도 되는 경우는, conflict가 없는 경우다.
+  - 이동하려는 branch가 fast-forward가 가능하다면 git add를 하지 않아도 branch switch가 가능하다.
+
+- 만약 conflict가 일어날 것이 분명하다면, git switch가 불가능하다.
+- 그럴 때 git stash를 사용해 local changes를 저장한다.
+
+- 버그를 해결할 때, 여러 시도를 할 때도 git stash를 여러번하여 실패한 버전과 실패했던 이유를 떠올릴 수 있다.
+- 개인 공부할 때 도움이 될 것이라 생각된다.
+- 다만 버그를 해결하면 git stash clear를 꼭 해줘야 한다.
+  - 그렇지 않으면 commit history graph에 stash도 남아있어 굉장히 지저분해진다.
+
+
 ```sh
 git stash : 
 ## 작업 파일 임시 저장
@@ -363,7 +376,34 @@ git push origin master
 ## <span style="color:#802548">_17. local change 지우기_</span>
 - 아직 staging에 올라오지 않은 것은 아래와 같이 지울 수 있다.
 
+
+```sh
+git checkout HEAD [filename]
+git checkout -- [filename]
+git restore [filename]
+```
+
+- 한꺼번에 다 지우고 싶다면?
+
+
+```sh
 git checkout -- .
+git restore .
+```
+
+- 만약 파일 내용을 전전 commit으로 돌리고 싶다면? 그러면서 HEAD는 유지하고 싶다면?
+```sh
+git restore --source HEAD~2 [파일이름]
+git restore --source [해쉬이름] [파일이름]
+```
+
+- 다시 HEAD로 복구하고 싶다면?
+
+
+```sh
+git restore [파일이름]
+```
+
 
 ## <span style="color:#802548">_18. 이쁘게 커밋 보기_</span>
 ```sh
@@ -401,3 +441,98 @@ git cherry-pick rtqwrr51...cderf21
 git cherry-pick cderf21...rtqwrr51 
 # git conflict
 ```
+
+## <span style="color:#802548">_20. branch diff_</span>
+- PR을 하지 않고 master를 그냥 merge하고 배포한다면?
+- branch 간 diff를 통해 변화사항을 추적해야 한다.
+
+```sh 
+git diff [base branch] [tobe Branch]
+git diff 
+git diff origin/master master 
+# 현재 local의 master와 remote의 master를 대비해줌. origin/master가 기준이 되고, local master branch를 비교해 추가되고 삭제된 것을 알려줌.
+# git diff master origin/master는 반대. 따라서 이건 쓰면 안됨
+```
+- origin이 remote일 때 origin/master고, father가 remote라면 father/master로 해줌.
+```sh
+git diff father/master master
+```
+
+- git lens를 쓰면 훨씬 편함.
+- vscode의 도움을 받아 git diff를 실행할 수 있음.
+
+https://yemsu.github.io/compare-two-git-branches-vscode/
+- 아래 같은 과정으로 origin/master가 기준이 되어 local master branch를 비교
+```
+git lens 설치
+SEARCH & COMPARE
+compare references
+처음 local의 master를 클릭
+그 다음 origin/master를 클릭
+```
+
+- 파일을 변경하고, staging에 올리지 않은 사항들을 보여주는 건 아래와 같다.
+- 이 경우 새로운 파일을 등록하면 untraked라서 staging에 없어도 보이지는 않는다.
+
+```
+git diff
+```
+
+- 파일을 변경하고, staging에 올린 뒤에도 working과 staging 포함 변경사항을 보는 것은 아래와 같다.
+- 새로운 파일을 등록하면 git add를 하고 git diff HEAD를 하면 변화사항을 포착할 수 있다.
+
+```
+git diff HEAD
+```
+
+- staging에 들어있는 변화사항만 보고싶다면 아래와 같다.
+
+
+```
+git diff --staged
+```
+
+
+- 특정 파일의 변화사항만 보고 싶다면 아래와 같다.
+
+
+```
+git diff HEAD [파일이름]
+git diff --staged [파일이름]
+git diff [파일이름]
+```
+
+
+- 특정 commit 간의 변화를 보고 싶다면 아래와 같다.
+
+
+```
+git diff [해쉬이름] [해쉬이름]
+```
+
+- 특정 커밋으로 돌아가기
+- 그럼 detached head라고 뜨는데, 그건 원래 HEAD는 branch를 reference한다.
+  - 따라서 branch의 맨 처음 commit을 따라간다.
+  - 근데 여기선 특정 commit을 reference하기 때문에 branch에서 detached된 것이다.
+```sh
+git checkout [commit hash]
+```
+
+- 특정 commit에서 다시 branch로 돌아가려면?
+
+
+```sh
+git switch [branch]
+git switch - (가장최근의 branch로 돌아감)
+```
+
+
+- 만약 특정 commit까지의 이력만 가지고 새로운 branch를 만들려면?
+
+
+```sh
+git checkout [commit hash]
+git switch -c [branch]
+```
+
+
