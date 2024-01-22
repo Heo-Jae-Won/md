@@ -2296,12 +2296,11 @@ function execute() {
       //오래 걸리는 작업, UI를 변화시키는 DOM 조작을 모두 setTimeout에 집어넣음.
       setTimeout(function(){
         longTakingLogic();
+         console.log(i);
+    console.log(isCompleted);
         remainCount = remainCount - 1;
         isCompleted = (i+1) % 10000 == 0;
-      
-        if (isCompleted) {
           progressElement.style.width = ((allCount - remainCount) / allCount) * 100 + '%';
-        } 
       },0)
     }
   }
@@ -2335,14 +2334,41 @@ function execute() {
         longTakingLogic();
         remainCount = remainCount - 1;
         isCompleted = (i+1) % 10000 == 0;
-      
-        if (isCompleted) {
-          progressElement.style.width = ((allCount - remainCount) / allCount) * 100 + '%';
-        } 
+        progressElement.style.width = ((allCount - remainCount) / allCount) * 100 + '%';
       },0)
      /**/ console.log((allCount - remainCount) / allCount); 
     }
   }
+```
+
+
+- 아래와 같이 setTimeout에 감싸지 않고 promise로 바깥으로 뺄 수도 있다.
+- 하지만 그렇게 하면 속도가 많이 느려진다.
+- if문이 있으면 percent가 계속 바뀌지 않는다.
+
+```js
+ function delay(time) { 
+      return new Promise((resolve) => setTimeout(()=> resolve(),time)); 
+    }
+    //버튼을 누르면 실행되는 작업
+		async function execute() {
+      let progressElement = document.getElementById("progressPercent");
+      let isCompleted;
+
+      initData();
+
+      for (let i = 0; i < allCount; i++) {
+        //오래 걸리는 작업, UI를 변화시키는 DOM 조작을 모두 setTimeout에 집어넣음.
+        await delay(0);
+        paintElement(progressElement,i);
+      }
+  }
+
+  function paintElement(progressElement,i){
+        longTakingLogic();
+        remainCount = remainCount - 1;
+        progressElement.style.width = ((allCount - remainCount) / allCount) * 1000 + '%';
+    }
 ```
 
 ### <span style="color:#FFCCFF">debounce와 throttle</span> 

@@ -536,3 +536,40 @@ git switch -c [branch]
 ```
 
 
+- remote branch 따라가기
+
+
+```sh
+git branch -r # 원격 branch 뭐있나 보기
+git switch [원격branch의 이름] # 이러면 저절로 remote의 branch와 연결되어 추적가능. 옛날버전은 git checkout --track origin/master. 쓰지말자.
+```
+
+
+- pull request를 하려는데 conflict가 나면 PR이 불가능하다.
+  - 그럴 때는 view command line을 클릭해 어떻게 하는 지 보고 conflict를 해결해주면 된다.
+  - 단, 그 경우 merge commit을 남기면 자동으로 PR이 닫힌다. conflict가 나면 PR이 불가능하다고 보면 되겠다.
+
+
+- branch 보호 규칙도 설정가능하다.
+  - 특히 master, main은 PR 필수로 섫정하는 경우가 많다.
+  - repo - settings - rules에서 설정한다. 
+
+- rebase를 하려면 어떻게 하냐?
+  - master를 기준으로 다시 feature branch의 history를 재정비하라는 명령
+  - feature의 commit은 master의 최신 commit 뒤로 붙게 된다.
+
+  
+```sh
+git pull origin master
+git switch [feature branch]
+git rebase master
+```
+
+- 이렇게 git rebase를 한 다음에 PR을 올려주면 된다.
+
+
+- git rebase를 하면 안되는 경우도 있다.
+- 이미 remote에 push한 commit들이다.
+- 같은 이유로 master branch에서 rebase하면 절대 안된다.
+- feature branch 또한 remote에 push했고, 누군가 그 branch를 따서 작업을 진행한다면?
+  - 그 때는 rebase하면 안 된다.

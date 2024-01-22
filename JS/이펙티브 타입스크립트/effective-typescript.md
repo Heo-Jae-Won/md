@@ -352,6 +352,7 @@ sortBy(pts,Math.random() < 0.5 ? 'x' : Math.random() < 0.7 ? 'y' : 'z');
 ```
 
 
+- ts의 type 정보는 
 
 
 
