@@ -916,3 +916,285 @@ const getLocation = ({lat, lon}) => {
 
 getLocation({lat:2,lon:1}); //key와 value를 개발자가 직접 구성하게 하니 헷갈리지 않음.
 ```
+
+
+- 디자인 패턴 중 decorator를 살펴보자.
+- ScienceFacility는 바꾸지 않고 기능을 확장하는 방법이다.
+
+```js
+class ScienceFacility {
+    constructor() {
+        this.units = ['Science Vessl'];
+    }
+
+    getUnits() {
+        return this.units;
+    }
+}
+
+let scienceFacility = new ScienceFacility();
+scienceFacility.getUnits(); // ['Science Vessel']
+
+
+class PysicsLab {
+    constructor(baseBuiliding) {
+        this.baseBuiliding = baseBuiliding;
+        this.units = ['Battlecruiser'];
+    }
+
+    getUnits() {
+        return [...this.baseBuliding.getUnits() /* 변수로 넣은 원래 변수의  unit. 여기선 Science Vessel */, ...this.units /*여기선 Battlecruiser*/]; 
+    }
+}
+scienceFacility = new PysicsLab(scienceFacility);
+scienceFacility.getUnits(); // ['Science Vessel', 'Battlecruiser']
+
+class CovertOps {
+    constructor(baseBuiliding) {
+        this.baseBuiliding = baseBuiliding;
+        this.units = ['Ghost'];
+    }
+
+    getUnits() {
+        return [...this.baseBuliding.getUnits() /* 변수로 넣은 원래 변수의  unit. 여기선 Science Vessel */, ...this.units /*여기선 Battlecruiser*/]; 
+    }
+}
+
+scienceFacility = new CovertOps(scienceFacility);
+scienceFacility.getUnits(); // ['Science Vessel', 'Ghost']
+```
+
+
+- 겹치는 부분은 상속을 통해 제거한다.
+
+
+```js
+class ScienceFacility {
+    constructor() {
+        this.units = ['Science Vessl'];
+    }
+
+    getUnits() {
+        return this.units;
+    }
+}
+
+let scienceFacility = new ScienceFacility();
+scienceFacility.getUnits(); // ['Science Vessel']
+
+class AddOnDecorator {
+    constructor(baseBuilding) {
+        this.baseBuilding = baseBuilding;
+    }
+}
+
+class PysicsLab extends AddOnDecorator{
+    constructor(baseBuiliding) {
+        super(baseBuilding);
+        this.units = ['Battlecruiser'];
+    }
+
+    getUnits() {
+        return [...this.baseBuliding.getUnits() /* 변수로 넣은 원래 변수의  unit. 여기선 Science Vessel */, ...this.units /*여기선 Battlecruiser*/]; 
+    }
+}
+scienceFacility = new PysicsLab(scienceFacility);
+scienceFacility.getUnits(); // ['Science Vessel', 'Battlecruiser']
+
+class CovertOps extends AddOnDecorator{
+    constructor(baseBuiliding) {
+        super(baseBuilding);
+        this.units = ['Ghost'];
+    }
+
+    getUnits() {
+        return [...this.baseBuliding.getUnits() /* 변수로 넣은 원래 변수의  unit. 여기선 Science Vessel */, ...this.units /*여기선 Battlecruiser*/]; 
+    }
+}
+
+scienceFacility = new CovertOps(scienceFacility);
+scienceFacility.getUnits(); // ['Science Vessel', 'Ghost']
+```
+
+- class가 아니라 함수형으로 해도 똑같이 만들 수 있다.
+- 함수 합성을 통해 가능하다.
+```js
+const pipe = (...fns) => (x) => fns.reduce((y,f) => f(y), x); //와 근데 ㄹㅇ 하나도 안 읽힌다.
+
+const scienceFacility = () => {
+    const units = ['Science Vessel'];
+    return units;
+}
+
+const physicsLab = (baseUnits) => {
+    const units = ['Battlecruiser'];
+    return [...baseUnits, ...units];
+}
+
+const physicsLab2 = (baseUnits) => {
+    const units = ['Ghosts'];
+    return [...baseUnits, ...units];
+}
+
+const scienceFacilityWithPhsicsLab = pipe(
+    scienceFacility,
+    physicsLab,
+    physicsLab2
+)(); // scienceFacility 함수를 돌리고, 그 다음에 그 값을 받아서 physicsLab 함수를 돌린다.  
+
+console.log(scienceFacilityWithPhsicsLab)
+```
+
+
+- 전략이 바뀌어도 getDialogues()는 바뀌지 않아도 된다.
+```js
+const Units = {
+    캐리어() {
+        return 'Carrier has arrived'
+    },
+    다크템플러() {
+        return 'Adun Toridas'
+    },
+    커세어() {
+        return 'It is a good day to die!'
+    }
+}
+
+const getDialogues = (unitName) => {
+    return Units[unitName]();
+}
+```
+
+- 실제 예시로는 chart가 있다.
+- 도넛 차트, 꺾은선 차트 등...필요한 걸 골라야 할 것이다.
+- 그 때는 각각 차트를 만들 수도 있다.
+
+- 통합적으로 컨트롤이 안된다.
+
+
+```js
+const chart = new BarChart();
+chart.render(data);
+
+const char2 = new DonutChart();
+chart.render(data);
+
+const chart3 = new LineChart();
+chart.render(data);
+```
+
+- Chart라는 껍데기를 만들어주고, 그 안에 넣는 strategy만 바꾼다.
+- 근데 strategy가 많지 않다면 굳이 안 써도 될거 같다.
+
+
+```js
+class Chart {
+    constructor(strategy) {
+        this.chartType = strategy;
+    }
+    render(data) {
+        this.chartType.render(data);
+    }
+}
+cosnt chart = new Chart(new BarChart());
+chart.render(data);
+
+chart = new Chart(new DonutChart());
+chart.render(data);
+```
+
+
+- 추상화 패턴은 facade도 알아보자.
+- 4개의 함수가 있다고 해보자.
+
+```js
+function checkShippingAddress(address) {
+    //지역 확인 로직..
+    if (address.includes('서울') || address.includes('경기')) {
+        return 0;
+    } else {
+        return 3000;
+    }
+}
+
+export function checkStock(productId) {
+    //...재고 확인 로직
+    return true; //재고가 있을 경우 true, 없을 경우 false 반환
+}
+
+export function checkDiscount(productId) {
+    //... 할인정보 확인 로직 ...
+    return 0.1;
+}
+
+export function checkout(productId, paymentInfo) {
+    // ...결제 로직...
+    return true;
+}
+```
+
+- 아래의 4개 함수를 모두 쓰는 비즈니스 로직이다. 
+- 4개의 함수를 모두 쓰기에 전부 알아야 한다.
+```js
+import { checkShippingADdress, checkStock, checkDiscount, checkout} from './myFunctions'
+
+const productId = 'ABC123';
+const paymentInfo = {
+    ...
+}
+
+const address = '서울특별시 강남구';
+const shippingCost = checkShippingAddress(address);
+
+if (!checkStock(productId)) {
+    console.error('Out of stock');
+} else {
+    const discount = checkDiscount(productId);
+    
+    try {
+        const result = checkout(productId, paymentInfo);
+        console.log("결제 성공: ", result);
+        //결제가 성공했을 경우 처리 로직
+    } catch (error) {
+        console.error('결제 실패: ', error.message);
+        //결제가 실패했을 경우 처리 로직
+    }
+}
+```
+
+- 위의 service.js에 모듈을 두어 추상화하자.
+- 그럼 아래와 같이 아주 간단하게 service.js가 바뀐다.
+```js
+const productId = 123;
+const paymentInfo = {...};
+const address = '서울특별시 강남구 역삼동';
+
+try {
+    const success = checkout(productId, paymentInfo, address);
+    console.log(success);
+} catch(error) {
+    console.error(error);
+}
+```
+
+- checkout 함수는 중간 모듈인 payment.js에 있는 것이다.
+
+
+```js
+import { checkShippingADdress, checkStock, checkDiscount, checkout} from './myFunctions'
+
+export function checkout(productId, paymentInfo, address) {
+    if (!checkStock(productId)) {
+        throw new Error('Out of Stock');
+    }
+
+     const discount = checkDiscount(productId);
+     const shippingCost = checkShippingAddress(address);
+
+     //... 결제 로직 ...
+     return true;
+}
+```
+
+
+- network debugging 시 오류 난 api를 우클릭 해 copy - copy as CURL(cmd)로 복사해서 보면 header, url 정보를 볼 수 있다.

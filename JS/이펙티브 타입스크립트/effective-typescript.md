@@ -327,6 +327,8 @@ getKey({}, Math.random() < 0.5 ? 1 : Math.random() < 0.7 ? 1 : 3);//<1 | 3>
 getKey({}, Math.random() < 0.5 ? 1 : Math.random() < 0.7 ? '1' : 3); //error
 ```
 
+
+
 # 주어진 interface로 union type의 조합들까지 커버하기
 - 위의 extends의 내용을 발전시키면 아래와 같다.
 - keyof로 K를 한정하여 가져오면 어떤 interface든 그 조합의 union을 커버할 수 있다.
@@ -352,7 +354,145 @@ sortBy(pts,Math.random() < 0.5 ? 'x' : Math.random() < 0.7 ? 'y' : 'z');
 ```
 
 
-- ts의 type 정보는 
+# typeof
+- ts의 typeof를 쓰면 값과 타입에 대해 다른 연산이 일어난다.
+- type의 typeof는 js코드로 사용이 불가능하다.
+- const같은 값의 typeof는 js코드로 사용이 가능하다.
+- 참고로 class는 js에서 함수로 구현되므로 값의 관점에서 typeof를 하면 function.
+- class로 만든 instance의 typeof는 object
+```js
+type t1 = typeof p; //js 코드로 변환 불가능. Person 같이 사용자 정의 type도 노출됨.
+const t1 = typeof p; //js runtime의 type 정보. string, number, object, function 등 6개 type 중 1개. interface나 type은 아님
+
+class ScienceFacility {
+    constructor() {
+        this.units = ['Science Vessl'];
+    }
+
+    getUnits() {
+        return this.units;
+    }
+}
+
+let scienceFacility = new ScienceFacility();
+scienceFacility.getUnits();
+
+const t1 = typeof ScienceFacility;
+const t1 = typeof scienceFacility ;
+console.log(t1); //fucntion
+console.log(t2); //object
+```
+
+
+# fn의 parameter에 object literal를 넣는 경우
+- fn의 parameter를 object로 받는다면, type을 선언하는 방식은 아래와 같다.
+
+
+```js
+function email(options: {person: Person, subject: string, body: string});
+```
+
+- email 함수를 위와 같이 선언했다면 비구조화 할당해서 사용한다면 아래와 같다.
+
+
+```js
+function email({person, subject, body} : {person: Person, subject: string, body: string})
+```
+
+
+# 잉여속성 체크. 
+- 타입 단언과 타입 선언은 아래와 같이 쓴다.
+
+
+```js
+const bob = {} as Person /* const bob = <Person>{} */   //타입 단언
+const bob: Person = {};                                 //타입 선언
+```
+
+- 참고로 객체형 type은 선언하면 안 된다. 
+
+
+```
+String X / string O
+Number X / number O
+Boolean X / boolean O
+```
+
+- 타입 선언이 좋은 이유는 함수에서 더 확실하게 드러난다.
+- type선언을 해놓고 쓰면 함수 표현식에 해당 return type으로 표시해준다.
+- 그럼 parameter에 type을 적지 않아도 context가 제공되니까 상관이 없다.
+
+```js
+function rollDice(sides: number): number {}
+
+type DiceRollFn = (sides: number) => number;
+const rollDice: DiceRollFn = sides => {};
+```
+
+- 그럼 의미에서 함수 선언보다는 함수 표현식이 좋다.
+- 함수 선언은 parameter에 type을 다 넣어줘야 한다.
+- 함수 표현식으로 쓰고 함수 전체에 type을 쓰면 좋은 이유가 더 있다.
+- 함수가 호출된 곳이 아니라, 함수가 정의한 곳에서 오류가 나서 오류 해결이 빨라진다.
+
+```js
+async function checkedFetch(input: RequestInfo, init?: RequestInit) {
+    const response = await fetch(input, init);
+}
+
+const checkedFetch: typeof fetch = async(input, init) => {
+    const response = await fetch(input, init);
+}
+```
+
+- 이제 타입 선언을 알아보자.
+- 타입선언은 매우 구리다.
+- 잉여속성 체크가 안 된다.
+
+
+```js
+interface Options {
+    title: string;
+    darkMode?: boolean;
+}
+
+const o = {
+    darkmode: true,
+    title: 'Ski Free'
+} as Options;   //darkmode라고 했으면 원래 잉여 속성 체크가 돼서 darkmode라는 key가 없다고 떠야한다.
+                //하지만 타입 선언을 했으므로 안 나온다.
+```
+
+- 다만 type 단언이 필요한 경우가 있다.
+- 바로 DOM 객체를 다룰 때다.
+
+
+```js
+const 
+
+```
+
+- 변수 대입으로 해도 잉여속성 체크가 안된다.
+- 임시 변수를 사용하는 것은 피해야 한다.
+
+
+```js
+interface Options {
+    title: string;
+    darkMode?: boolean;
+}
+
+const intermediate = {
+    darkmode: true,
+    title: 'Ski Free'
+} 
+
+const o : Options = intermediate; //darkmode라서 key가 없다는 오류가 떠야하지만 뜨지 않는다.
+```
+
+
+
+
+
 
 
 

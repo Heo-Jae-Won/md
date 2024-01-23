@@ -573,3 +573,127 @@ git rebase master
 - 같은 이유로 master branch에서 rebase하면 절대 안된다.
 - feature branch 또한 remote에 push했고, 누군가 그 branch를 따서 작업을 진행한다면?
   - 그 때는 rebase하면 안 된다.
+
+
+
+- github 쓰는 법.
+```
+repo 만들기
+invite peopl
+collaborators - add people
+projects 클릭 - link projects - create new projects - board로 생성
+add feature를 Todo나 In Progress Done에 추가
+feature 클릭해서 add assign - convert to issue
+그럼 자동으로 issue가 열리는데 거기서 create a branch 누르면 remote에서 만든 branch가 생성. 
+local에서 해당 branch 활성화 하려면 아래 command 입력
+git fetch origin
+git switch [feature branch] //그럼 알아서 upstream이 origin/featrue branch가 되어 track됨.
+그리고 pull request하면 됨.
+```
+
+- commit message 바꾸기도 rebase로 가능하다. 
+- 하지만 remote에 안올렸을 때만 써야 한다.
+
+
+```sh
+git rebase -i HEAD~4
+```
+
+- 그럼 오래된 commit부터 위로 오게 vim이 열린다.
+- 그 떄 pick을 reword로 바꿔준다.
+- 그럼 커밋 메시지만 바꾸게 된다.
+- 커밋 내용은 바뀌지 않지만, 커밋 해시는 새로 생긴다.
+- rebase한 commit 이후의 commit들도 부모 commit의 해쉬가 바꼈으므로 같이 커밋 해쉬가 바뀐다.
+
+
+- 커밋 병합도 가능하다.
+- key properties를 넣는 commit을 했는데, 실수로 안넣어서 두번째 commit을 했다고 해보자.
+- 그럴 때 병합을 하는데, fixup을 사용한다.
+- 없어진 commit의 내용은 그 다음 commit에 그대로 녹여진다.
+- 오타를 낸 걸 수정하고, 또 수정하는 commit을 했을 때도 유용하게 쓸 수 있다.
+- fixup을 2개를 하면, 2개 commit이 바뀐 내용을 합쳐서 다음 commit에 녹여낸다.
+
+- 아래와 같은 commit history가 있다고 해보자.
+
+
+```sh
+q5141414 my cat made this commit
+e151241 fix another navbar typo
+r151295 fix navbar typos
+```
+
+- 아래와 같은 명령어를 사용한다.
+
+
+```sh
+git rebase -i HEAD~3
+```
+
+-  그럼 아래와 같이 vim이 열린다.
+
+
+```sh
+pick q141414 my cat made this commit
+pick e151241 fix another navbar typo
+pick r151295 fix navbar typos
+```
+
+
+- 그럼 아래 오타 커밋을 fixup으로 바꿔준다.
+
+
+```sh
+pick q141414 my cat made this commit
+fixup e151241 fix another navbar typo
+fixup r151295 fix navbar typos
+```
+
+- 그럼 아래와 같이 commit history가 변경된다.
+
+```sh
+v51241 my cat made this commit
+```
+
+
+- commit을 아예 삭제하는 것도 가능하다.
+
+
+```sh
+k51251 my father made this commit
+v51241 my cat made this commit
+e14124 not useful commit
+g15155 initial commit
+```
+
+- 똑같이 현재 branch를 rebase 해준다.
+
+
+```sh
+git rebase -i HEAD~2
+```
+
+- 그럼 아래와 같이 열린다.
+
+
+```sh
+pick k51251 my father made this commit
+pick v51241 my cat made this commit
+pick e14124 not useful commit
+pick g15155 initial commit
+```
+
+
+- 여기서 not useful commit을 drop으로 바꿔준다.
+
+```sh
+pick k51251 my father made this commit
+pick v51241 my cat made this commit
+drop e14124 not useful commit
+pick g15155 initial commit
+```
+
+- 그럼 해당 commit의 내용이 자식 commit부터 싹 사라진다.
+- 파일을 추가한 경우 파일도 사라지는 것으로 보인다.
+
+
+
