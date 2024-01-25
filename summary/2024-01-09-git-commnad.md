@@ -286,8 +286,29 @@ git config --global init.defaultbranch main :
 ## <span style="color:#802548">_12. 태그_</span>
 ​
 ```sh
+git tag [tagname]
+# 태그를 생성한다.
+
+git tag -a [tagname] -m "[message]"
+# 메타데이터를 포함한 태그를 생성한다. message가 필수다.
+
+git show [tagname]
+# -a 태그로 생성한 태그의 경우, 태그 생성 날짜, 태그 생성인 등의 메타데이터를 보여준다.
+
+git tag  [tagname] [commit hash]
+# 해당 commit에 tag를 달아준다.
+
+git tag [tagname] [commit hash] -f 
+# 이미 존재하는 tag를 다른 commit으로 이동시킨다.
+
 git tag -l : 
 # tag를 달은 모든 목록을 보여줌.
+
+git tag -l "17" 
+# 정확히 17이라는 tag를 보여줌
+
+git tag -l "*17*"
+# 17이 들어간 태그를 보여줌
 
 git tag [태그] [해쉬값] -m "message" : 
 # git tag -l에는 message가 없지만 git show [tag이름]하면 부여한 message가 나옴.
@@ -295,11 +316,20 @@ git tag [태그] [해쉬값] -m "message" :
 git tag -d [태그이름] 
 # 태그 삭제. d는 delete
 
+git push origin [tagname]
+# 해당 tag만 remote에 동기화
+
 git push origin --tags :  
 # 로컬저장소의 모든 태그를 원격저장소에도 동기화
 
 git push origin --delete [태그이름] : 
 # 특정 태그만 원격저장소와 로컬저장소 모두에서 삭제
+
+git checkout [tag] 
+# 해당 tag가 달린 commit으로 HEAD가 이동한다.
+
+git diff [tag] [tag]
+# commit간의 비교와 동일하게 작동
 ```
 ​
 
@@ -693,7 +723,47 @@ pick g15155 initial commit
 ```
 
 - 그럼 해당 commit의 내용이 자식 commit부터 싹 사라진다.
-- 파일을 추가한 경우 파일도 사라지는 것으로 보인다.
+- 파일을 추가한 경우 파일도 사라진다.
 
+- reflog로 최근에 사용한 모든 명령어를 볼 수 있다.
+- reflog에서는 움직임만을 HEAD로 잡아 알려주지, branch의 HEAD를 가리키지 않는다.
+- 따라서 HEAD@{0}과 HEAD@{2}가 실제로 branch 내에서 같은 것을 ref할 수 있다.
+  - 여기선 donkey branch의 HEAD다.
+```
+HEAD@{0}: checkout: moving from b151241251289512412 to donkey
+HEAD@{1}: checkout: moving from donkey to b165125125fs1512515 //donkey HEAD에서 donkey 내 다른 commit으로 이동. detached HEAD
+HEAD@{2}: commit: add haha
+```
+
+- 시간을 제약하여 reflog를 실행할 수도 있다.
+
+
+```sh
+git reflog show HEAD@{2.days.ago}
+git reflog show HEAD@{1.month.ago}
+git reflog show HEAD@{1.week.ago}
+git reflog show master@{0} master@{yesterday}
+
+# 2일 전까지 해당 branch에서 일어난 명령어들을 보여준다.
+```
+
+- 만약 rebase를 하다 잘못돼서 파일이 날라갔다면?
+- 시간이 얼마 되지 않았다면 복구가 가능하다.
+- .git 파일에서 해당 참조를 여전히 갖고 있기 때문이다.
+- 다만 시간이 지나면 유효하지 않은 참조라서 git이 청소한다.
+
+```sh
+git reflog show
+git reset --hard [commit hash]
+```
+
+
+
+
+- 버전의 숫자는 의미가 다르다.
+- 1.0.0이 처음이다.
+- 1.0.1로 가면 버그 패치다.
+- 1.1.0으로 가면 신기능이 생긴 경우다.
+- 2.0.0으로 가면 완전히 새롭게 개편한 경우다. 기능이 삭제되고, 메뉴가 완전 새롭게 바뀐다.
 
 

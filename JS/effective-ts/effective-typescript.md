@@ -406,6 +406,7 @@ function email({person, subject, body} : {person: Person, subject: string, body:
 
 ```js
 const bob = {} as Person /* const bob = <Person>{} */   //타입 단언
+/* const bob =ref<>();와는 다르다. 해당 문법은 generics를 사용한 것이다.*/
 const bob: Person = {};                                 //타입 선언
 ```
 
@@ -489,11 +490,389 @@ const intermediate = {
 const o : Options = intermediate; //darkmode라서 key가 없다는 오류가 떠야하지만 뜨지 않는다.
 ```
 
+# index signature
+
+- index signature는 특별한 경우가 아니면 쓰지 않는 것이 좋다.
+- 아래와 같은 interface가 있다고 해보자.
 
 
+```js
+interface Schedule {
+    date: string,
+    headCount: number
+}
+```
+
+- 만약 해당 속성에 대괄호로 접근하려 한다면 오류가 난다.
 
 
+```js
+const a: Schedule = {
+    date:'2023-01-21',
+    heaCount:5
+}
+
+a['date']; // Element implicitly has an 'any' type because expression of type 'string' can't be used to index type
+```
+
+- 그 때 index signature를 도입하면 문제가 해결된다.
+- 하지만 임시방편이다.
+- 아래와 같은 index signature는 string 형식의 key면 무엇이든 받는다.
+  - 그것이 실제 Schedule interface에 존재하지 않아도 말이다.
+
+```js
+interface Schedule {
+    date: string,
+    headCount: number
+    [key: string]: string | number
+}
+```
+
+- 따라서 아래와 같이 써도 오류가 나지 않게 된다.
+- 이건 명백한 오류다. 'ddd'라는 property는 존재하지 않기 때문이다.
+```js
+const a: Schedule = {
+    date:'2023-01-21',
+    heaCount:5
+}
+a['ddd']; //error 안 남.
+```
+
+- 해당 현상을 해결하기 위해서는 아래와 같은 방법을 모색할 수 있다.
+- as keyof를 사용하는 것이다.
+- 그럼 모든 변수에서가 아니라, 딱 저기에서만 as를 사용하기에 더 나은 선택이다.
+
+```js
+interface Schedule {
+    date: string,
+    headCount: number
+}
+
+ <v-select v-for="element in stationFilteringItems" :label="element.label" :key="element.label" :items="stationItems" v-model="scheduleRequest[element.value]"></v-select>
+```
+
+- 하지만 이 역시 element.value가 headcountInfo의 key가 아닌 게 들어와도 type check를 해주지 않는다.
+- scheduleArriveStation인데 scheduleArriveStatino으로 오타를 내도 as를 썼기에 오류가 없다.
+- as를 쓰면 type check가 작동하지 않기 때문이다. 오타에 취약하다.
+```js
+const stationFilteringItems = [
+  { label: '출발역', value: 'scheduleDepartStation' },
+  { label: '도착역', value: 'scheduleArriveStatino' },
+];
+```
 
 
+- 따라서 value를 대괄호에 들어갈 수 있는 key로 규정해줘야 한다.
+- 그것은 즉 keyof로 규정해줘야 문제를 해결할 수 있다는 것이다.
+- 바로 type check를 통해 오타를 인지하는 모습을 볼 수 있다.
+- 또한 자동완성 서비스도 받을 수 있다. value라고 치고 컨트롤 엔터를 누르면 ScheduleRequest의 key가 자동완성 추천에 뜬다.
+```js
+interface StationFilteringItem {
+  label: string;
+  value: keyof ScheduleRequest; // Assuming ScheduleRequest is the type for scheduleRequest
+}
+const stationFilteringItems: StationFilteringItem[] = [
+  { label: '출발역', value: 'scheduleDepartStation' },
+  { label: '도착역', value: 'scheduleArriveStatino' }, //type '"scheduleArriveStatino"' is not assignable to type 'keyof ScheduleRequest'. Did you mean '"scheduleArriveStation"'?
+];
+```
 
 
+- index signature를 써야만 할 때도 있다.
+- 데이터가 어떻게 들어오는 지 모르는 것들일 때다.
+- 예를 들자면 excel, csv 등이다. 어떤 column 이름이 들어올 지 모르기 때문이다.
+
+
+```js
+function parseCSV(input: string): {[columnName: string]: string}[] {
+    const lines = input.split('\n');
+    const [header, ...rows] = lines;
+    const headerColumns = header.split(',');
+    return rows.map(rowStr => {
+        const row: {[columnName:string]: string} = {};
+        rowStr.split(',').forEach((cell,i) => {
+            row[headerColumns[i]] = cell;
+        })
+        return row;
+    })
+}
+```
+
+- 만약에 열 이름을 안다면 interface를 만들면 된다.
+
+
+```js
+interface ProductRow {
+    productId: string;
+    name: string;
+    price: string;
+}
+
+let csvData = '';
+const products = parseCSV(csvData) as unknown as ProductRow[];
+```
+
+- 더 안전하게 할 수도 있다. 
+- 아래와 같이 undeinfed type을 return type으로 추가해준다.
+
+
+```js
+function safeParseCSV(input: string): {[columnName:string]: string | undefined}[] {
+    return parseCSV(input);
+}
+
+const prices:{[proodut: string]: number} = {};
+let csvData = '';
+const safeRows = safeParseCSV(csvData);
+for(const row of safeRows) {
+    if(row.productId) {//row.productId가 undefined일 수 있어 type check 필요
+        prices[row.productId] = Number(row.price);
+    }
+}
+```
+
+# interface는 중복제거로도 좋다.
+- interface는 중복을 제거하는 데 있어서도 꽤나 중요하다.
+
+
+```js
+function distance(a: {x: number, y: number} , b: {x: number, y: number}) {
+    return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+}
+```
+
+
+```js
+interface Point2D {
+    x: number,
+    y: number
+}
+function distance(a:Point2D, b:Point2D) {}
+```
+
+- 만약 몇 개의 property는 optional 하게 받고 싶다면, 해당 property를 optional로 만들 수도 있지만, interface의 extends를 활용할 수도 있다.
+- PersonWithBirthDate는 firstName, lastName, birth 3개를 갖게 된다.
+
+```js
+interface Person {
+    firstName: string;
+    lastName: string;
+}
+
+interface PersonWithBirthDate extends Person {
+    birth: date
+}
+```
+
+- 이를 type으로 보여주면 아래와 같다.
+
+
+```js
+type PersonWithBirthDate = Person & {birth: Date};
+```
+
+# Pick 패턴
+
+- 기존의 interface에서 일부 property만 가져오고 싶을 떄 사용하는 pattern이다.
+
+- 아래는 노가다 interface다.
+```js
+interface State {
+    userId: string;
+    pageTitle: string;
+    recentFiles: string[];
+    pageContents: string;
+}
+
+interface TopNavState {
+    userId: string;
+    pageTitle: string;
+    recentFiles: string;
+}
+```
+
+
+- 저 상태에선 부모 interface property의 type이 바뀌면 자식도 일일이 찾아서 바꿔줘야 한다.
+- 그걸 하지 않게 매핑시켜주자.
+
+```js
+interface TopNavState {
+    userId: State['userId'];
+    pageTitle: State['pageTitle'];
+    recentFiles: State['recentFiles'];
+}
+```
+
+- 이걸 추상화 시켜주자.
+
+
+```js
+type TopNavState = {[k in 'userId' | 'pageTilte' | recentFiles]: State[k]}
+```
+
+
+- 이걸 다시한번 구체적 상황이 아닌 일반 상황으로 추상화 시켜주자.
+
+
+```js
+type Pick<T,K> = {[k in K]: T[k]}
+```
+
+- K가 아무거나 들어가면 안되니까 T의 key여야 한다.
+
+
+```js
+type Pick<T,K extends keyof T> = {[P in K]: T[P]}
+```
+
+- 따라서 아래와 같이 쓸 수있다.
+
+
+```js
+type TopNavState = Pick<State,'userId' | 'pageTitle' | 'recentFiles'>;
+```
+
+
+# Partial 패턴
+- 특정 interface의 property를 모두 optional property가 되게 하는 방법도 있다.
+
+
+```js
+interface Options {
+    width: number;
+    height: number;
+    color: string;
+    label: string;
+}
+
+interface OptionsUpdate {
+    width?: number;
+    height?: number;
+    color?: string;
+    label?: string;
+}
+```
+
+- 하지만 이건 역시 type mapping이 안 된다.
+- 자동으로 받아오게 해보자.
+
+
+```js
+type OptionsUpdate = {[k in keyof Options]?: Options[k]};
+```
+
+- 이걸 아래와 같이 추상화할 수 있다.
+
+
+```js
+type Partial<T> = {[P in keyof T]?: T[P]};
+```
+
+- 이를 이용해서 아래와 같이 쓸 수 있다.
+
+
+```js
+type OptinosUpdate = Partial<Options>
+```
+
+# key가 아닌 값을 type으로(엔간하면 이렇게 쓰면 안 된다)
+
+- 값을 type으로 받고 싶을 수도 있다.
+- 예를 들어 아래와 같은 형태의 변수가 있다고 해보자.
+
+
+```js
+const INIT_OPTIONS = {
+    width: 641,
+    height: 'F100FF00',
+    label: 'VGA'
+}
+```
+
+- 저 변수의 형태를 type으로 갖고 싶다면 interface를 만들수도 있다.
+
+
+```js
+interface Options {
+    width: number,
+    height: string,
+    label: string
+}
+```
+
+
+- 하지만 간단하게 아래와 같이 만들 수도 있다.
+- 이런 방식은 설계상 나쁘다. type이 있은 뒤에 값을 그 type에 맞게 쓰는 것을 연습하자.
+
+```js
+type Options = typeof INIT_OPTIONS;
+```
+
+- 만약 함수의 returnType을 명명된 type으로 하고 싶다면?
+- 직접 쓸 수도 있다.
+
+```js
+function getUserInfo(userId: string) {
+
+    return {
+        userId,
+        name,
+        age,
+        height,
+    }
+}
+
+type getUserInfo = {
+    userId: string;
+    name: string;
+    age: number;
+    height: number
+}
+```
+
+- 하지만 이건 너무 노가다다. 
+- 노가다 대신 ReturnType을 쓸 수 있다.
+
+
+```js
+type getUserInfo = ReturnType<typeof getUserInfo>;
+```
+- ReturnType은 아래와 같다. 
+- parameter는 아무거나 받고, return type도 아무거나 받을 수 있다.
+
+
+```js
+type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any;
+```
+
+
+# Record 패턴
+
+- 특정한 값으로만 이뤄지는 type을 손쉽게 만드는 방법도 있다.
+- 바로 Record다.
+- 아래와 같이 interface를 만들었는데, 이게 일회용이다.
+
+
+```js
+interface point3D {
+    x: number;
+    y: number;
+    z: number;
+}
+```
+
+- 그럼 더 간단하게 Record를 쓰면 된다.
+
+
+```js
+type Point3D = Record<'x' |'y'|'z',number>;
+```
+
+- Record 패턴은 아래와 같다.
+- 모든 key가 들어갈 수 있지만, 각 key의 type은 하나로 고정이다.
+
+```js
+type Record<K extends keyof any, T> = {
+    [P in K]: T;
+};
+```
