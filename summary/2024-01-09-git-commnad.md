@@ -28,7 +28,7 @@ git clone -b(--branch) <branchname> <remote-repo-url>
 
 ## <span style="color:#802548">_1. branch 관련 명령어_</span>
 ```sh
-git switch -C [branch이름] : 
+git switch -c [branch이름] : 
 ## git branch test + git switch test : branch를 만들고 바로 이동.
 ```
 ```sh
@@ -78,15 +78,12 @@ git commit --amend -m "Add new File" :
 ```sh
 git reset --mixed : 
 ## 커밋이력을 없애면서 git add한 것들을 모두 없앤다. 소스코드는 유지된다. 
-```
-```sh
+
 git reset --soft : 
 ## 커밋이력을 없애면서 여태까지 git add한 것을 보존하면서 소스코드는 유지된다. 
 ## 커밋 이후에 뭔가 더 추가해야한다면 자주 쓴다. git reset --soft + git add . + git commit -m""의 형태다. 
 # 위처럼 git add [file이름] + git commit --amend -m "commit"과 같다.
-```
 
-```sh
 git reset --hard : 
 ## working dir과 staging area 모두에서 지운다
 ```
@@ -100,6 +97,7 @@ git revert --no-commit [해쉬코드]...[해쉬코드] :
 
 git revert --no-commit HEAD~3
 ## 여러개를 revert 해도 commit은 1개만 남는다. 각각의 revert commit을 남기지 않는다.
+
 git push origin master
 ```
 ​
@@ -118,48 +116,44 @@ git push origin master -f
 1. 업무가 아닌 함수 단위 commit
 2. 하루 3번 원격 저장소 동기화 - 출근 직후, 점심 먹고, 퇴근하기 1시간 전
 ```
-```sh
 
+- conflict가 나면 아래와 같다.
+```sh
 # <<<< ---> 이전에 있던 소스
 # ===
 # >>>> --> 새롭게 가져온 소스
+```
+
+- conflict는 아래와 같이 해결해준다.
+```sh
 git status : 
 ## unmerged된 파일이 무엇인지 살펴본다.
-```
-```sh
+
 git diff : 
 ## git status로 확인한 문제되는 파일에서 어떤 부분이 문제인지 살펴보고 원하는 방향으로 정리한다.
 ## 이 명령어를 bash에서 쓰는 것은 추천되지 않는다. vscode에서 살펴보는게 훨씬 편하다
-```
 
-```sh
 git add . : 
 ## 수정한 사항을 staging area에 넣는다. unmerged의 경우, 수정하지 않고 그냥 git add . 해도 수정된 것처럼 인식된다. 따라서 수정을 했으면 무조건 파일을 저장하고 git add를 해야한다.
-```
 
-```sh
 git merge --continue : 
 ## merge를 완료하는 commit을 남기면서 conflict를 해결한다.
 ```
 ​
 
 ## <span style="color:#802548">_7. 원격저장소 설정_</span>
+- remote는 보통 이름을 origin으로 정한다.
+
 ```sh
 git remote add [저장소 alias] [url] :
 ## 원격저장소를 설정한다. 거의 git remote add origin https://~~~ 형태
-```
 
-```sh
 git remote -v : 
 ## 설정된 원격저장소와 저장소이름 정보 출력
-```
 
-```sh
 git remote set-url [저장소 alias] [url] : 
 ## 기존 원격저장소를 새로운 원격저장소로 바꿈
-```
 
-```sh
 git remote remove [저장소 alias] : 
 ## 원격저장소와 연결 끊으며, 저장소 alias도 사라진다.
 ```
@@ -182,33 +176,22 @@ git remote remove [저장소 alias] :
 ```sh
 git stash : 
 ## 작업 파일 임시 저장
-```
 
-```sh
 git switch -C feature/insert : 
 ## insert branch를 만들면서 이동.
-```
-
-```sh
 git stash apply : 
-## feature/insert branch에 임시로 저장해둔 작업 파일을 꺼냄. 
-```
 
-```sh
+## feature/insert branch에 임시로 저장해둔 작업 파일을 꺼냄. 
+
 git stash branch [branch이름] : 
 ## git switch -C [branch이름] + git stash apply + git stash drop을 한꺼번에 한다. 단 stash에 내용이 있어야만 하기 때문에 git stash + git stash branch [branch이름] 식으로 사용한다.
 
-```sh
 git stash drop stash@{0} : 
 ## 0번째 index stash 삭제
-```
 
-```sh
 git stash list : 
 ## 임시저장 파일 목록 확인
-```
 
-```sh
 git stash clear : 
 ## 전체 stash를 다 비운다
 ```
@@ -235,6 +218,10 @@ git push origin master :
 ​
 
 ## <span style="color:#802548">_10. commmit 이력 보기_</span>
+- git commit 이력 보는 것은 아래가 기본이다.
+- 하지만 alias를 설정해주는 게 좋다.
+- https://www.durdn.com/blog/2012/11/22/must-have-git-aliases-advanced-examples/ 를 참고하자.
+
 
 ```sh
 git log --oneline : 
@@ -263,6 +250,7 @@ https://www.atlassian.com/git/tutorials/git-log
 
  
 ## <span style="color:#802548">_11. 환경설정_</span>
+
 ```sh
 git config --list : 
 # 설정해둔 변수들을 확인한다.
@@ -379,13 +367,6 @@ git rebase -i HEAD~n :
 pick을 reword로 변경하고 :wq 
 commit message를 변경하고다시 :wq
 ```
-
-
-
-​
-
-https://xtring-dev.tistory.com/entry/Git-%EC%9D%B4%EB%AF%B8-commit%ED%95%9C-%EB%A9%94%EC%84%B8%EC%A7%80-%EC%88%98%EC%A0%95%ED%95%98%EA%B8%B0-%EB%B0%94%EB%A1%9C-%EC%9D%B4%EC%A0%84%EA%B7%B8-%EC%A0%84%EB%A6%AC%EB%AA%A8%ED%8A%B8-commit
-
  
 
 ## <span style="color:#802548">_16. git commit 전부 초기화하면서 폴더 내용 그대로 가져가기_</span>
@@ -422,6 +403,8 @@ git restore .
 ```
 
 - 만약 파일 내용을 전전 commit으로 돌리고 싶다면? 그러면서 HEAD는 유지하고 싶다면?
+
+
 ```sh
 git restore --source HEAD~2 [파일이름]
 git restore --source [해쉬이름] [파일이름]
@@ -435,22 +418,7 @@ git restore [파일이름]
 ```
 
 
-## <span style="color:#802548">_18. 이쁘게 커밋 보기_</span>
-```sh
-git config --global -e(vim ~/.gitconfig)
-# .gitconfig 파일이 열린다. 괄호와 동일하다.
-
-[alias]
-        hist = log --graph --all --pretty=format:'%C(yellow)[%ad]%C(reset) %C(green)[%h]%C(reset) | %C(white)%s %C(bold red){{%an}}%Creset' --abbrev-commit
-# 해당 alias를 추가해준다.
-
-git config --list
-# hist라는 alias가 추가되었는지 확인한다.
-
-git hist
-```
-
-## <span style="color:#802548">_19. 체리픽_</span>
+## <span style="color:#802548">_18. 체리픽_</span>
 - git cherry pick 했을 때 cherry pick 순서 지켜서 cherry pick 해야한다.
 
 ```
@@ -472,7 +440,7 @@ git cherry-pick cderf21...rtqwrr51
 # git conflict
 ```
 
-## <span style="color:#802548">_20. branch diff_</span>
+## <span style="color:#802548">_19. branch diff_</span>
 - PR을 하지 않고 master를 그냥 merge하고 배포한다면?
 - branch 간 diff를 통해 변화사항을 추적해야 한다.
 
@@ -540,10 +508,13 @@ git diff [파일이름]
 git diff [해쉬이름] [해쉬이름]
 ```
 
+## <span style="color:#802548">_20. 해당 commit 보기_</span>
 - 특정 커밋으로 돌아가기
 - 그럼 detached head라고 뜨는데, 그건 원래 HEAD는 branch를 reference한다.
   - 따라서 branch의 맨 처음 commit을 따라간다.
   - 근데 여기선 특정 commit을 reference하기 때문에 branch에서 detached된 것이다.
+
+
 ```sh
 git checkout [commit hash]
 ```
@@ -574,6 +545,7 @@ git branch -r # 원격 branch 뭐있나 보기
 git switch [원격branch의 이름] # 이러면 저절로 remote의 branch와 연결되어 추적가능. 옛날버전은 git checkout --track origin/master. 쓰지말자.
 ```
 
+## <span style="color:#802548">_21. rebase 활용법_</span>
 
 - pull request를 하려는데 conflict가 나면 PR이 불가능하다.
   - 그럴 때는 view command line을 클릭해 어떻게 하는 지 보고 conflict를 해결해주면 된다.
@@ -605,6 +577,7 @@ git rebase master
   - 그 때는 rebase하면 안 된다.
 
 
+## <span style="color:#802548">_21. rebase -i_</span>
 
 - github 쓰는 법.
 ```
@@ -725,6 +698,8 @@ pick g15155 initial commit
 - 그럼 해당 commit의 내용이 자식 commit부터 싹 사라진다.
 - 파일을 추가한 경우 파일도 사라진다.
 
+
+## <span style="color:#802548">_22. reflog_</span>
 - reflog로 최근에 사용한 모든 명령어를 볼 수 있다.
 - reflog에서는 움직임만을 HEAD로 잡아 알려주지, branch의 HEAD를 가리키지 않는다.
 - 따라서 HEAD@{0}과 HEAD@{2}가 실제로 branch 내에서 같은 것을 ref할 수 있다.
@@ -756,8 +731,6 @@ git reflog show master@{0} master@{yesterday}
 git reflog show
 git reset --hard [commit hash]
 ```
-
-
 
 
 - 버전의 숫자는 의미가 다르다.

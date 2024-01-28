@@ -1329,6 +1329,16 @@ var [{id},{id},{id}] = todos //Uncaught SyntaxError: Identifier 'id' has already
 console.log(id) //3
 ```
 
+- vue도 destructuring을 사용한다.
+
+
+```js
+const abc1 = storeToRefs(scheduleStore);
+const abc2 = abc1.scheduleRequest;
+
+const {scheduleRequest} = storeToRefs(scheduleStore)
+```
+
 ## <span style="color:#802548">_11.흔히 쓰이는 method_</span>
 - 아래는 array의 일반함수다.
 ```javascript

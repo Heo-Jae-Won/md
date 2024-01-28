@@ -2,7 +2,6 @@
 - noImplicitAny 설정
 - strictNullChecks 설정
 - NoImplictthis 설정
-- no_inferred-types 설정
 
 ```
 만약 ts 예제 오류 재현이 안된다?
@@ -38,24 +37,6 @@ function calculateArea(shape: Shape) {
     } else {
         shape //Square type
     }
-}
-```
-
-# 형변환은 여전히 필요하다
-- return variable에 type assertion을 하는 것은 type check를 속이는 것일 뿐이다.
-  - runtime에서는 무의미하다. 
-  - 그럴 땐 ts가 아닌 js의 형변환을 사용하는 것이 좋다.
-
-
-```js
-//bad
-function asNumber(val: number | string) {//val은 string도 될 수 있으니 as number로 썼다.
-    return val as number;
-}
-
-//
-function asNUmber(val: number | string) : boolean {
-    return typeof(val) === 'string' ? Number(val) : val;
 }
 ```
 
@@ -247,19 +228,17 @@ function calculateLengthL1(v: Vector3D) {
 
 ```js
 const calculateLengthL1 = (v: Vector3D) => {
-      let length = 0;
-      for (const axis of Object.keys(v)) {
+    let length = 0;
+    for (const axis of Object.keys(v)) {
         const coord = v[axis as keyof Vector3D];
         length += Math.abs(coord);
-      }
-      alert(length);
-    };
+    }
+};
 ```
 
 - 또 다른 문제는 Vector2D를 받았어야 하는데, Vector3D를 받아버리는 것과 같은 실수를 할 수 있다는 점이다.
 - 다른 해결 방법은 tagged union이다.
 - 다만 완벽하진 않다. 실수를 줄이는 정도다.
-
 
 
 ```js
@@ -297,7 +276,7 @@ keyof (A | B)는 (keyof A) & (keyof B)와 동일
 
 # extends
 
-- string을 extends한 것은 string 간의 union type도 포함이다.
+- string을 extends한 것은 string literal 간의 union type도 포함이다.
 
 
 ```js
@@ -334,13 +313,14 @@ getKey({}, Math.random() < 0.5 ? 1 : Math.random() < 0.7 ? '1' : 3); //error
 - keyof로 K를 한정하여 가져오면 어떤 interface든 그 조합의 union을 커버할 수 있다.
 
 ```js
-function sortBy(K extends keyof T, T)(vals: T[], key: K): T[] {
+function sortBy<K extends keyof T, T>(vals: T[], key: K): T[] {
     return vals;
 }
 
 interface Point {
     x: number;
     y: number;
+    z: number;
 }
 const pts : Point[] = [{x:1, y:1}, {x:2, y:0}];
 sortBy(pts,'x');
@@ -377,8 +357,8 @@ class ScienceFacility {
 let scienceFacility = new ScienceFacility();
 scienceFacility.getUnits();
 
-const t1 = typeof ScienceFacility;
-const t1 = typeof scienceFacility ;
+const t1 = typeof ScienceFacility;  // class
+const t1 = typeof scienceFacility ; // instance
 console.log(t1); //fucntion
 console.log(t2); //object
 ```
@@ -400,7 +380,7 @@ function email({person, subject, body} : {person: Person, subject: string, body:
 ```
 
 
-# 잉여속성 체크. 
+# 타입 단언은 왜 나쁜가?
 - 타입 단언과 타입 선언은 아래와 같이 쓴다.
 
 
@@ -445,8 +425,8 @@ const checkedFetch: typeof fetch = async(input, init) => {
 }
 ```
 
-- 이제 타입 선언을 알아보자.
-- 타입선언은 매우 구리다.
+- 이제 타입 단언을 알아보자.
+- 타입 단언은 매우 구리다.
 - 잉여속성 체크가 안 된다.
 
 
@@ -465,11 +445,14 @@ const o = {
 
 - 다만 type 단언이 필요한 경우가 있다.
 - 바로 DOM 객체를 다룰 때다.
-
-
+- 아래의 경우, element는 HTMLElement를 return한다.
+- 그러나 HTMLElement가 아니라 HTMLInputElment를 return해야 한다.
+- 그래야 value라는 property에 접근 가능하기 때문이다.
+- 그 때 타입 단언을 사용한다.
 ```js
-const 
+const element = document.querySelector('#input');
 
+const element = document.querySelector('#input') as HTMLInputElement;
 ```
 
 - 변수 대입으로 해도 잉여속성 체크가 안된다.
@@ -488,6 +471,25 @@ const intermediate = {
 } 
 
 const o : Options = intermediate; //darkmode라서 key가 없다는 오류가 떠야하지만 뜨지 않는다.
+```
+
+
+- 타입단언은 최대한 쓰지 않는 게 좋다.
+- return variable에 type assertion을 하는 것은 type check를 속이는 것일 뿐이다.
+  - runtime에서는 무의미하다. 
+  - 그럴 땐 ts가 아닌 js의 형변환을 사용하는 것이 좋다.
+
+
+```js
+//bad
+function asNumber(val: number | string) {//val은 string도 될 수 있으니 as number로 썼다.
+    return val as number;
+}
+
+//
+function asNUmber(val: number | string) : boolean {
+    return typeof(val) === 'string' ? Number(val) : val;
+}
 ```
 
 # index signature
@@ -515,8 +517,7 @@ const a: Schedule = {
 a['date']; // Element implicitly has an 'any' type because expression of type 'string' can't be used to index type
 ```
 
-- 그 때 index signature를 도입하면 문제가 해결된다.
-- 하지만 임시방편이다.
+- 그 때 index signature를 도입하면 문제가 해결된다. 하지만 임시방편이다.
 - 아래와 같은 index signature는 string 형식의 key면 무엇이든 받는다.
   - 그것이 실제 Schedule interface에 존재하지 않아도 말이다.
 
@@ -575,6 +576,17 @@ const stationFilteringItems: StationFilteringItem[] = [
   { label: '출발역', value: 'scheduleDepartStation' },
   { label: '도착역', value: 'scheduleArriveStatino' }, //type '"scheduleArriveStatino"' is not assignable to type 'keyof ScheduleRequest'. Did you mean '"scheduleArriveStation"'?
 ];
+```
+
+- 원래 있던 key를 가져오는 경우는 as keyof로 바로 해결가능하다.
+- 아래와 같은 경우다. axis는 무조건 해당 객체의 key이기 때문에 as를 써도 된다.
+- 내가 직접 객체로 넣는 것도 아니기에 오타를 걱정할 필요도 없다.
+
+```js
+for (const axis of Object.keys(v)) {
+        const coord = v[axis as keyof Vector3D];
+        length += Math.abs(coord);
+}
 ```
 
 
@@ -775,6 +787,1043 @@ type Partial<T> = {[P in keyof T]?: T[P]};
 type OptinosUpdate = Partial<Options>
 ```
 
+# Record 패턴
+
+- 특정한 값으로만 이뤄지는 type을 손쉽게 만드는 방법도 있다.
+- 바로 Record다.
+- 아래와 같이 interface를 만들었는데, 이게 일회용이다.
+
+
+```js
+interface point3D {
+    x: number;
+    y: number;
+    z: number;
+}
+```
+
+- 그럼 더 간단하게 Record를 쓰면 된다.
+
+
+```js
+type Point3D = Record<'x' |'y'|'z',number>;
+```
+
+- Record 패턴은 아래와 같다.
+- 모든 key가 들어갈 수 있지만, 각 key의 type은 하나로 고정이다.
+
+```js
+type Record<K extends keyof any, T> = {
+    [P in K]: T;
+};
+```
+
+
+# js와 ts에서 key 종류의 차이
+- js runtime에서 key는 늘 문자열 취급이다.
+- a[2]과 a['2']이 똑같다.
+- 그러나 ts에서는 다르다. a[2]와 a['2']는 다르다.
+- 다만 Object.keys()는 늘 문자열을 return하기에 문자열 key만 나온다.
+  - Object.keys()로 객체의 속성을 살펴보고 이용하려고 하지말자.   
+  - 그럴 때는 차라리 for in 문을 쓰자.
+
+# interface의 속성이 바뀌었을 때, 자동 오류 내기
+- interface에 필수 속성이 추가됐을 때, 자동으로 오류가 나게 하는 방법이 있다.
+- 아래와 같이 규정된 interface와 변수가 있다.
+
+```js
+interface ScatterProps {
+    x: number[];
+    y: number[];
+    onClick (x: number, y: number, index:number) => void;
+}
+
+const REQUIRES_UPDATES = {
+    x: true,
+    y: true,
+    onClick: false
+}
+```
+
+- 여기서 interface에 doubleClick 속성을 추가했다.
+- 만약 REQUIRES_UPDATES 변수가 ScatterProps의 interface key를 가져오려했다면, 의도한 대로 동작하지 않는다.
+- 현재 onDoubleClick이 추가됐지만, 변수에는 추가되지 않았다. 그래도 오류가 없다. 변수는 ScatterProps type이 아니기 때문이다. 
+- 주석으로 어디어디에 수정해야한다고 알려줄 수도 있지만, 매우 나쁜 방법이다.
+```js
+interface ScatterProps {
+    x: number[];
+    y: number[];
+    onClick (x: number, y: number, index:number) => void;
+    // 더 추가되면 REQUIRES_UPDATES 변수 수정 요구됨.
+    onDoubleClick: ~~
+}
+
+const REQUIRES_UPDATES= {
+     x: true,
+    y: true,
+    onClick: false
+    //error 나지 않음.
+}
+```
+
+- 그렇다고 ScatterProps type으로 줄 수도 없다. 결과값들은 boolean으로 받고 싶기 때문이다. 
+- 그럴 때 아래와 같이 keyof를 사용할 수 있다.
+
+```js
+const REQUIRES_UPDATES:{[k in keyof ScatterProps]: boolean} = {
+    x: true,
+    y: true,
+    onClick: false,
+    //Property 'onDoubleClick' is missing in type 
+}
+
+```
+
+# let보다 더 정밀한 const
+- const의 경우, let보다 더 정밀하게 type을 추론한다.
+
+
+```js
+let x ='x'; //string type
+const x = 'x'; // 'x' type
+```
+
+- 이는 강점이 될 수도 있지만, 너무 엄격한 type checking은 방해가 될 때도 있다.
+- 그럴 때 명시적 type 선언을 해주자.
+
+
+```js
+const x: string = 'x';
+```
+- 물론 string literal type은 string의 일부라서 이 경우에는 type checking에 걸리지 않는다.
+- 이건 문자, 숫자, boolean에 대해서 모두 동일하다.
+
+```js
+const x = 'x';
+function abc(arg: string){
+    console.log(arg);
+}
+
+abc(x);
+```
+
+- 물론 명시적 type을 남발하는 게 좋은 것은 아니다.
+- 그런 코드가 많을수록 refactoring이 어려워진다.
+- typescript의 자동추론에 맡기는 게 좋다.
+- 특히 명시적 선언은 destructuring으로 해소할 수 있다.
+
+
+# type 정보가 있는 library
+
+- type 정보가 있는 library의 경우, 해당 lib의 method를 사용할 때, parameter 정보가 자동 추론된다.
+- 따라서 parameter에 type을 명시할 필요가 없다.
+
+
+```js
+app.get('/health', (request: express.Request, response: express.Response) => {
+    reseponse.send('ok');
+}) 
+
+app.get('/health', (request, response) => {
+    response.send('ok')
+})
+```
+
+# 함수의 returnType을 명시해두자.
+
+- 함수의 returnType을 명시해두면, 호출된 곳이 아니라, 함수가 정의된 곳에서 오류가 난다.
+- 그럼 오류를 잡기가 좋다.
+
+- 아래는 return type을 명시하지 않았을 때다.
+- number 형식에 then 속성이 없습니다라는 오류가 뜬다.
+- 함수를 호출한 곳에 알아먹기 어려운 오류가 뜬다. 
+
+
+```js
+function getQuote(ticker: string) {
+    .
+    .
+    .
+    return cache[ticker]
+}
+getQuote('MSFT').then(consiedBuying); //number 형식에 then 속성이 없습니다
+```
+
+- 그럼 return type을 줘보자.
+- 그러자 이제 제대로 표시된다.
+- number 형식은 Promise<number>형식에 할당 불가능하다라는 오류가 정의부에서 뜬다.
+```js
+function getQuote(ticker: string) : Promise<number>{
+    .
+    .
+    .
+
+    return cahce[ticker]; // number 형식은 Promise<number>형식에 할당 불가능하다.
+}
+```
+
+# 사용자정의 타입 가드 함수
+- type을 판별하는 함수를 도입할 수 있다.
+- 아래와 같은 형태다.
+```js
+function isCertainType(parameter: wantedType): parameter is wantedType {
+    return must-have property in parameter; //무조건 boolean return
+}
+```
+
+- 실제 예시는 아래와 같다.
+
+
+```js
+function isInputElement(el: HTMLElement): el is HTMLInputElment {
+    return 'value' in el;
+}
+function getElementContent(el: HTMLElement) {
+    if(isInputElment) {
+        return el.value; // isInputElement가 true인 경우, HTMLInputElement type이다.
+    }
+    
+    return el.textContent; //isInputElement가 false인 경우, 그냥 HTMLElement다.
+}
+```
+
+- 이같은 type guard 함수를 사용하면, 고차함수에서도 undefined를 거를 수 있다.
+- 아래처럼 filter 안에서 !== undefined 조건절로는 type이 string[]로 만들 수 없다.
+
+```js
+const jackson5 = ['Jackie', 'Tito', 'Jermnire','marion','Michael'];
+const members = ['Janet', 'Michael'].map(who => jackson5.find(n => n === who)); // 이 경우 members의 type은 (string | undefined)[]
+const filteredMembers = ['Janet', 'Michael'].map(who => jackson5.find(n => n === who).filter(who => who !== undefined)); // 이 경우 members의 type은 (string | undefined)[]
+```
+
+- 아래와 같은 type guard 함수를 넣어줘야 한다.
+
+
+```js
+function isDefined<T>(x: T | undefined): x is T {
+    return x !== undefined
+}
+const filteredMembers = ['Janet', 'Michael'].map(who => jackson5.find(n => n === who).filter(isDefined)); // 이 경우 members의 type은 string[]
+```
+
+
+# 객체는 한꺼번에 만들어라.
+- js와 달리 ts는 객체를 한꺼번에 만들어야 한다.
+- 그 이유는 ts는 처음 객체를 만들 때 type을 결정하는 경우가 대다수기 때문이다.
+- 나중에 property를 동적으로 추가하면 안 된다.
+
+```js
+const abc = {};
+abc.x = 'y'; //error. abc는 {} type이기 때문에 property를 추가할 수 없다.
+```
+
+- 객체 전개를 통해 동적으로 추가가 가능하긴 하다.
+
+
+```js
+let hasMiddle: boolean;
+const firstLast = {first: 'Harry', last: 'Truman'};
+const president = {...firstLast, ...(hasMiddle ? {middle: 'S'} : {})};
+```
+
+- 그럼 type이 두 개중에 하나게 된다.
+
+
+```js
+president: {
+    middle?: string;
+    first: string;
+    last: string
+}
+
+or 
+
+president: {
+    first: string;
+    last: string;
+} |
+president: {
+    middle: string;
+    first: string;
+    last: string
+}
+```
+
+- 만약 optional property가 되길 원했다면 아래와 같이 helper 함수를 써야 한다.
+
+
+```js
+function addOptional<T extends object, U extends object>(a: T, b: U | null): T & Partial<U> {
+    return {...a, ...b}
+}
+
+const firstLast = {first: 'Harry', last: 'Truman'};
+
+const president = addOptional(
+    firstLast,
+    hasMiddle ? {middle: 'S'} : null
+)
+
+president {
+    middle?: string
+    first: string;
+    last: string;
+}
+```
+
+
+# 변수로 쪼개지 말고 객체나 배열로 감싸서 만들어라
+- 어느 경우에도 필요한 값 같은 경우도 따로 변수를 두지 않고 배열, 객체로 포괄해서 만들자.
+- 아래는 포괄하지 않은 경우다.
+- 포괄했다면 max가 없을 때도 if문을 만들었겠지만, 실수로 못 넣었다.
+- 그러자 undefined 오류가 뜬다.
+
+
+```js
+function extent(nums: number[]) {
+    let min, max;
+    for (const num  of nums) {
+        if (!min) {
+            min = num;
+            max = num;
+        } else {
+            min = Math.min(min, num);
+            max = Math.max(max, num);
+        }
+    }
+    return [min, max];
+}
+
+const [min, max] = extent([0,1,2]);
+const span = max - min; //max is possibly undefined
+                        //min is possibly undefined
+```
+
+
+- 그걸 아래와 같이 배열로 바꿔주자.
+
+
+```js
+function extent(nums: number[]) {
+    let result: [number, number] | null = null;
+    for (const num  of nums) {
+        if (!result) { // null check해줘야 함. 안 해주면 아래 result[0]에서 null일수 있다는 오류가 남.
+            result = [num,num];
+        } else {
+            result = [Math.min(num,result[0]),Math.max(num,result[1])];
+        }
+    }
+    return result;
+}
+
+const [min, max] = extent([0,1,2])!; // null 없음 단언 해줘야 함. 아니면 Type '[number, number] | null' is not an array type.
+const span = max - min;
+```
+
+- 객체도 마찬가지다.
+- 아래와 같이 birth의 경우 place와 date를 받으려고 한다.
+
+```js
+interface Person {
+    name: string;
+    placeOfBirth?: string;
+    dateOfBirth?: date;
+}
+```
+- 그런데 사실 두개를 한꺼번에 받거나, 아예 안받거나다.
+- 그 경우 아래와 같이 interface를 통해 해당 방식으로 객체 구현을 강제할 수 있다.
+```js
+interface Person {
+    name: string;
+    birth?: {
+        place: string;
+        date: Date;
+    }
+}
+
+cosnt alanT: Person = {
+    name: 'Alana Turing';
+    birth: {
+        place: 'London';
+    }
+} // error. birth 안에 date 속성이 없습니다.
+```
+
+- 만약 기존 interface를 수정할 수 없는 환경이라면?
+- 잘게 쪼개주고 union type으로 만들어야 한다.
+
+```js
+interface Name {
+    name: string;
+}
+interface PersonWithBirth extends Name {
+    placeOfBirth?: string;
+    dateOfBirth?: date;
+}
+type Person = Name | personWithBirth;
+
+function getPersonIfBirth(p: Person) {
+    if ('placeOfBirth' in p) {
+        const {dateOfBirht} = p //dateOfBirth는 Date type
+    }
+}
+```
+
+
+
+
+# 좋은 type을 설계해야 한다.
+- 좋은 type을 설계하려면, 유효한 상태만 표현해야 한다.
+- 가령 아래와 같은 interface가 있다고 해보자.
+- 아래의 interface는 loading이 true면서 error가 true인 상황을 처리할 수 없다.
+
+```js
+interface State {
+    pageText: strting; 
+    isLoading: boolean;
+    error?: string
+}
+```
+
+- 위의 interface에는 아래와 같은 함수가 나올 수 밖에 없다.
+
+
+```js
+function rednerPage(state: State) {
+    if (state.error) {
+        return `Error! Unable to load ${currentPage} : ${state.error}`;
+    } else if (state.isLoading) {
+        return `Loading ${currentPage}`;
+    }
+
+    return `<h1>${currentPage}</h1>\n${state.pageText}`
+}
+
+async function changePage(state: State, newPage: string) {
+    state.isLoading = true;
+    try {
+        const response = await fetch(getUrlForPage(newPage));
+        if (!response.ok) {
+            throw new Error(`Unable to load ${newPage}: ${response.statusText}`);
+        }
+        const text = await response.text();
+        state.isLoading = false;
+        state.pageText = text;
+    } catch (e) {
+        state.error = '' + e;
+    }
+}
+```
+
+- 위의 changePage 함수는 아래와 같은 문제가 있다.
+
+
+```
+오류가 발생했을 때 state.isLoading = false로 바꿔주지 않는다.
+state.error를 초기화하지 ㅇ낳았기에, 페이지 전환 중에 로딩 메시지 대신 과거의 오류 메시지를 보여준다.
+페이지 로딩 중에 사용자가 페이지를 바꾸면, 벌어질 일을 예상하기 어렵다.
+    - 새 페이지에 오류가 뜨거나
+    - 응답이 오는 순서에 따라 두번쨰 페이지가 아닌 첫번쨰 페이지로 전환될 수 있다
+```
+
+- 그럼 이제 type을 유효하게 나눠보자.
+
+
+```js
+interface RequestPending {
+    state: 'pending'
+}
+interface RequestError {
+    state: 'error',
+    error: string;
+}
+interface RequestSuccess {
+    state: 'ok',
+    pageText: string;
+}
+
+type RequestState = RequestPending | RequestError | RequestSuccess;
+interface State {
+    currentPage: string;
+    requests: {[page: string]: RequestState}; //index signature
+}
+
+function renderPage(state: State) {
+    const {currentPage} = state;
+    const requestState = state.requests[currentPage];
+    switch (requestState.state) {
+        case 'pending':
+            return `loading ${currentPage}`;
+        case 'error':
+            return `Error! Unable to load ${currentPage}: ${requestState.error}`;
+        case 'ok':
+            return `<h1>${currentPage}</h1>\n${requestState.pageText}`;
+    }
+}
+
+async function changePage(state: State, newPage: string) {
+    state.requests[newPage] = {state: 'pending'};
+    state.currentPage = newPage;
+    try {
+        const response = await fetch(getUrlForPage(newPage));
+        if (!response.ok) {
+            throw new Error(`Unable to load ${newPage}: ${response.statusText}`);
+        }
+        const pageText = await response.text();
+        state.requests[newPage] = {state: 'ok', pageText};
+    } catch (e) {
+        state.requests[newPage] = {state: 'error', error: '' + e}
+    }
+}
+```
+
+- 또 다른 예시를 들어보자.
+- 아래처럼 union을 합친 interface를 만들었다면, 뭔가 type 설계가 잘못 된 것이다.
+
+```js
+interface Layer {
+    layout: FillLayout | LineLayout | PointLayout;
+    paint: FillPaint | LinePaint | PointPaint;
+}
+```
+
+```js
+interface FillLayer {
+    layout: FillLayout;
+    paint: FillPaing;
+}
+interface LineLayer {
+    layout: LineLayout;
+    paint: LinePaint;
+}
+interface PointLayer {
+    layout: PointLayout;
+    paint: PointPaint;
+}
+type Layer = FillLayer | LineLayer | PointLayer;
+```
+
+- 만약 runtime에서도 interface 정보를 활용하고 싶다면 tagged union으로 만들면 된다.
+
+
+```js
+interface FillLayer {
+    kind: 'fill';
+    layout: FillLayout;
+    paint: FillPaing;
+}
+interface LineLayer {
+    kind: 'line';
+    layout: LineLayout;
+    paint: LinePaint;
+}
+interface PointLayer {
+    kind: 'point';
+    layout: PointLayout;
+    paint: PointPaint;
+}
+
+function drawLayer(layer: Layer) {
+    if (layer.kind === 'point') {
+        cosnt {paint} = layer; //paint의 type은 PointPaint
+    } else if (layer.kind === 'fill') {
+        const {paint} = layer; //paint의 type은 FillPoint
+    }
+}
+```
+
+# 사용할 떄는 너그럽게, 생성할 땐 엄격하게
+- 생성할 떄 모두 optional property로 줘서 쉽게 만들 수도 있다.
+- 하지만, 이것은 좋지 않다. 차라리 interface를 원본과 option으로 나누자.
+
+
+```js
+interface LngLat {
+      lng: number;
+      lat: number;
+    }
+
+type LngLatLike = LngLat | {lon: number; lat: number; } | [number, number];
+
+interface Camera {
+    center: LngLat;
+    zoom: number;
+    bearing: number;
+    pitch: number;
+}
+
+interface CamerOptions extends Omit<Partial<Camera>, 'center'> {
+    center?: LngLatLike;
+}
+/*
+interface CamerOptions {
+  center?: LngLatLike;
+  zoom?: number;
+  bearing?: number;
+  pitch?: number;
+}
+*/
+```
+
+
+
+# string 보다 구체적인 type을 사용하자.
+- string type은 어떤 값이 들어올 지 모르는 문자열에 대해서만 활용하자.
+- 만약 들어올 값이 정해져 있다면, literal type을 활용해 구체화 하자.
+
+
+```js
+interface Album {
+    artist: string;
+    title: string;
+    releaseDate: string;
+    recordingType: string;
+}
+
+const kindOfBlue: Album = {
+    artist: 'Miles Davis',
+    title: 'Kind of Blue',
+    releaseDate: 'August 17th, 1959',
+    recordingType: 'Studio'
+}
+
+type RecordingType = 'studio' | 'live';
+interface Album {
+    artist: string;
+    title: string;
+    releaseDate: Date;
+    recordingType: RecordingType;
+}
+
+const album: Album = {
+    artist: 'abc',
+    title: 'ad',
+    releaseDate: new Date('2014-02-11'),
+    recordingType: 'Studio' //error. studio라고 써야 하는데, 대문자로 씀. 그럼 literal type은 catch 가능!
+}
+```
+
+- 함수에 특히 parameter를 string으로 주는 것은 좋지 않다.
+- 아래와 같은 함수가 있다고 해보자.
+
+```js
+function pluck(records, key) {
+    records.map(r => r[key])
+}
+```
+
+- 해당 함수를 아래와 같이 바꿀 수있다.
+
+```js
+function pluck(records: any[], key: string): any[] {
+    return records.map(r => r[key]);
+}
+```
+
+- 해당 함수에 generics를 써서 string을 감춘다.
+- 그러나 undefined type도 같이 딸려온다.
+- T[keyof T]면 T[string], T[Date], T[RecordingType]이 가능하다.
+- 이중 T[string]의 경우, 해당하는 key가 없어 undefined를 return할 수 있다. 
+- 따라서 (string | undefined)[]로 나온 것이다.
+```js
+function pluck<T>(records: T[], key: keyof T): T[keyof T] {
+    return records.map(r => r[key])
+}
+
+const releaseDates = pluck(albums, 'releaseDate')// type이 (string | undefined)[]
+```
+
+- undefined가 딸려오지 않게 extends를 활용한다.
+- 그럼 K는 절대로 아무런 문자열 key를 받을 수 없게 된다.
+- 무조건 T interface 안에 있는 key를 받아오게 되므로 undefined는 사라진다.
+- 더불어 key가 잘못되면 오류도 잡을 수 있다.
+```js
+function pluck<T, K extends keyof T>(records: T[], key: K): T[K][] {
+    return records.map(r => r[key])
+}
+
+pluck(albums, 'releaseDate');   //타입이 Date[]. undefined[]는 있을 수 없다.
+pluck(albums, 'recordingDate'); //error. recordingDate property is not a type of album.
+```
+
+# 명시적 any를 최소하하라.
+- any는 기본적으로 최소화해야 한다.
+- 아래처럼 x에 any type으로 선언하면 안 된다.
+
+```js
+function f1() {
+    const x: any = expresssionReturningFoo();
+    processBar(x);
+}
+```
+
+- 호출되는 parameter를 직접 넣을 때 any로 바꿔줘야 한다.
+```js
+function f2() {
+    const x = expressionReturningFoo();
+    processBar(x as any);
+}
+```
+
+- 객체도 마찬가지다.
+- 아래같이 전체 객체를 any로 감싸면 type정보가 다 사라진다.
+```js
+const config: Config = {
+    a: 1,
+    b: 2,
+    c: {
+        key: value
+    }
+} as any
+```
+
+- 모르는 부분만 any 단언을 해준다.
+```js
+const config: Config = {
+    a: 1,
+    b: 2,
+    c: {
+        key: value as any
+    }
+}
+```
+
+- 함수를 정의할 때도 적어도 배열인 것만 알아도, 그 정보를 제공하자.
+  - 그냥 any가 아니라 any[]와 같이 써주자.
+- any로 쓰면 length를 return할 때 number가 아니라 any type이 된다.
+    - any[]로 쓰면 length를 return할 때 number type이 된다.
+```js
+function getLengthBad(array: any) {
+    return array.length; //any type
+}
+```
+
+
+- 어쨌든 any[]라서 length 속성은 number type이다.
+```js
+function getLengthBad(array: any[]) {
+    return array.length; // number type
+}
+```
+
+- 객체를 정의할 때도 마차간지다.
+- 만약 value를 모른다면, 그냥 any로 쓰지 말자.
+
+```js
+function hasTwelveLetterKey(o: any) {
+    for (const key in o) {
+        if (key.length === 12) {
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+- 아래와 같이 object 형태를 명시해주자.
+
+
+```js
+function hasTwelveLetterKey(o: {[key: string]: any}) {
+    for (const key in o) {
+        if (key.length === 12) {
+            console.log(key, o[key]); //o[key]에 접근 가능함.
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+- 위의 type은 object와 동일하다.
+- 다만 object type으로는 속성에 접근할 수가 없다.
+
+```js
+function hasTwelveLetterKey(o: object) {
+    for (const key in o) {
+        if (key.length === 12) {
+            console.log(key, o[key]); //o[key]에 접근 불가능함.
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+- 객체로 속성에 접근할 필요가 있다면, 위처럼 {[key: string]: any}나 unknown을 쓰자.
+
+
+```js
+function hasTwelveLetterKey(o: unknown) {
+    for (const key in o) {
+        if (key.length === 12) {
+            console.log(key, o[key]); //o[key]에 접근 가능함.
+            return true;
+        }
+    }
+    return false;
+}
+```
+
+- any를 return type으로 하지 말아야할 이유가 또 있다.
+- any를 쓰면 잉여 속성 체크가 발동하지 않는다.
+  - 그러니 모른다면 차라리 unknown으로 하자.
+  - 그럼 타입 단언으로 원하는 객체로 바꿀 수 있다.
+
+```js
+function parseYAML(yaml: string): any {
+    .....
+}
+
+function safeParseYAML(yaml: string): unknown /* null이나 undefined를 return하지 않을 확신이 있다면 {}도 괜찮다. 하지만 eslint에서 막으니까 쓰지 말자.*/{
+    return parseYAML(yaml); // any는 unknown type으로 바뀔 수 있다.
+}
+const book = safeParseYAML(`
+    name: Villette
+    author: Charlotte Bronte
+`)
+alert(book.title);  //type check 통과. 그러나 runtime에서 error 뜸.
+```
+
+
+- 그럼 호출하는 쪽에서 원하는 타입으로 바꿔줄 수 있다.
+```js
+interface Book {
+    name: string;
+    title: string;
+}
+
+const book = safeParseYAML(`
+    name: Villette
+    author: Charlotte Bronte
+`) as Book;
+alert(book.title);  //error. Book 형식에는 title 속성이 없습니다.
+```
+
+- generics를 이용하는 경우도 있다.
+- 하지만 호출하는 쪽이 아니라 정의하는 쪽에서 강제하는 것이라 쓰지 말자
+- 사용자가 원하는 객체로 바꿀 수 있게 해주는 쪽이 바람직하다.
+
+```js
+function safeParseYAML<T>(yaml: string): T {
+    return parseYAML(yaml);
+}
+```
+
+- parameter를 unknown으로 받을 때 타입을 고정시키는 것은 꼭 타입 단언만 있지 않다.
+- 아래와 같이 helper, instanceof를 사용할 수도 있다.
+```js
+function isBook(val: unknown): val is Book {
+    return (
+        typeof(val) === 'object' && val !== null && 'name' in val && 'author' in val
+    )
+}
+
+function processValu(val: unknown) {
+    if (isBook(val)) {
+        val; //type이 Book
+    }
+}
+
+function processValue(val: unknonw) {
+    if (val instanceof Date) {
+        val // 타입이 Date
+    }
+}
+```
+
+
+# 암시적 any는 아예 쓰지 말자.
+- 변수를 암시적 any로 쓰는 것도 매우 안 좋다.
+- 아래같이 쓰면 any[]이 된다.
+- 그런데 값을 넣으면 type이 계속 확장된다.
+
+
+```js
+const array = [];   //any[] type
+array.push('a');    //string[] type
+array.push(1);      //(string | number)[] type
+```
+
+
+- 이건 매우 좋지 않다. 배열을 사용할 때는 처음부터 type을 명시하고 사용하자.
+
+```js
+const list: number[] = [];
+list.push('11')     //error.  rgument of type 'string' is not assignable to parameter of type 'number'.
+```
+
+
+- 분기문에서도 암시적 any의 진화가 일어난다.
+- 따라서 선언만 할 때도 type을 명시하자.
+
+
+```js
+let val = null; // any type
+try {
+    val = 12; 
+    val         // number type
+} catch(e) {
+    console.warn('alas!');
+}
+val; //number | undefined
+```
+
+```js
+let val: number;    // number;
+try {
+    val = 12;       // number
+} catch(e) {
+    console.log('alas!');
+}
+val;                // number
+```
+
+# any가 쓰인 곳 찾아내기
+- any가 project의 어디에 쓰였는지 알 수 있는 방법으로 type-coverage package가 있다.
+
+```
+npm i type-coverage
+npx type-coverage --detail
+```
+
+# type은 devDependency에 깔자.
+- runtime에 필요한 것은 dependency에 깐다.
+- compile시에 필요한 것은 devDependency에 깐다.
+```
+npm install react
+npm install --save-dev @types/react
+```
+
+- ts를 깐 경우 3가지 모두 버전이 맞아야 한다.
+
+```
+ts 버전 - typescript 3.1.x
+lib 버전 - 특정 library 10.4.x
+lib type 버전 - 특정 library의 type 10.4.x
+```
+
+# this 다루기
+- class 내에서 this를 쓰는 경우, 아래와 같이 보통 bind를 쓴다.
+
+
+```js
+class ResetButton {
+    constructor() {
+        this.onClick = this.onClick.bind(this);
+    }
+
+    render() {
+        return makeButton({text: 'Reset', onClick: this.onClick});
+    }
+
+    onClick() {
+        alert(`Reset ${this}`);
+    }
+}
+```
+
+- 아니면 화살표함수를 쓴다.
+
+
+```js
+class ResetButton {
+    constructor() {
+        this.onClick = this.onClick(this);
+    }
+
+    render() {
+        return makeButton({text: 'Reset', onClick: this.onClick});
+    }
+
+    onClick = () => {
+        alert(`Reset ${this}`);
+    }
+}
+```
+
+- 아니면 좀 옛날 방식으론 대리변수를 쓴다.
+
+
+```js
+class ResetButton {
+    constructor() {
+        var self = this;
+        this.onClick = function() {
+           alert("Reset" + self);
+        }
+    }
+
+    render() {
+        return makeButton({text: 'Reset', onClick: this.onClick});
+    }
+}
+```
+
+- 그런데 parameter의 경우가 문제다. 여기서 this를 쓰려하면 문제가 발생한다.
+
+```js
+function addKeyListener(el: HTMLElement, fn: (e: KeyboardEvent) => void) {
+    el.addEventListener('keydown', e => {
+        fn.(e); //call이 무조건 있어야 한다. fn.call()로 불러야 한다. 하지만 그럼 오류가 난다. this가 먼저 규정되어야 하기 때문이다.
+    })
+}
+const element = document.querySelector('input') as HTMLElement;
+addKeyListener(element,function(e) {
+    console.log(e, this.innerHTML); //'this' implicitly has type 'any' because it does not have a type annotation.
+})
+```
+- 그 경우, this를 함수 정의에 포함시키고, call로 부른다. 
+- call()은 this를 첫번째 parameter로 받는다. 여기서 this의 type을 지정해준다.
+- 또한 callback함수의 첫번쨰 parameter와 원함수의 첫번쨰 parameter의 type은 동일해야 한다.
+
+
+
+```js
+function addKeyListener(el: HTMLElement, fn: (this: HTMLElement, e: KeyboardEvent) => void) {
+    el.addEventListener('keydown', e => {
+        fn.call(el, e); //call이 무조건 있어야 한다.
+    })
+}
+const element = document.querySelector('input') as HTMLElement;
+addKeyListener(element,function(e) {
+    console.log(e, this.innerHTML);
+})
+```
+
+- 이 경우, 화살표 함수를 사용하기 어렵다는 단점이 있다.
+- listener들은 뭔가 return 하는 경우가 없어 void인데, 화살표함수는 상위 컨텍스트에 this를 binding한다.
+- 그런데 innerHTML이 상위 컨텍스트에 없기 때문에 오류가 난다.
+- type이 void인 것은 아직 이유를 잘 모르겠으나, arrow fn의 type이 void여서 그런 것으로 생각된다.
+
+```js
+function addKeyListener(el: HTMLElement, fn: (this: HTMLElement, e: KeyboardEvent) => void) {
+    el.addEventListener('keydown', e => {
+        fn.call(el, e); //call이 무조건 있어야 한다.
+    })
+}
+const element = document.querySelector('input') as HTMLElement;
+addKeyListener(element,(e) => {
+    console.log(e, this.innerHTML); //Property 'innerHTML' does not exist on type 'void'.
+})
+```
+
+- this에 어떤 type을 부여하느냐에 따라 this가 가져올 수 있는 property가 달라진다.
+- Event로 바꾸면 addEventListner가 없어 type check에서 오류가 난다.
+
+```js
+ function addKeyListener(el: Event, fn: (this: Event, e: KeyboardEvent) => void) {
+    el.addEventListener('keydown', e => {//Property addEventListener does not exist on type 
+        fn.call(el, e); 
+    });
+}
+const element = document.querySelector('input') as HTMLElement;
+addKeyListener(element, function (e) {
+    console.log(e, this.innerHTML);
+});
+```
+
+
 # key가 아닌 값을 type으로(엔간하면 이렇게 쓰면 안 된다)
 
 - 값을 type으로 받고 싶을 수도 있다.
@@ -843,36 +1892,4 @@ type getUserInfo = ReturnType<typeof getUserInfo>;
 
 ```js
 type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any;
-```
-
-
-# Record 패턴
-
-- 특정한 값으로만 이뤄지는 type을 손쉽게 만드는 방법도 있다.
-- 바로 Record다.
-- 아래와 같이 interface를 만들었는데, 이게 일회용이다.
-
-
-```js
-interface point3D {
-    x: number;
-    y: number;
-    z: number;
-}
-```
-
-- 그럼 더 간단하게 Record를 쓰면 된다.
-
-
-```js
-type Point3D = Record<'x' |'y'|'z',number>;
-```
-
-- Record 패턴은 아래와 같다.
-- 모든 key가 들어갈 수 있지만, 각 key의 type은 하나로 고정이다.
-
-```js
-type Record<K extends keyof any, T> = {
-    [P in K]: T;
-};
 ```
