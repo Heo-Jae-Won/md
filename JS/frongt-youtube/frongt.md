@@ -1205,3 +1205,46 @@ export function checkout(productId, paymentInfo, address) {
 
 
 - network debugging 시 오류 난 api를 우클릭 해 copy - copy as CURL(cmd)로 복사해서 보면 header, url 정보를 볼 수 있다.
+
+
+- export가 있어야 module이다.
+- declare module은 module이 아니라 script 파일이다.
+- declare module만 하면, 기존에 있던 module을 덮어씌운다.
+- 매우 조심해야 한다.
+
+
+```js
+declare module 'express-session' {
+.
+.
+.
+}
+```
+
+- 반면에 export와 declare module을 같이 쓸 수도 있다.
+- 그 경우, 확장하는 것이다.
+- 그럼 기존의 속성과 더불어 추가한 해당 속성도 가져다 쓸 수 있다. 
+
+```js
+declare module 'express-session' {
+    interface SessionData {
+        jaewon: string;
+    }
+}
+
+export {}
+```
+
+- 전역으로 추가할 수도 있다.
+- 단, script가 아닌 모듈에서만 가능하다.
+
+
+```js
+declare global {
+    interface Error {
+        jaewon: string;
+    }
+}
+
+export {} //없으면 script가 되어 오류가 난다. global은 module에서만 존재할 수 있다.
+```
