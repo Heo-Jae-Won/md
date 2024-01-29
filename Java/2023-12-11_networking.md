@@ -1,58 +1,5 @@
-- url을 만들어 거기에 있는 정보를 가져올 때는 URL instance를 활용한다.
-- stream을 열어야 하는데, 그것은 openStream()으로 가능하다.
-```java
-public class NetWorkEx4 {
-    public static void main(String[] args) {
-        URL url = null;
-        BufferedReader input = null;
-        String address = "http://www.codechobo.com/sample.hello.html";
-        String line = "";
 
-        try{
-            url = new URL(address);
-            input = new BufferedReader(new InputStreamReader(url.openStream()));
 
-            while( (line = input.readLine()) != null) {
-                sysout(line);
-            }
-            input.close();
-        } catch(Exceptione e) {
-            e.printStackTrace();
-        }
-    }
-}
-```
-
-- try catch보다는 try with resources로 바꿔주자.
-```java
- try( BufferedReader input = new BufferedReader(new InputStreamReader(new URL(address).openStream())) ){
-    while( (line = input.readLine()) != null) {
-        sysout(line);
-    }
-}
-```
-
-- URL은 인터넷 상의 주소여야 한다.
-- 하지만 그걸 출력할 Stream은 반드시 문자열일 필요가 없다.
-- 아래와 같이 파일로 만들 수도 있다.
-```java
-public class NetWorkEx5 {
-    public static void main(String[] args) {
-        URL url = null;
-        InputStream out = null;
-        FileOutputStream out = null;
-        String address = "http://www.codechobo.com/book/src/javajungsuk3_src.zip";
-
-        int ch = 0;
-
-        try(in = new URL(address).openStream(); out = new FileOutputStream("javajungsuk3_src.zip")) {
-            while( (ch = in.read()) != -1) {
-                out.write(ch);
-            }
-        }
-    }
-}
-```
 
 ```java
 public class TcpIpServer {

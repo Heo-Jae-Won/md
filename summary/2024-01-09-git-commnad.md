@@ -740,3 +740,55 @@ git reset --hard [commit hash]
 - 2.0.0으로 가면 완전히 새롭게 개편한 경우다. 기능이 삭제되고, 메뉴가 완전 새롭게 바뀐다.
 
 
+- git은 key와 value를 통해 저장한다.
+- key는 SHA-1 방식으로 해싱된 hash 값(40자리 16진수 값)이고, value는 일종의 파일이다.
+
+- 파일을 복원하려고 할 때, git reflog 외에도 아래와 같이 쓸 수 있다.
+
+
+```sh
+git cat-file -p [commit hash]
+git cat-file -p [tree hash]
+git cat -file -p [src tree hash]
+git cat-file -p [원하는폴더 tree hash]
+git cat-file -p [원하는 파일 blob hash] > [원하는 텍스트 이름]
+```
+
+
+- git이 저장하는 종류로는 blob, tree, commit이 있다.
+- blob은 파일의 내용만을 포함한다.파일의 이름이 저장되지는 않는다.
+- 파일의 이름은 tree가 저장한다. 정확히는 디렉터리의 구조를 저장한다.
+- 큰 디렉토리를 하나의 tree라고 하면, 그 tree 안에 하부 파일의 tree와 blob이 같이 있는 구조다.
+
+```
+tree
+tree blob tree blob
+```
+
+
+- tree를 보고 싶다면 아래와 같이 쓸 수 있다.
+- 아래는 master tree 기준이다.
+
+```sh
+git cat-file -p master^{tree}
+```
+
+- 마지막으로 commit이 있다.
+- commit은 tree, parent, author, commiter, message를 가진다.
+- tree는 폴더 구조를 스냅샷으로 담는다.
+- tree 안에 해당 프로젝트의 tree와 blob이 있기 때문에 해당 프로젝트를 전부 복원할 수 있다.
+- 파일의 내용이 바뀌지 않으면 해당 blob은 계속 똑같은 hash값을 유지한다.
+```sh
+git cat-file -p [commit hash]
+
+tree ....
+parent ....
+authro ...
+committer...
+message ...
+```
+
+- 파일의 내용이 바뀌면 새로운 blob이 형성된다. 
+- 따라서 tree 안에서 새로운 blob으로 바뀌게 되고, 그게 스냅샷으로 찍힌다.
+- 입력값이 아무리 바뀌어도 40자리의 commit hash를 생성한다. 따라서 파일로 저장하지 않고, 40자리 commit hash로 가지고 있다가 필요하면 복호화해서 파일 형태로 펼치는 것이다.
+- 파일 형태로 펼칠 때 파일 이름은 tree가 알려주게 된다.
