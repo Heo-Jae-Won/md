@@ -644,10 +644,22 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 }
 ```
 
-
 <br>
 
-boot와는 달리 Filter를 만들었다면 아래와 같이 web.xml(혹은 그에 준하는 class config)에 등록시켜주는 과정이 필요합니다.
+boot와는 달리 Filter를 만들었다면 아래와 같이 web.xml(혹은 그에 준하는 class config)에 등록시켜주는 과정이 필요합니다.\
+```xml
+<filter>
+        <filter-name>springSecurityFilterChain</filter-name>
+        <filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+    </filter>
+
+    <!-- Filter mapping -->
+    <filter-mapping>
+        <filter-name>springSecurityFilterChain</filter-name>
+        <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+```
 
 ```java
 public class MyWebAppInitializer implements WebApplicationInitializer {
