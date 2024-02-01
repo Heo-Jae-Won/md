@@ -792,3 +792,58 @@ message ...
 - 따라서 tree 안에서 새로운 blob으로 바뀌게 되고, 그게 스냅샷으로 찍힌다.
 - 입력값이 아무리 바뀌어도 40자리의 commit hash를 생성한다. 따라서 파일로 저장하지 않고, 40자리 commit hash로 가지고 있다가 필요하면 복호화해서 파일 형태로 펼치는 것이다.
 - 파일 형태로 펼칠 때 파일 이름은 tree가 알려주게 된다.
+
+
+## <span style="color:#802548">_23. git object_</span> 
+- git은 C언어로 내부에서 이뤄져서 file, folder, commit을 object로 관리한다.
+- 해당 object들은 모두 SHA-1 방식으로 해싱 암호화가 이뤄진다.
+- 향후 SHA-256 등 암호화 수준을 올릴 계획은 있다고 한다.
+- SHA-1 해싱 암호화의 이점은 아래와 같다.
+- 
+```
+각 파일마다 고유의 해쉬를 가진다. 따라서 유일성이 보장된다. 변화사항마다도 고유의 해쉬를 가지기 때문에 버전관리가 가능하다.
+해쉬기반으로 검색을 빠르게 진행할 수 있다.
+```
+- file은 C언어의 blob이다. file을 blob으로 저장하면 좋은 장점은 아래와 같다.
+
+```
+변화사항이 없으면 새로운 blob을 만들지 않는다.
+파일이었다면, 파일째로 다시 저장해야해서 저장소 용량을 효율적으로 활용할 수 없다.
+```
+
+- tree는 C언어의 struct다. 
+- 대략 아래와 같은 구조라고 한다.
+
+```C
+struct tree_entry {
+    mode_t mode;  // File mode (permissions)
+    char name[256];  // File or directory name (assuming a maximum length of 255 characters)
+    unsigned char sha1[20];  // SHA-1 hash of the blob or subtree
+};
+
+struct tree {
+    int entry_count;  // Number of entries in the tree
+    struct tree_entry entries[MAX_ENTRIES];  // Array of tree entries
+    unsigned char sha1[20];  // SHA-1 hash of the tree object
+};
+```
+
+- commit도 C언어의 struct다.
+- 대략 아래와 같은 구조를 지니고 있다.
+```C
+struct commit {
+    unsigned char tree[20];  // SHA-1 hash of the tree object representing the project's directory structure
+    unsigned char parents[MAX_PARENTS][20];  // Array of SHA-1 hashes of parent commits (for merge commits)
+    const char *author_name;
+    const char *author_email;
+    unsigned long author_timestamp;  // Timestamp of the author's commit
+    const char *committer_name;
+    const char *committer_email;
+    unsigned long committer_timestamp;  // Timestamp of the committer's commit
+    const char *commit_message;
+    unsigned char sha1[20];  // SHA-1 hash of the commit object
+};
+```
+
+- tree는 blob을 배열로 갖고 있고, commit은 tree를 배열로 갖고 있다.
+- 이와 같이 물고물어지는 계층구조를 갖고 있으며, 주소값도 담고 있기 때문에 branching하기가 매우 쉽다는 장점이 있다.
