@@ -42,3 +42,277 @@ Thread thread = new Thread(new Runnable() {
 		});
 		thread1.start();
 ```
+
+```java
+public class Main {
+    public static final int MAX_PASSWORD = 9999;
+
+    public static void main(String[] args) {
+        Random random = new Random();
+
+        Vault vault = new Vault(random.nextInt(MAX_PASSWORD));
+
+        List<Thread> threads = new ArrayList<>();
+
+        threads.add(new AscendingHackerThread(vault));
+        threads.add(new DescendingHackerThread(vault));
+        threads.add(new PoliceThread());
+
+        for (Thread thread : threads) {
+            thread.start();
+        }
+    }
+
+    private static class Vault {
+        private int password;
+
+        public Vault(int password) {
+            this.password = password;
+        }
+
+        public boolean isCorrectPassword(int guess) {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+            }
+            return this.password == guess;
+        }
+    }
+
+    private static abstract class HackerThread extends Thread {
+        protected Vault vault;
+
+        public HackerThread(Vault vault) {
+            this.vault = vault;
+            this.setName(this.getClass().getSimpleName());
+            this.setPriority(Thread.MAX_PRIORITY);
+        }
+
+        @Override
+        public void start() {
+            System.out.println("Starting thread " + this.getName());
+            super.start();
+        }
+    }
+
+    private static class AscendingHackerThread extends HackerThread {
+
+        public AscendingHackerThread(Vault vault) {
+            super(vault);
+        }
+
+        @Override
+        public void run() {
+            for (int guess = 0; guess < MAX_PASSWORD; guess++) {
+                if (vault.isCorrectPassword(guess)) {
+                    System.out.println(this.getName() + " guessed the password " + guess);
+                    System.exit(0);
+                }
+            }
+        }
+    }
+
+    private static class DescendingHackerThread extends HackerThread {
+
+        public DescendingHackerThread(Vault vault) {
+            super(vault);
+        }
+
+        @Override
+        public void run() {
+            for (int guess = MAX_PASSWORD; guess >= 0; guess--) {
+                if (vault.isCorrectPassword(guess)) {
+                    System.out.println(this.getName() + " guessed the password " + guess);
+                    System.exit(0);
+                }
+            }
+        }
+    }
+
+    private static class PoliceThread extends Thread {
+        @Override
+        public void run() {
+            for (int i = 10; i > 0; i--) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                }
+                System.out.println(i);
+            }
+
+            System.out.println("Game over for you hackers");
+            System.exit(0);
+        }
+    }
+}
+```
+
+```java
+public class MultiExecutor {
+    
+    private final List<Runnable> tasks;
+ 
+    /*
+     * @param tasks to executed concurrently
+     */
+    public MultiExecutor(List<Runnable> tasks) {
+        this.tasks = tasks;
+    }
+ 
+    /**
+     * Executes all the tasks concurrently
+     */
+    public void executeAll() {
+        List<Thread> threads = new ArrayList<>(tasks.size());
+        
+        for (Runnable task : tasks) {
+            Thread thread = new Thread(task);
+            threads.add(thread);
+        }
+        
+        for(Thread thread : threads) {
+            thread.start();
+        }
+    }
+}
+```
+
+```java
+
+	//thread는 아무것도 안해도 커널과 메모리의 자원을 잡아먹는다. 안 쓰는 스레드는 제거해야 한다.
+	//thread가 하나만 살아있어도 process가 죽지 않는다. 따라서 application을 죽이기 전에 모든 thread를 종료시켜야 한다.
+	//거기에 쓰이는 method가 interrupt()다.
+	public static void main(String[] args) throws Exception {
+		Thread thread = new Thread(new BlockingTask());
+		thread.start();
+		thread.interrupt();
+		//System.out.println("thread is over"); 이렇게 써도 start가 먼저시작되지 않으면 이놈이 먼저 뜸.
+
+		Thread thread1 = new Thread(new LongComputationTask(new BigInteger("20000"),new BigInteger("100000")));
+		thread1.start();
+		thread1.interrupt(); //이것만으로는 부족. 해당 thread의 run method에서 실제 오래 걸리는 작업에 flag를 붙여줘야 함.
+		//따라서 아래 pow()의 for문 안에 if문으로 flag를 줌. 그럼 interrupted가 된 것을 알고 thread 정지  
+		
+		
+		Thread thread2 = new Thread(new LongComputationTask1(new BigInteger("2000"),new BigInteger("10000")));
+		thread2.setDaemon(true); //만약 if문으로 어떤 처리를 따로 할 필요가 없다고 생각한다면 간단하게 이렇게 처리 가능. 그럼 interrupt됨.
+		thread2.start();
+		thread2.interrupt();
+	}
+	
+	private static class BlockingTask implements Runnable {
+		
+		@Override
+		public void run() {
+			try {
+				Thread.sleep(50000);
+			} catch(InterruptedException e) {
+				System.out.println("Exiting blocking thread");
+			}
+		}
+	}
+	
+	private static class LongComputationTask implements Runnable {
+        private BigInteger base;
+        private BigInteger power;
+
+        public LongComputationTask(BigInteger base, BigInteger power) {
+            this.base = base;
+            this.power = power;
+        }
+
+        @Override
+        public void run() {
+            System.out.println(base + "^" + power + " = " + pow(base, power));
+        }
+
+        private BigInteger pow(BigInteger base, BigInteger power) {
+            BigInteger result = BigInteger.ONE;
+
+            for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
+                if (Thread.currentThread().isInterrupted()) {
+                    System.out.println("Prematurely interrupted computation");
+                    return BigInteger.ZERO;
+                }
+                result = result.multiply(base);
+            }
+
+            return result;
+        }
+    }
+	
+	private static class LongComputationTask1 implements Runnable {
+        private BigInteger base;
+        private BigInteger power;
+
+        public LongComputationTask1(BigInteger base, BigInteger power) {
+            this.base = base;
+            this.power = power;
+        }
+
+        @Override
+        public void run() {
+            System.out.println(base + "^" + power + " = " + pow(base, power));
+        }
+
+        private BigInteger pow(BigInteger base, BigInteger power) {
+            BigInteger result = BigInteger.ONE;
+
+            for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
+                result = result.multiply(base);
+            }
+
+            return result;
+        }
+    }
+```
+
+```java
+//맞습니다. 애플리케이션을 프로그램적으로 중단할 수 있는 유일한 방법은 스레드를 데몬으로 만드는 것입니다. 안타깝게도 System.in.read()는 Thread.interrupt();에 응답하지 않습니다.
+ public static void main(String [] args) {
+        Thread thread = new Thread(new WaitingForUserInput());
+        thread.setName("InputWaitingThread");
+		//thread.setDaemon(true);
+        thread.start();
+		//thread.interrupt();
+
+    }
+ 
+    private static class WaitingForUserInput implements Runnable {
+        @Override
+        public void run() {
+            try {
+                while (true) {
+                    char input = (char) System.in.read();
+                    if(input == 'q') {
+                        return;
+                    }
+                }
+            } catch (IOException e) {
+                System.out.println("An exception was caught " + e);
+            };
+        }
+    }
+```
+
+```java
+    public static void main(String [] args) {
+        Thread thread = new Thread(new SleepingThread());
+        thread.start();
+        thread.interrupt();
+				// thread.interrupt()는 다른 스레드에게 중단하라는 신호를 보내는 방법일 뿐입니다. 중단이 가능한 경우, 중단을 하는 건 사용자의 몫입니다.
+				// 아래 catch문에 return을 추가할 필요가 있습니다.
+    }
+ 
+    private static class SleepingThread implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    Thread.sleep(1000000);
+                } catch (InterruptedException e) {
+                }
+            }
+        }
+    }
+```
