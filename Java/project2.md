@@ -29,7 +29,6 @@ public class Main {
         // Write to file
         String content = "cipherkey";
         Files.write(path, content.getBytes());
-
     }
 }
 ```
@@ -429,6 +428,247 @@ if("A".equals(deviceOS) && 310 > appVersion || "I".equals(deviceOS) && 305 > app
 if((!"A".equals(deviceOS) || 310 <= appVersion) && (!"I".equals(deviceOS) || 305 <= appVersion))
 
 if(!"A".equals(deviceOS) || 310 <= appVersion && !"I".equals(deviceOS) || 305 <= appVersion)
+```
+
+- 이젠 실제 코드로 살펴보자.
+```java
+String devcOS = session.getAttribute("devcOS");
+int appVersion = session.getAttribute("version");
+String versionCheck = "1";
+String registered = "";
+if ("A".equals(devcOS) ) {
+    if(305 > appVersion) {
+        isOpenDialog = "N";
+    } else {
+        if (312 <= appVersion) {
+            inputMap.put("name", name);
+            outputMap1 = Service1.service(inputMap);
+            outputMap2 = Service2.service(inputMap);
+
+            String responseCode = String.valueOf(outputMap1.get("code"));
+            String value1       = String.valueOf(outputMap2.get("value1"));
+            String value2       = String.valueOf(outputMap2.get("value2"));
+            String value3       = String.valueOf(outputMap2.get("value3"));
+            versionCheck = "2";
+
+            if("3".equals(value3)) {
+                isOpenDialog = "N";
+            }
+
+            if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+                if("1".eqauls(value2)) {
+                    isOpenDialog = "N";
+                } else {
+                    isOpenDialog = "Y";
+                }
+            }
+        }
+    }
+} else {
+    if (303 > appVersion) {
+        isOpenDialog = "N";
+    } else {
+        if (309 <= appVersion) {
+            inputMap.put("name", name);
+            outputMap1 = Service1.service(inputMap);
+            outputMap2 = Service2.service(inputMap);
+
+            String responseCode = String.valueOf(outputMap1.get("code"));
+            String value1       = String.valueOf(outputMap2.get("value1"));
+            String value2       = String.valueOf(outputMap2.get("value2"));
+            String value3       = String.valueOf(outputMap2.get("value3"));
+            versionCheck = "2";
+
+            if("3".equals(value3)) {
+                isOpenDialog = "N";
+            }
+
+            if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+                if("1".eqauls(value2)) {
+                    isOpenDialog = "N";
+                } else {
+                    isOpenDialog = "Y";
+                }
+            }
+        }
+    }
+}
+```
+
+- 위의 중첩 if를 보면 정신이 나갈수밖에 없다.
+- 고쳐보자. 먼저 if문 303 >appVersion의 else문은 303 <=appVersion이다.
+- 따라서 else문의 시작에 존재하는 309 <=appVersion은 있으나마나 한 if문이다. else문의 조건자체가 303 <= appVersion이기 때문이다.
+- 즉 304, 305, 306, 307, 308은 애초에 못들어온다. 따라서 지워주자.
+
+
+```java
+String devcOS = session.getAttribute("devcOS");
+int appVersion = session.getAttribute("version");
+String versionCheck = "1";
+String registered = "";
+if ("A".equals(devcOS) ) {
+    if(305 > appVersion) {
+        isOpenDialog = "N";
+    } else {
+        inputMap.put("name", name);
+        outputMap1 = Service1.service(inputMap);
+        outputMap2 = Service2.service(inputMap);
+
+        String responseCode = String.valueOf(outputMap1.get("code"));
+        String value1       = String.valueOf(outputMap2.get("value1"));
+        String value2       = String.valueOf(outputMap2.get("value2"));
+        String value3       = String.valueOf(outputMap2.get("value3"));
+        versionCheck = "2";
+
+        if("3".equals(value3)) {
+            isOpenDialog = "N";
+        }
+
+        if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+            if("1".eqauls(value2)) {
+                isOpenDialog = "N";
+            } else {
+                isOpenDialog = "Y";
+            }
+        }
+    }
+} else {
+    if (303 > appVersion) {
+        isOpenDialog = "N";
+    } else {
+        inputMap.put("name", name);
+        outputMap1 = Service1.service(inputMap);
+        outputMap2 = Service2.service(inputMap);
+
+        String responseCode = String.valueOf(outputMap1.get("code"));
+        String value1       = String.valueOf(outputMap2.get("value1"));
+        String value2       = String.valueOf(outputMap2.get("value2"));
+        String value3       = String.valueOf(outputMap2.get("value3"));
+        versionCheck = "2";
+
+        if("3".equals(value3)) {
+            isOpenDialog = "N";
+        }
+
+        if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+            if("1".eqauls(value2)) {
+                isOpenDialog = "N";
+            } else {
+                isOpenDialog = "Y";
+            }
+        }
+    }
+}
+```
+
+
+- 이제는 조건문을 통합해주자.
+- 가만 보면, 중첩 if문의 else문들은 전부 똑같은 내용들이다.
+- 조건문만 ||로 통합하면 내용을 겹쳐 쓸 수 있다.
+```java
+String devcOS = session.getAttribute("devcOS");
+int appVersion = session.getAttribute("version");
+String versionCheck = "1";
+String registered = "";
+if( ("A".eqauls(devcOS) && 304 > appVersion) || ("I".eqauls(devcOS) && 303 > appVersion) ) {
+    isOpenDialog = "N";
+} else if( ("A".eqauls(devcOS) && 303 <= appVersion) || ("I".equals(devcOS) && 303 <= appVersion) ) {
+    inputMap.put("name", name);
+    outputMap1 = Service1.service(inputMap);
+    outputMap2 = Service2.service(inputMap);
+
+    String responseCode = String.valueOf(outputMap1.get("code"));
+    String value1       = String.valueOf(outputMap2.get("value1"));
+    String value2       = String.valueOf(outputMap2.get("value2"));
+    String value3       = String.valueOf(outputMap2.get("value3"));
+    versionCheck = "2";
+
+    if("3".equals(value3)) {
+        isOpenDialog = "N";
+    }
+
+    if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+        if("1".eqauls(value2)) {
+            isOpenDialog = "N";
+        } else {
+            isOpenDialog = "Y";
+        }
+    }
+}
+```
+
+- 하지만 위의 조건식은 알아보기 너무 어렵다. 
+- 조건식에 이름을 주자.
+```java
+String devcOS = session.getAttribute("devcOS");
+int appVersion = session.getAttribute("version");
+String versionCheck = "1";
+String registered = "";
+boolean isAOS = "A".eqauls(devcOS);
+boolean isIOS = "I".eqauls(devcOS);
+if( (isAOS && 304 > appVersion) || (isIOS && 303 > appVersion) ) {
+    isOpenDialog = "N";
+} else if( (isAOS && 303 <= appVersion) || (isIOS && 303 <= appVersion) ) {
+    inputMap.put("name", name);
+    outputMap1 = Service1.service(inputMap);
+    outputMap2 = Service2.service(inputMap);
+
+    String responseCode = String.valueOf(outputMap1.get("code"));
+    String value1       = String.valueOf(outputMap2.get("value1"));
+    String value2       = String.valueOf(outputMap2.get("value2"));
+    String value3       = String.valueOf(outputMap2.get("value3"));
+    versionCheck = "2";
+
+    if("3".equals(value3)) {
+        isOpenDialog = "N";
+    }
+
+    if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1))) {
+        if("1".eqauls(value2)) {
+            isOpenDialog = "N";
+        } else {
+            isOpenDialog = "Y";
+        }
+    }
+}
+```
+
+- 그런데 value1, value2, value3는 해당 로직에서 딱 1번만 쓰인다.
+- 거기다 else if안에서 어차피 서비스가 실행되기 때문에, 값을 가지고 연산하는 로직은 밖에서 해도 된다.
+- 아래와 같이 따로 빼서 사용할 수 있다.
+- 처음에 비하면 엄청나게 깨끗해진 로직이다!
+```java
+String devcOS = session.getAttribute("devcOS");
+int appVersion = session.getAttribute("version");
+String versionCheck = "1";
+String registered = "";
+boolean isAOS = "A".eqauls(devcOS);
+boolean isIOS = "I".eqauls(devcOS);
+if( (isAOS && 304 > appVersion) || (isIOS && 303 > appVersion) ) {
+    isOpenDialog = "N";
+} else if( (isAOS && 303 <= appVersion) || (isIOS && 303 <= appVersion) ) {
+    inputMap.put("name", name);
+    outputMap1 = Service1.service(inputMap);
+    outputMap2 = Service2.service(inputMap);
+    versionCheck = "2";
+}
+
+String responseCode = String.valueOf(outputMap1.get("code"));
+String value1       = String.valueOf(outputMap2.get("value1"));
+String value2       = String.valueOf(outputMap2.get("value2"));
+String value3       = String.valueOf(outputMap2.get("value3"));
+
+if("3".equals(value3)) {
+    isOpenDialog = "N";
+}
+
+if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1)) ) {
+    if("1".eqauls(value2)) {
+        isOpenDialog = "N";
+    } else {
+        isOpenDialog = "Y";
+    }
+}
 ```
 
 - 등록해 둔 배너 이미지, 내용을 3개의 다른 곳에서 사용할 수 있게 조회하는 쿼리
@@ -843,4 +1083,41 @@ public class AsyncFileUploadRetryExample {
         }
     }
 }
+```
+
+- 핸드폰 팝업에서 select 같이 보이는 것들 선택했을 떄, 다른 선택 css 처리 초기화
+```js
+$('.popup').each(function() {
+    var idVal = $(this).attr('id');
+
+    $('.popup.show .select_item_wrap').find('li').on('click',function() {
+        //결제수단을 바꾼 경우, 그 아래에 있는 모든 css 선택 처리 초기화를 의도. 그러나 의도대로 잘 되지 않는 경우가 있어음.
+        $(this).childeren().addClass('selected ui-pop-close').parent('li').siblings().children().removeClass('selected ui-pop-close');
+
+        //따라서 아래와 같이 추가.
+        var txt = $(this).find('strong').html();
+        var selectedDomArray = ['#crdReasonPop', '#actReasonPop', '#cashReasonPop'];
+       
+        if (idVal == "wayPop") {
+            if (txt == "카드") {
+                selectedDomArray = selectedDomArray.filter(function(item) {
+                    return item !== '#crdReasonPop';
+                })
+            } else if (txt == "계좌") {
+                selectedDomArray = selectedDomArray.filter(function(item) {
+                    return item !== '#actReasonPop';
+                })
+            } else if (txt == "현금") {
+                selectedDomArray = selectedDomArray.filter(function(item) {
+                    return item !== '#cashReasonPop';
+                })
+            }
+        }
+        //만약 결제수단을 변경하면 분류 선택 css를 초기화함.  다만, 자기 자신을 누른 경우는 제외해야 하므로 위에서 filtering 한것.
+        //그게 selectedDomArray.toString()
+        $('.btn-select').parents().find('#container').siblings(selectedDomArray.toString()).find('ul').children().each(function() {
+            $(this).find('div').removeClass('selected ui-pop-close');
+        })
+    })
+})
 ```
