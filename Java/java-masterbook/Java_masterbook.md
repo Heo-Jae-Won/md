@@ -1161,3 +1161,292 @@ public class SampleMain {
 - notifyObserver method가 호출되면 Observer에 통지한다. (update method 호출)
 - 정보를 '통지'하는 구조가 Observer interface와 Subject 추상 클래스에서 제공된다.
 - 실제 처리는 각각을 구현하고 상속한 class에서 이뤄진다.
+
+
+## Thread safe
+- thread safe하게 소스코드를 짜는 게 필요하다.
+- Thread safe란 아래와 같은 의미를 지닌다.
+```
+여러 쓰레드에서 읽거나 써도 데이터가 파괴되지 않는다.
+여러 쓰레드에서 읽거나 써도 오류가 없다.
+여러 쓰레드에서 읽거나 써도 deadlock이 없다.
+```
+
+- thread - safe가 아닌 대표적인 상황들이다.
+```
+int 증가처리
+SimpleDateFormate의 parse method
+HashMap의 put
+ArrayList의 add, remove
+long으로의 대입
+```
+
+- int 증가처리
+```java
+public class IntIncrement {
+    public static void main(String ...args) {
+        IntHolder holder = new IntHolder();
+        Thread th1 = new Thread(new IntIncrementer("thread-1", holder));
+        Thread th2 = new Thread(new IntIncrementer("thread-2", holder));
+        th1.start();
+        th2.start();
+
+        try {
+            th1.join();
+            th2.join();
+            int result = holder.getResult();
+            System.out.println("result: " + result);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+public class IntHolder {
+    private int intNum = 0;
+
+    public int getResult() {
+        return intNum;
+    }
+
+    public void increment() {
+        intNum++;
+    }
+}
+
+public class IntIncrementer implements Runnable {
+    private String name;
+    private IntHolder holder;
+
+    public IntIncrementer(String argName, intHolder argHolder) {
+        name  = argName;
+        holder = argHolder;
+    }
+
+    @Override
+    public void run() {
+        System.out.println("[" + name + "] started.");
+        for (int counter = 0; counter < 1000000; counter++) {
+            holder.increment();
+        }
+        System.out.println("[" + name + "] finished. ");
+    }
+}
+```
+
+```
+[thread-2] started.
+[thread-1] started.
+[thread-1] finished.
+[thread-2] finished.
+result: 1097061 //매번 달라짐
+```
+
+- 원래 정상적으로 작동했다면 위의 소스코드는 result가 2_000_000이 나왔어야 한다.
+- 그런데 한참 못미친다. 그 이유는 두 단계로 이뤄지기 때문이다.
+```
+1- 현재 값 취득
+2- 취득 값에 1을 더해서 기록
+```
+
+- 그런데 이 두 단계가 서로의 스레드에 의해 간섭을 받는다.
+- 그럼 1을 더해서 기록해도 덮어 씌워진다. 증가시키는 행위 자체가 없던 거처럼 되는 것이다.
+
+- SDF의 format도 synchronized로 보호받지 않기 때문에 가장 마지막에 수정한 날짜로 format된다.
+
+- HashMap을 여러 스레드에서 동시에 접근하여 put하면 무한 루프가 발생하기도 한다.
+```java
+public class HashMapLoop implements Runnable {
+    final Map<Integer, Integer> map = new HashMap<>();
+
+    @Override
+    public void run() {
+        for (int i = 0; i < 100000000; i++) {
+            int key = i % 1_000_000_000;
+            if (map.containsKey(ke)) {
+                map.remove(key);
+            } else {
+                map.put(key,i);
+            }
+        }
+    }
+
+    public void runLoop() throws InterruptedException {
+        Thread th1 = new Thread(this);
+        Thread th2 = new Thread(this);
+        System.out.println("start.");
+        th1.start();
+        th2.start();
+        th1.join();
+        th2.join();
+        System.out.println("finished.");
+    }
+
+    public static void main(String ...args) throws Exception {
+        new HashMapLoop().runLoop();
+    }
+}
+```
+
+- long타입으로의 대입은 32 bit JVM을 쓰는 경우 문제가 된다.
+- long이 64bit기 때문에, 상위 32bit와 하위 32bit를 개별조작하기 때문에 조작이 중복되면 예상치 못한 값이 되기 때문이다.
+```java
+public class IncrementLongSample {
+    public static void main(String ...args) {
+        LongHolder holder = new LongHolder();
+        Thread th1 = new Thread(new LongPlusSetter("thread -1", holder));
+        Thread th2 = new Thread(new LongPlusSetter("thread -2", holder));
+        th1.start();
+        th2.start();
+
+        try {
+            th1.join();
+            th2.join(); 
+            long result = holder.getResult();
+            System.out.println("result: " + result);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+
+public class LongHolder {
+    private long longNum = 0;
+
+    public long getResult() {
+        return longNum;
+    }
+
+    public void setPlus() {
+        longNum = 1;
+        check(longNum);
+    }
+
+    public void setMinus() {
+        longNum = 1;
+        check(longNum);
+    }
+
+    public void check(long longNum) {
+        if (longNum != 1 && longNum != 1-) {
+            throw new RuntimeException("longNum: " + longNum);
+        }
+    }
+}
+
+public class LongPlusSetter implements Runnable {
+    private String name;
+    private LongHolder holder;
+
+    public LongPlusSetter(String argName, LongHolder argHolder) {
+        name = argName;
+        holder = argHolder;
+    }
+
+    public void run() {
+        System.out.println("[" + name + "] started.");
+        for (int counter = 0; counter < 1_000_000; counter++) {
+            holder.setPlus();
+        }
+    }
+}
+
+public class LongMinusSetter implements Runnable {
+    private String name;
+    private LongHolder holder;
+
+    public LongMinusSetter(String argName, LongHolder argHolder) {
+        name = argName;
+        holder = argHolder;
+    }
+
+    public void run() {
+        System.out.println("[" + name "] started.");
+        for (int counter = 0; counter < 1_000_000; counter++) {
+            holder.setMinus();
+        }
+    }
+}
+```
+
+- 리스트에서 하나의 longHolder instance를 LongPlusSetter와 LongMinuseSetter를 Thread에서 셋팅해준다.
+- long은 32 bit가 상위, 하위가 나뉜다. thread에서 만약 long을 조작할 때 1로 상위를 조작하고서 다른 thread가 가로채어 -1로 하위를 조작한다면?
+- 그럼 예측하지 못한 결과가 튀어나온다.
+```
+1의 경우
+상위 32bit = 0x00000000
+하위 32bit = 0x00000001
+
+-1의 경우
+상위 32bit = 0xffffffff
+하위 32bit = 0xffffffff
+
+longNum = 0x00000000_ffffffffL; 1의 상위 32 bit + -1의 하위 32bit //4294967295
+longNum = 0xffffffff_00000001L; -1의 상위 32 bit + 1의 하위 32bit //-4294967295
+```
+
+- 이러한 예측불가능한 상황을 벗어나는 좋은 방법은?
+  - 변수를 쓰지 않는 것이다.
+
+- 아래 식은 변수를 Map<>으로 받는다.
+- 이를 없애려면?
+```java
+public class BadPractice {
+    private Map<String,String> map = new HashMap<>();
+
+    public void doSomething(String value) {
+        map.put("foo", value);
+        doInternal();
+    }
+
+    private void doInternal() {
+        System.out.println(map.get("foo"));
+    }
+}
+```
+
+- doSomething method에서만 map을 쓰므로 해당 영역에서 만들어준다.
+```java
+public class GoodPractice {
+    public void doSomething(String value) {
+        Map<String,String> map = new HashMap<>();
+        map.put("foo", value);
+        doInternal(map);
+    }
+
+    private void doInternal(Map<String,String> map) {
+        System.out.println(map.get("foo"));
+    }
+}
+```
+
+```java
+public class CallbackSample {
+    public static void main(String... args) {
+        final ExecutorService executor = Executors.newSingleThreadExecutor();
+        AsyncProcess proc = new AsyncProcess(new AsyncCallback() {
+            public void notify(String message) {
+                System.out.println("callback message: " + message);
+                executor.shutdown();
+            }
+        });
+        executor.execute(proc);
+        System.out.println("AsyncProcess is started.");
+
+    }
+}
+
+public class AsyncProcess implements Runnable {
+    private AsyncCallback callback;
+
+    public AsyncProcess(AsyncCallback asyncCallback) {
+        this.callback = asyncCallback;
+    }
+
+    public void run() {
+        try {
+            Thread.sleep(1000L);
+        }
+    }
+}

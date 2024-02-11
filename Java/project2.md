@@ -799,6 +799,9 @@ ORDER BY ORDER_NO, COMN_CNM, COMN_C_ID, RMK_CNTN2;
 - 특히 streaming APIs, and server-sent events (SSE) 같이 webFlux module을 사용할 때는 nio connector를 써야 한다.
 - nio와 bio의 선택은 자바의 멀티스레딩과는 관련이 없다. 그냥 thread를 다루는 방식이다.
 - bio는 사람 한명 당 한 스레드를 부여한다. nio는 여러명이 한 스레드를 공유한다.
+- 쓰레드가 1개의 stack을 가지는데, 여러명이 한 스레드를 공유하게 되면 문제가 생기지 않을까 생각할 수 있다.
+- 그런데 nio는 그러한 문제가 없는데, 그 이유는 connection마다 method call과 관련된 정보를 저장하는게 stack이 아니기 때문이다.
+- connection과 관련된 다른 곳에 method call 정보를 저장해둔다. 전통적 stack 개념을 생각해선 안 된다.
 - Jetty, 톰캣은 bio, nio 둘다 있는데 보통 요새는 거의 nio이며, Netty or Undertow는 nio방식만 있다.
 
 - Selector class의 예시다.
