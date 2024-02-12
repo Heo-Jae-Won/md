@@ -1,29 +1,32 @@
 ## <span style="color:#802548">_1. 데이터_</span>
+
 - 기본형: 정수형, 실수형, 논리형, 문자형
-<br/>
-정수형: `overflow 가능성이 있다.` 크면 long. 작으면 int. 너무 크면 정수형이 아닌 BigInt 사용. 곱연산 시에, int와 int 끼리 곱한 것은 무조건 int다. 
+  <br/>
+  정수형: `overflow 가능성이 있다.` 크면 long. 작으면 int. 너무 크면 정수형이 아닌 BigInt 사용. 곱연산 시에, int와 int 끼리 곱한 것은 무조건 int다.
 
 ```java
 int a = 1_000_000;
-int b = 2_000_000; 
+int b = 2_000_000;
 int c = a * b; //overflow
 long c = a * b; //overflow. a와 b를 곱한 것은 long이 아니라 int다. long으로 선언해도.. 2000000000000이 아니라 -1454759936로 나옴
 long c = (long)a * b; // overflow가 나지 않는다. 2000000000000. data가 포괄할 수 있는 더 넓은 범위로 옮겨간다.
 long c = a * (long)b; //overflow가 나지 않는다. 2000000000000
 ```
+
 <br/>
 
 실수형: overflow와 underflow 모두 가능. 소수점 많으면 double, 적으면 float. 처음부터 float로 해놓고 double 형변환해봐야 float 값
 
 ```java
 float a  = 0.0_000_001f;
-float b = 0.0_000_001f; 
+float b = 0.0_000_001f;
 double c = a * b; //1.000000023372195E-14
 double c = (float)a * b; //1.000000023372195E-14
 double c = (float)a * (float)b; //9.9999998245167E-15
 ```
 
 - 배열: 같은 type의 값을 모아둠
+
 ```java
 int[] arr = new int[5]{10,20,30,40,50}; //생성 당시에 바로 기본 element 할당
 
@@ -34,13 +37,13 @@ for(int i=0;i<arr.length;i++){
 }
 
 System.out.print(Arrays.toString(arr)) //값 출력됨.for문과 동일한데 간편.
-``` 
+```
 
 - 배열은 index가 꽉 차면 새로운 배열을 만들어서 옮겨줘야 한다.
 
 ```java
-int[] arr = new int[5]; 
-int[] temp = new int[arr.length * 2] 
+int[] arr = new int[5];
+int[] temp = new int[arr.length * 2]
 for (int i = 0; i<arr.length; i++) {
 	Temp[i]=arr[i]
 }
@@ -56,7 +59,6 @@ System.out.println(Arrays.toString(result)); //값 출력됨
 
 - 대표적인 배열을 이용한 로직 연습은 아래와 같다.
 
-
 1. 평균내기
 2. 최댓값구하기, 최솟값 구하기
 3. 랜덤하게 숫자 순서 바꾸기
@@ -66,10 +68,10 @@ System.out.println(Arrays.toString(result)); //값 출력됨
 7. 내림차순 정렬
 8. 2차원 배열
 
-
 - 그 외 class도 데이터의 형식. class 안에 inner class로 데이터만 담는 구조체를 만드는 경우도 있음. 아주 가끔.. 추천되지 않는 방식
 
 ## <span style="color:#802548">_2.선언자_</span>
+
 - 데이터에 맞는 선언을 만들어줘야 한다. int, float 등..
 - 사용 전에 초기화하는 습관을 들이자.
 - 상수는 값 변경 불가. 선언과 초기화(할당)이 `동시에` 이뤄져야 한다.
@@ -111,6 +113,7 @@ public class ErrorUtil extends RuntimeException{
 - 그경우에도 의미가 있다.
 - class에 final이 붙으면 다른 class에서 상속이 불가능하다.
 - method에 final이 붙으면 override가 불가능하다.
+
 ```java
 final class MyClass{
 	private String name;
@@ -135,6 +138,7 @@ class MyClass{
 
 - 생성자에 private이 붙으면 외부에서 접근이 불가능해서 내부에서만 instance를 만들게 된다.
 - enum이 이러한 방식을 사용한다.
+
 ```java
 enum MyClass{
 	My(1);
@@ -146,7 +150,9 @@ enum MyClass{
 	}
 }
 ```
+
 ## <span style="color:#802548">_3.식의 활용_</span>
+
 - 식은 ;로 끝난다.
 - 제어문, 반복문이 대표적이다.
 - 아래처럼 &&을 사용하는 것은 연산에 악영향을 미치므로 최대한 자제하자.
@@ -175,6 +181,7 @@ if(score >=90){
 
 - 숫자가 범위가 아니라 딱 하나의 수라면 아래와 같은 `switch문`도 유효하다. 연산을 if문보다 훨씬 덜한다.
 - 하지만 범위라면 아래와 같이 너무 비효율적인 switch문이 만들어진다.
+
 ```java
 
 if(menu==1){
@@ -193,7 +200,7 @@ switch(menu){
 	case 2:
 		System.out.println("result = " + Math.sqrt(num));
 		break; //switch문 끝나고서 진행되는 소스코드있으면 다 진행됨
-	case 3: 
+	case 3:
 		System.out.println("result = " + Math.log(num));
 		break;
 }
@@ -249,8 +256,9 @@ switch (sb.toString()) {
 } // break문 처리가 필요하지 않은 경우에는 위와 같이 하지 않을수도 있다. 정처기에 자주 나오는 듯
 ```
 
-- while문은 아래와 같다. 
+- while문은 아래와 같다.
 - while문을 빠져나오려면 `flag를 false`로 만들던지, `break;`를 걸던지 하면 된다.
+
 ```java
 boolean flag = true; //반복문 전 변수 초기화
 while(flag){
@@ -269,7 +277,6 @@ while(flag){
 }
 ```
 
-
 - 반복문이 안에 하나 더 있으면 break;를 구별해서 주기 위해 위와 같이 `Outer:`로 주기도 한다. 꼭 Outer일 필요는 없다.
 
 ```java
@@ -279,7 +286,7 @@ Outer:
 		System.out.println("(2) square root");
 		System.out.println("(3) log ");
 		System.out.println("원하는 메뉴 선택");
-		
+
 		String tmp = scanner.nextLine();
 		int menu = Integer.parseInt(tmp);
 		if(menu==0){
@@ -289,12 +296,12 @@ Outer:
 			System.out.println("메뉴를 잘못 선택했습니다. 종료는 0");
 			continue;
 		}
-		
+
 		for(;;){
 			System.out.println("계산 값 입력. (계산 종료: 00, 전체종료:99)");
 			String temp = scanner.nextLine();
 			int num = Integer.parseInt(temp);
-			
+
 			if(num==0){
 				break; // 해당 if문을 감싼 for문을 벗어남.
 			}
@@ -309,13 +316,14 @@ Outer:
 				case 2:
 					System.out.println("result = " + Math.sqrt(num));
 					break; //switch문 끝나고서 진행되는 소스코드있으면 다 진행됨
-				case 3: 
+				case 3:
 					System.out.println("result = " + Math.log(num));
 					break;
 			}
 		}
 	}
 ```
+
 - continue Outer도 똑같이 먹힌다.
 
 ```java
@@ -325,7 +333,7 @@ Outer:
 		System.out.println("(2) square root");
 		System.out.println("(3) log ");
 		System.out.println("원하는 메뉴 선택");
-		
+
 		String tmp = scanner.nextLine();
 		int menu = Integer.parseInt(tmp);
 		if(menu==0){
@@ -335,12 +343,12 @@ Outer:
 			System.out.println("메뉴를 잘못 선택했습니다. 종료는 0");
 			continue;
 		}
-		
+
 		for(;;){
 			System.out.println("계산 값 입력. (계산 종료: 00, 전체종료:99)");
 			String temp = scanner.nextLine();
 			int num = Integer.parseInt(temp);
-			
+
 			if(num==0){
 				break; // 해당 if문을 감싼 for문을 벗어남.
 			}
@@ -355,7 +363,7 @@ Outer:
 				case 2:
 					System.out.println("result = " + Math.sqrt(num));
 					break; //switch문 끝나고서 진행되는 소스코드있으면 다 진행됨
-				case 3: 
+				case 3:
 					System.out.println("result = " + Math.log(num));
 					break;
 			}
@@ -364,8 +372,10 @@ Outer:
 ```
 
 ## <span style="color:#802548">_3.parameter_</span>
+
 - 함수의 파라미터로 다양한 것이 올 수 있다.
 - 그 중에 가변인자는 `맨 마지막`에 와야 한다.
+
 ```java
 void getSth(String a, int b, MyClass... b);
 ```
@@ -386,7 +396,7 @@ void getSth();
 - 그 경우 해당 interface를 `implements`한 것, 혹은 해당 class를 `extends`한 것을 넣어주면 된다.
 
 ```java
-UsernamePasswordAuthenticationToken authenticationToken = 
+UsernamePasswordAuthenticationToken authenticationToken =
 		            new UsernamePasswordAuthenticationToken(loginDto.getUserId(), loginDto.getUserPassword());
 authenticationManagerBuilder.getObject().authenticate(authenticationToken); //authenticate()의 parameter로 Authentication interface를 implements한 class를 넣는다. 아래와 같다.
 
@@ -406,13 +416,15 @@ public boolean remove(Object o) // Object가 parameter라면 모든 class가 들
 ```
 
 ## <span style="color:#802548">_4.초기화_</span>
+
 - 명시적 초기화 -> 클래스 블록 초기화 -> 인스턴스 블록 초기화 -> 생성자 초기화순이다.
 - method를 호출하지 않는 이상 `생성자`에서 초기화한 게 최종이다.
+
 ```java
 class MyClass{
 	String a = "a";
 	static int b = 1;
-	
+
 	static {//instance 변수는 static block에서 할당 불가능
 		b = 2;
 	}
@@ -427,6 +439,7 @@ class MyClass{
 ```
 
 ## <span style="color:#802548">_5.참조변수_</span>
+
 - interface나 abstract class는 자신의 자식을 instance로 생성한다.
 - 그런데 자식은 보통 더 많은 method나 멤버변수를 가진다.
 - 만약 자식class가 참조변수가 아니라 해당 interface나 abstract class를 참조변수로 가진다면, 해당 method는 사용 불가능하다.
@@ -436,6 +449,7 @@ List<String> abc = new ArrayList<>();
 abc.get(0); // list interface에도 규정된 method를 arrayList가 implements한 것이라 사용 가능. 즉 override한 것.
 abc.grow() //ERROR. override하지 않고 자식인 ArrayList에서 자체로 만든 것이기 떄문
 ```
+
 - 위와 마찬가지 이유로 형변환 시 downcasting에는 `명시적` 형변환만 가능하다.
 
 ```java
@@ -443,6 +457,7 @@ String abc = (String)map.get("abc"); //get의 return type이 Object이므로 dow
 ```
 
 ## <span style="color:#802548">_6.예외처리_</span>
+
 - 아래와 같이 try ~ catch 문을 사용할 수 있다.
 - resources를 IO하는 경우에는 아래와 같이 try() ~ catch를 사용하며, 그 경우 close가 필요없다.
 
@@ -527,7 +542,6 @@ class controller{
 - 아래와 같이 checked를 unchecked Exception인 RuntimeException으로 감싸면 unchecked처럼 처리도 가능하다.
 - 참고로 기능을 구현하지 않을 override의 경우 아래와 throw new Exception으로 처리한다.
 
-
 ```java
 if (readDto == null || !passwordEncoder.matches(loginDto.getUserPassword(), readDto.getUserPassword())) {
 	throw new ServiceException(CommonErrorCode.AUTH_BAD_CREDENTIALS.getMessage());
@@ -537,7 +551,7 @@ if(true){
 	throw new RuntimeException(new Exception());
 }
 
-  
+
 public class ArrayList<E>
 @Override
 E get(){
@@ -545,8 +559,8 @@ E get(){
 };
 ```
 
-
 ## <span style="color:#802548">_7.주요 class_</span>
+
 - Object class는 모든 class가 조상으로 갖는 class다.
 - 주로 쓰는 것은 equals, hashCode, toString이다. 보통 각 class에서 자신에 맞게 바꿔쓴다.
 - 바꾸지 않는다면 모두 객체의 주소값을 비교하거나, 주소값을 return하고 주소값을 문자열로 반환한다.
@@ -588,7 +602,7 @@ for(int i = abc.size()-1; i >=0; i--){
 }
 ```
 
-- String class에서 주로 쓰는 것은  equals, length, format, lastIndexOf, subString, trim, replace
+- String class에서 주로 쓰는 것은 equals, length, format, lastIndexOf, subString, trim, replace
 
 ```java
 if(type.equals("1")) // type == "1"; 이러면 bug가 날 것이다
@@ -684,13 +698,15 @@ Collections.sort(list, new Comparator(){
 ```
 
 ## <span style="color:#802548">_8. generics_</span>
+
 - 컴파일 시의 타입을 체크하는 기능이다. T, K, V, E 등이 있다.
 - 기호의 종류만 다를 뿐 임의의 참조형 타입을 의미하는 것은 같다.
+
 ```java
 class Box<T>{ //제너릭 클래스. T box라고 읽는다. T는 타입 매개변수, Box는 원시 타입이다.
     T item;
 
-    void setItem(T item){ 
+    void setItem(T item){
         this.item = item;
     }
     T getItem();
@@ -701,7 +717,9 @@ b.setItem(new Object());
 b.setItem("ABC");
 String item = b.getItem; // generics로 Element의 type T를 String으로 정했기 때문에 (String) 형변환 필요 없음.
 ```
+
 - 다시말해 아래 식은 아래와 같은 class를 선언한 것이다.
+
 ```java
 Box<String b = new Box<String>;
 
@@ -751,6 +769,7 @@ class FruitBox<T extends Fruit>{
 ```
 
 - 반면에 T super Fruit이라면, 특정클래스와 그 위 조상 class만 generics의 type으로 선언 가능하다.
+
 ```java
 class FruitBox<T super Fruit>{
     .
@@ -761,7 +780,8 @@ class FruitBox<T super Fruit>{
 ```
 
 - interface를 implements하는 것일지라도 extends라는 용어를 사용해야만 한다.
-- 아래는 &로 묶여서 Fruit과 자손, Eatable과 자손의 교집합의 경우에만 type으로 들어올 수 있음을 의미한다. 
+- 아래는 &로 묶여서 Fruit과 자손, Eatable과 자손의 교집합의 경우에만 type으로 들어올 수 있음을 의미한다.
+
 ```java
 class FruitBox<T extends Fruit & Eatable>{
     .
@@ -772,9 +792,9 @@ class FruitBox<T extends Fruit & Eatable>{
 ```
 
 ## <span style="color:#802548">_generics의 whildcard란?_</span>
+
 - 와일드카드를 사용하면 한층 자유도가 높아진다. 물론 더 어려워지는 것도 맞다.
 - whildcard를 사용한 Collections의 sort()를 살펴보자.
-
 
 ```java
 static void sort(List<T> list, Comparator<? super T> comp)
@@ -800,7 +820,6 @@ static void sort(List<T> list, Comparator<? super T> comp)
 - 그 이유는 유지보수와 재활용성 때문이다.
 - 만약 아래와 같이 와일드카드를 쓰지 않았다고 해보자.
 
-
 ```java
 static void sort(List<T> list, Comparator<T> comp)
 ```
@@ -818,6 +837,7 @@ Collections.sort(appleBox.getList(), new AppleComp());
 ```
 
 - 저기까진 괜찮은데 만약 Grape도 비교해야 한다면 아래와 같은 똑같은 내용의 comp를 또 만들어줘야 한다.
+
 ```java
 class GrapeComp implements Comparator<Grape>{
     public int compare(Grape t1, Grape t2){
@@ -841,7 +861,8 @@ class FruitComp implements Comparator<Fruit>{
 Collections.sort(appleBox.getList(), new FruitComp());
 Collections.sort(grapeBox.getList(), new FruitComp());
 ```
-- 물론 Fruit class로 list를 만들고 FruitComp를 반들 수도 있다. 
+
+- 물론 Fruit class로 list를 만들고 FruitComp를 반들 수도 있다.
 - 하지만 그 경우에는 아래와 같이 Apple만 모으고 싶을 때, Apple만 모으게 compile 시에서부터 강제가 불가능하다.
 - 즉 유지보수에 좋지 않다. 따라서 Comparator class는 generics로 ? super T를 쓰는 것이다.
 - 쓰지 않았다면 Fruit class만 타입 매개변수로 받는 list가 강제되어 apple만 따로, grape만 따로 모을 수가 없다.
@@ -851,7 +872,7 @@ List<Apple> list = new ArrayList<>();
     list.add(new Grape("파란", 0));//Fruit이라서 Grape도 담음. 하지만 error가 아님.
     list.add(new Apple("빨간",1));//Fruit이라서 Apple도 담음. 하지만 error가 아님.
     Collections.sort(list, new FruitComp());
-    for(Fruit f : list) { 
+    for(Fruit f : list) {
         System.out.println(f.toString());
     }
 ```
@@ -875,10 +896,10 @@ static Juice makeJuice(FruitBox<? extends Object> box){
 ```
 
 ## <span style="color:#802548">_generics method란?_</span>
+
 - method의 return type 앞에 붙는 <>generics는 참조변수에 붙는 것과는 완전히 다른 의미다.
 - 이 경우, 매개변수의 type을 지정하는 의미다.
 - 아래 두 식은 동일한 식이다. 매개변수에 다 몰아넣냐, 매개변수의 type에 대한 설명을 앞으로 빼냐의 차이다.
-
 
 ```java
 static Juice makeJuice(FruitBox<? extends Fruit> box) 		//FruitBox class에 들어갈 type은 Fruit class를 extends한 class만 가능하다.
@@ -896,6 +917,7 @@ sysout(Juicer.<Apple>makeJuice(appleBox));	 	//거의 이렇게는 안 쓴다.
 ```
 
 - generics의 type에 관한 설명인 <Fruit>은 대부분 생략할 수 있다.
+
 ```java
 sysout(Juicer.makeJuice(fruitBox));
 sysout(Juicer.makeJuice(appleBox));
@@ -913,7 +935,6 @@ public static <T extends Comparable<? super T>> void sort(List<T> list)
 - 아래와 같이 Optional에도 static에 <T>가 붙어있다.
 - 그런데 여기는 parameter가 없기 때문에 parameter generics는 아니다.
 
-
 ```java
 public static<T> Optional<T> empty() {
     @SuppressWarnings("unchecked")
@@ -924,10 +945,11 @@ Optional<String> optVal = Optional.<String>empty();
 Optional<String> optVal = Optional.empty(); //위에서 말했듯 generics의 type에관한 설명인 <String>은 생략 가능.
 ```
 
-
 ## <span style="color:#802548">_9. enum_</span>
+
 - enum을 쓰면 아래 class를 간단하게 만들어 줄 수 있다.
 - Java의 enum은 type까지 관리하기 때문에 타입에 안전하다.
+
 ```java
 class Card{
     static final int CLOVER = 0;
@@ -945,6 +967,7 @@ final int num;
 ```
 
 - enum을 쓰면 아래와 같이 바뀐다.
+
 ```java
 @ReArgsConstructor
 class Card{
@@ -954,7 +977,6 @@ class Card{
 ```
 
 - 하지만 보통 아래와 같이 enum을 따로 만드는 편이다.
-
 
 ```java
 public enum Suit {
@@ -983,7 +1005,6 @@ public class Card {
 
 - enum에 새로운 member를 추가하는 것도 가능하다.
 
-
 ```java
 enum Direction{
     EAST(1), SOUTH(5), WEST(-1), NORTH(10);
@@ -1001,7 +1022,6 @@ enum Direction{
 
 Dirction d = new Direction(); //error. 생성자는 private
 ```
-
 
 ```java
 enum Direction{
@@ -1094,7 +1114,8 @@ System.out.println("airplane fare =  " + Transportation.AIRPLANE.fare(100)); //3
 ```
 
 - 아래와 같이 switch - case문에서도 사용이 가능하다.
-- 
+-
+
 ```java
 switch (Transportation) {
     case BUS: //...
@@ -1104,9 +1125,8 @@ switch (Transportation) {
 }
 ```
 
-
-
 ## <span style="color:#802548">_10. IOStream_</span>
+
 - OutputStream의 예시는 아래와 같다.
 - 거의 대부분 BufferedStream을 불러서 사용한다. 그게 효율적이기 때문이다.
 - try ~ catch 혹은 try ~ with ~ resources 혹은 throws Exception이 필수다.
@@ -1143,7 +1163,7 @@ void transferFile(){
         File file = new File("/upload/" + fileName + fileExtension);
     try(FileOutputStream fileOutputStream = new FileOutputStream(file);
         BufferedOutputStream bos = new BufferedOutputStream();){
-      
+
         bos.write(decodedBytes);
     }catch(IOException e){
         throw e;
@@ -1185,10 +1205,8 @@ try{
 }
 ```
 
-
-
-
 ## <span style="color:#802548">_11. Stream_</span>
+
 - 람다식이란 반환값이 없고, 문장도 아니기 떄문에, 세미콜론을 쓰지 않는다.
 
 ```java
@@ -1240,9 +1258,9 @@ int max(int a, int b){
 ```java
 () -> {System.out.println("MyFunction()"); System.out.println("bbb");};
 ```
+
 - 사실 Java에서는 lambda식은 interface를 구현한 익명 클래스의 객체로 구현한다.
 - 따라서 아래와 같은 interface가 필요하다.
-
 
 ```java
 interface MyFunction{
@@ -1290,6 +1308,7 @@ Collections.sort(list, (s1, s2) -> s2.compareTo(s1));
 ```
 
 ## <span style="color:#802548">_매개변수로 method를 받는 람다식_</span>
+
 - 람다식을 활용하면 method를 매개변수로 받을 수도 있다.
 
 ```java
@@ -1343,7 +1362,9 @@ MyFunction getSth(){
     return () -> {System.out.println("lambda")};
 }
 ```
+
 ## <span style="color:#802548">_stream을 생성하는 여러가지 방법_</span>
+
 - Stream을 생성하는 여러가지 방법이 있다.
 
 ```java
@@ -1364,6 +1385,7 @@ IntStream intStream = IntStream.rangeClosed(1,5);
 ```
 
 ## <span style="color:#802548">_중간연산과 최종연산_</span>
+
 - 스트림의 연산이 중간연산일 경우, 연산 결과가 stream이다. 스트림에 연속해서 중간 연산을 실행할 수 있다.
 - 반면에 최종 연산의 경우, 연산 결과가 stream이 아니다. 스트림의 요소를 소모하기 때문에 최종연산은 단 한 번만 가능하다.
 - 그런데 사실 최종 연산을 먼저 하고, 중간 연산이 실행되는 것이다.
@@ -1395,8 +1417,8 @@ int count = itemStream.count(); // error
 		            new String[]{"ABC","DEF","JKL"}
 		        );
 
-		        //Stream<Stream<String>> strStrmStrm = strArrStream.map(Arrays::stream); 
-		        Stream<String> strStrm = strArrStream.flatMap(Arrays::stream); 
+		        //Stream<Stream<String>> strStrmStrm = strArrStream.map(Arrays::stream);
+		        Stream<String> strStrm = strArrStream.flatMap(Arrays::stream);
 ```
 
 - 따라서 인간의 눈에 보는 내용물이 같더라도, 주소값이 다른 객체라면 다른 stream으로 취급된다.
@@ -1407,7 +1429,7 @@ int count = itemStream.count(); // error
 		            new String[]{"abc","def","jkl"},
 		            new String[]{"ABC","DEF","JKL"}
 		        );
-		 
+
 		 Stream<String[]> strArrStrea1 = Stream.of(
 		            new String[]{"abc","def","jkl"},
 		            new String[]{"ABC","DEF","JKL"}
@@ -1417,9 +1439,7 @@ int count = itemStream.count(); // error
 		        Stream<String> strStrm = strArrStream.flatMap(Arrays::stream);  //Stream 안의 Stream을 전부 합쳐서 동일한 차원에 설정
 ```
 
-
 - 중간연산으로 주로 사용되는 것들은 아래와 같다.
-
 
 ```
 map()
@@ -1429,14 +1449,13 @@ filter()
 
 - 최종연산으로 주로 사용되는 것들은 아래와 같다.
 
-
 ```
 forEach()
 reduce()
 collect()
 ```
 
-- map의 사례는 아래와 같다. 
+- map의 사례는 아래와 같다.
 
 ```java
  Collection<? extends GrantedAuthority> authorities = Arrays.stream(claims.get("auth").toString().split(","))
@@ -1475,6 +1494,7 @@ Stream<String> strs3 = Stream.concat(str1, str2);
 - map과 다르게 flat이 붙어있는데, 이는 차원을 평평하게 하는 것이다.
 - 아래와 같이 String[]을 stream으로 생성하면 Stream<String>이 아니라 Stream<Stream<String>>이 되어버린다.
 - 그럴 때 flatMap을 써서 동일한 차원에 있게 만들어준다.
+
 ```java
 class StreamEx4{
     public static void main(String[] args){
@@ -1526,7 +1546,6 @@ class StreamEx4{
 ```
 
 - collect()는 Stream에서 가장 많이 쓰이는 method다.
-
 
 ```java
 List<String> names = stuStream.map(Student::getName).collect(Collectors.toList());
@@ -1638,7 +1657,7 @@ Map<Student.Level, Long> stuByLevel = stuStream.collect(groupingBy(s->{
 },counting())) //[MID] - 8명, [HIGH] - 8명, [LOW] - 2명
 
 Map<Integer,Map<Integer,List<Student>>> stuByHakAndBan = stuStream.collect(
-				Collectors.groupingBy(Student::getHak, 
+				Collectors.groupingBy(Student::getHak,
 						Collectors.groupingBy(Student::getBan))); //학년별로 그룹화 후 반별로 다시 그룹화
 Map<Integer, Map<Integer,Student>> topStuByHakAndBan = stuStream.collect(groupingBy(Student::getHak, groupingBy(Student::getBan, collectingAndThen(maxBy(comparingInt(Student::getScore),Optional::get))))) //각 반의 1등을 출력
 Map<Integer, Map<Integer,Set<Student.Level>>> stuByHakAndBan = stuStream.collect(GroupingBy(Student::getHak,groupingBy(Student::getBan,mapping(s->{
@@ -1655,10 +1674,9 @@ Map<Integer, Map<Integer,Set<Student.Level>>> stuByHakAndBan = stuStream.collect
 - 위는 static import를 실행했을 때의 모습이다.
 - 그냥 import로는 class명을 전부 기입해줘야 한다.
 
-
 ```java
 		Map<Integer,Map<Integer,List<Student>>> stuByHakAndBan = stuStream.collect(
-                                                                                    Collectors.groupingBy(Student::getHak, 
+                                                                                    Collectors.groupingBy(Student::getHak,
                                                                                             Collectors.groupingBy(Student::getBan)
                                                                                     )
                                                                 ); //학년별로 그룹화 후 반별로 다시 그룹화
@@ -1669,8 +1687,8 @@ Map<Integer, Map<Integer,Set<Student.Level>>> stuByHakAndBan = stuStream.collect
                 for(Student s : ban){
                     System.out.println(s);
                 }
-            } 
-        } 
+            }
+        }
         // [나자바, 남, 1학년 1반, 300점]
         // [김지미, 여, 1학년 1반, 250점]
         // [김자바, 남, 1학년 1반, 200점]
@@ -1694,11 +1712,11 @@ Map<Integer, Map<Integer,Set<Student.Level>>> stuByHakAndBan = stuStream.collect
         // [황지미, 여, 2학년 3반, 100점]
         // [강지미, 여, 2학년 3반, 150점]
         // [이자바, 남, 2학년 3반, 200점]
-		
-		
+
+
 		Map<Integer, Map<Integer,Student>> topStuByHakAndBan = stuStream.collect(
-																				Collectors.groupingBy(Student::getHak, 
-																						Collectors.groupingBy(Student::getBan, 
+																				Collectors.groupingBy(Student::getHak,
+																						Collectors.groupingBy(Student::getBan,
 																								Collectors.collectingAndThen(
 																										Collectors.maxBy(Comparator.comparingInt(Student::getScore)),
 																																					Optional::get
@@ -1743,8 +1761,8 @@ for(Integer key : keySet2){
 // [1]{1=[HIGH], 2=[MID, LOW], 3=[MID, HIGH]}. 1학년 1반은 HIGH, 2반은 MID,LOW, 3반은 MID,HIGH
 // [2]{1=[HIGH], 2=[MID, LOW], 3=[MID, HIGH]}
 ```
-- 마지막 예시의 경우 아래와 같이 String을 key로 사용하는 Set으로 고칠 수 있다.
 
+- 마지막 예시의 경우 아래와 같이 String을 key로 사용하는 Set으로 고칠 수 있다.
 
 ```java
 Map<String,Set<Student.Level>> stuByScoreGroup = stuStream.collect(
@@ -1773,17 +1791,14 @@ for(String key: keySet2){
 // [2-3][MID, HIGH]
 ```
 
-
-
-
 ## <span style="color:#802548">_12. Optional_</span>
+
 - Optional 객체는 null처리를 안해도 되게 해줘서 편하다.
 - of는 nullpointerException이 발생하지만, ofNullable은 NPE가 발생하지 않는다.
 
-
 ```java
 String str = "abc";
-Optional<String> optVal = Optional.of(str); 
+Optional<String> optVal = Optional.of(str);
 Optional<String> optVal = Optional.ofNullable(str); // str이 null일 가능성이 있다면 ofNullable로!
 ```
 
@@ -1831,6 +1846,7 @@ System.out.println(str1.equals(optionalStr)); //true
 ```
 
 - orElseGet()은 공백도 value로 인식한다.
+
 ```java
 String str = "";
 String optionalStr = abc.orElseGet(()->"bbb");
@@ -1848,19 +1864,19 @@ if(Optional.ofNullalbe(str).isPresent()){
     sysout(str);
 } //Optional 객체를 활용한 형태
 
-Optional.ofNullable(str).ifPresent(System.out::println); // Optional 객체와 lambda식을 활용한 형태. 만약 값이 있다면 sysout을, 값이 없다면 
+Optional.ofNullable(str).ifPresent(System.out::println); // Optional 객체와 lambda식을 활용한 형태. 만약 값이 있다면 sysout을, 값이 없다면
 ```
+
 - stream의 연산에도 아래와 같이 Optional 객체를 사용할 수 있다.
 - 만약에 stuStream에 값이 없으면 빈 Optional 객체를 반환한다. 빈 Optional 객체는 안에 null을 저장해두고 있음.
 
 ```java
 Stream<Student> stuStream = Stream.empty();
 boolean noFailed = stuStream.anyMatch(s->s.getTotalScore() <= 100);
-Optional<Student> stu = stuStream.filter(s->s.getTotalScore() <= 100).findFirst(); 
+Optional<Student> stu = stuStream.filter(s->s.getTotalScore() <= 100).findFirst();
 ```
 
 - 그냥 stream class를 이용한 경우는 아래와 같이 int type으로 타입을 지정한다. Stream<Integer>
-
 
 ```java
 int count = intStream.reduce(0,(a,b)->a+1);
@@ -1872,7 +1888,6 @@ int min = intStream.reduce(Integer.MAX_VALUE, (a,b)->a<b ? a: b);
 - IntStream을 이용한 경우는 아래와 같이 OptionalInt로 타입을 지정한다.
 - 기본형으로 바꾸고 싶다면 아래와 같이 getAsInt()로 바꿔주면 된다.
 
-
 ```java
 OptionalInt max = intStream.reduce((a,b)->a > b ? a : b);
 OptionalInt min = intStream.reduce((a,b)->a < b ? a : b);
@@ -1881,11 +1896,11 @@ OptionalInt min = intStream.reduce(Integer::min);
 int maxValue = max.getAsInt();
 ```
 
-
-
 ## <span style="color:#802548">_13. network_</span>
+
 - url을 만들어 거기에 있는 정보를 가져올 때는 URL instance를 활용한다.
 - stream을 열어야 하는데, 그것은 openStream()으로 가능하다.
+
 ```java
 public class NetWorkEx4 {
     public static void main(String[] args) {
@@ -1910,6 +1925,7 @@ public class NetWorkEx4 {
 ```
 
 - try catch보다는 try with resources로 바꿔주자.
+
 ```java
  try( BufferedReader input = new BufferedReader(new InputStreamReader(new URL(address).openStream())) ){
     while( (line = input.readLine()) != null) {
@@ -1919,7 +1935,6 @@ public class NetWorkEx4 {
 ```
 
 - Spring을 쓴다면 WebClinet class를 쓸 수도 있다.
-
 
 ```java
 public class WebClientExample {
@@ -1941,6 +1956,7 @@ public class WebClientExample {
 - URL은 인터넷 상의 주소여야 한다.
 - 하지만 그걸 출력할 Stream은 반드시 문자열일 필요가 없다.
 - 아래와 같이 파일로 만들 수도 있다.
+
 ```java
 public class NetWorkEx5 {
     public static void main(String[] args) {
@@ -1959,8 +1975,8 @@ public class NetWorkEx5 {
     }
 }
 ```
-- WebClient로도 충분히 파일을 만들 수 있다.
 
+- WebClient로도 충분히 파일을 만들 수 있다.
 
 ```java
 public class FileDownloadExample {
@@ -1991,24 +2007,24 @@ public class FileDownloadExample {
 }
 ```
 
-- RestTemplate으로도 가능하다. 하지만 webClient가 추천된다. 
+- RestTemplate으로도 가능하다. 하지만 webClient가 추천된다.
 - webClient는 비동기도 지원되지만, RestTemplate은 동기만 가능하다.
 - 하지만 RestTemplate은 HttpConnection(url.openConnection)을 추상화한 것 뿐이라 성능 문제는 똑같다.
 - 엔간하면 webClient를 쓰자. https://velog.io/@jmjmjmz732002/Spring-%EC%99%B8%EB%B6%80-API-%ED%86%B5%EC%8B%A0-%EB%A6%AC%ED%8C%A9%ED%86%A0%EB%A7%81%EC%9D%84-%ED%95%98%EA%B2%8C-%EB%90%9C-%EC%9D%B4%EC%9C%A0 참조
 
-
 - 다만 % 인코딩의 문제가 있으니 만약 문제가 일어난다면, 아래와 같이 encodingmode를 바꿔줘야 한다.
+
 ```java
 DefaultUriBuilderFactory factory = new DefaultUriBuilderFactory();
 factory.setEncodingMode(DefaultUriBuilderFactory.EncodingMode.NONE);
- 
+
  // baseUrl e.g. https://apis.data.go.kr
  WebClient webClient = WebClient.builder()
  				.uriBuilderFactory(factory)
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
-                
+
 // serviceKey : {SERVICE_KEY_HERE}
 String result = webClient.get()
 					.uri(uriBuilder -> uriBuilder
@@ -2020,6 +2036,93 @@ String result = webClient.get()
                         .block();
 ```
 
+- Webclient가 채택한 리액티브 패턴은 전염성이 있어서 최적의 성능을 내려면 처음부터 끝까지 모든 구간을 비동기로 짜야한다.
+- 컨트롤러의 return 타입이 Mono나 Flux 타입이 되야한다.
+- 어디선가 block을 한번 호출하면 그 시점부터 비동기의 이점이 없어지기 때문에 별 차이가 없는 것처럼 느껴질 수 있다.
+- Mono와 Flux의 차이는 Mono는 말그대로 one이고, Flux는 다수라는 차이다. 물론 둘다 요소가 없을 수도 있다.
+```java
+ @GetMapping("/data")
+    public Flux<String> getData() {
+        return webClient.get()
+                        .uri("/api/data")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToFlux(String.class);
+    }
 
-## <span style="color:#802548">_14. thread_</span>
+//
 
+@RestController
+public class MyController {
+
+    @GetMapping("/data")
+    public Flux<String> getData() {
+        // Simulate streaming data
+        return Flux.just("Data 1", "Data 2", "Data 3");
+    }
+}
+```
+
+- Mono는 아래와 같다.
+```java
+@RestController
+public class MyController {
+
+    @Autowired
+    private WebClient webClient;
+
+    @GetMapping("/data")
+    public Mono<String> getData() {
+        return webClient.get()
+                        .uri("/api/data")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(String.class);
+    }
+}
+```
+
+- front에서도 기존과 동일한 방식으로 받으면 된다.
+```js
+axios.get('/data')
+  .then(response => {
+    const data = response.data;
+    console.log("Received data:", data);
+  })
+  .catch(error => {
+    console.error("Error:", error);
+  });
+```
+
+- 다만 Flux를 ServerSentEvent로 사용할 경우, axios나 fetch 같은 전통 방식을 활용할 수가 없다.
+```java
+@RestController
+public class MyController {
+
+    @GetMapping(value = "/data", produces = "text/event-stream")
+    public Flux<ServerSentEvent<String>> getData() {
+        // Simulate streaming data
+        return Flux.interval(Duration.ofSeconds(1))
+                   .map(sequence -> ServerSentEvent.<String>builder()
+                           .id(String.valueOf(sequence))
+                           .data("Data " + sequence)
+                           .build());
+    }
+}
+```
+
+- 위와 같이 SSE인 경우, 어쩔수없이 다른 방식으로 front에서 받아야 한다.
+- streaming을 열어서 받아야 한다는 의미다.
+- EventSource는 ES5에서도 사용가능하다.
+```js
+const eventSource = new EventSource("/data");
+
+eventSource.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+    console.log("Received data:", data);
+};
+
+eventSource.onerror = function(error) {
+    console.error("EventSource error:", error);
+};
+```

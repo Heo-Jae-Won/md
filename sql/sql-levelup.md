@@ -309,7 +309,9 @@ ANALYZE TABLE [tableName]
 - table scan의 종류는 2가지가 있다.
   - TABLE ACCESS FULL은 full scan을 의미한다.
   - TaBLE ACCESS BY INDEX ROWID는 index를 이용한 scan을 의미한다.
-  - 보통 INDEX UNIQUE SCAN과 같이 쓰인다.
+  - 보통 INDEX UNIQUE SCAN,  INDEX RANGE SCAN과 같이 쓰인다. unique는 row가 1개고, range는 row가 multiple인 정도의 차이다.
+  - row가 1개이려면 filtering 조건이 PK나 UK, FK 혹은 UI여야 할것이다. multiple은 PK나 UK는 아닌 것이다. 당연히 unique scan이 성능이 더 좋다.
+  - 다만 INDEX FULL SCAN은 좀 다른데, 이건 주로 hint와 같이 쓰인다. 즉 where조건문이 없을 때 index를 사용하길 원하는 경우, 주로 쓴다.
   - index scan은 logn 복잡도고, full scan은 n 복잡도라 index scan을 성능 상 많이 쓴다.
   - 다만 index scan의 선택률이 5% 미만일 때가 좋고, 20%를 넘으면 index를 안 쓰고 full scan을 때리는 게 더 성능이 좋다.
 
@@ -927,3 +929,877 @@ Becky       |       54      |성인           |   6
 Bates       |       87      |노인           |   1
 Chris       |       90      |노인           |   2
 ```
+
+# 왜 DB는 반복문을 제공하지 않을까?
+- DB에서 반복문을 거의 제공하지 않는데, 그 이유는 DB 자체가 집합의 원리를 구현하려 했기 때문이다.
+- 물론 내부적으로는 반복문을 사용한다. 특히 FK 제약에서 CASCADE가 재둎적이다.
+- 이들을 갱신할 때, 만약 대량의 데이터를 건든다면 실제로 성능저하가 발생한다. 반복문으로 돌아가기 때문이다.
+
+- 반복문은 짜는 난이도가 매우 낮다. 그러나 성능이 좀 안 좋은 경우가 많다.
+- 반복문이 성능을 저하시키는 현상은 자주 찾아볼 수 있다.
+  - 반복계가 성능이 좋지 않은 이유는 간단하다. 선형으로 처리 시간이 증가하기 때문이다.
+    - 처리 횟수가 늘어날수록 그에 비례해 처리 시간이 늘어나는 구조다.
+  - 또 문제인 것은, 전처리와 후처리에서 시간이 오래 걸린다는 점이다.
+    - 전처리와 후처리를 먼저 살펴보자.
+```
+1. SQL 구문을 네트워크로 전송
+2. 데이터베이스 연결
+3. SQL 구문 파스
+4. sql 구문의 실행 계획 생성 또는 평가
+-----------------------------전처리 끝----------------------
+1. 결과 집합을 네트워크로 전송
+-----------------------------후처리 끝---------------------
+```
+   - 1번과 5번은 WAS와 DB가 같은 본체에 있다면 발생하진 않는다. 
+   - 물론 보통 분리되어있긴 하지만, 같은 LAN에 속하기 떄문에 전송 속도는 고속이므로 대부분 오버헤드가 거의 없다.
+   - 2번도 연결을 일정 수 확보하는 connection pool에 의해 오버헤드를 감소시키기 떄문에 오버헤드가 크지 않다.
+   - 문제는 3번이다. 3번은 느린 경우 1초까지도 걸리므로 오버헤드가 크다.
+  - 또 문제인 것은 병렬처리에서 최적화 이득을 보지 못한다는 점이다.
+  - 또한 DB의 기술 진보는 대용량 데이터를 다루는 데서 이뤄지는 만큼, 단순 SQL처리는 기술 향상의 혜택을 보기 어렵다.
+  - 종합해서 보면, 반복계는 튜닝을 해도 성능이 향상되기 어렵다는 의미다.
+
+- 물론 장점도 있다.
+- 아래 쿼리가 바로 반복계의 대표 예시다.
+```sql
+SELECT col_a FROM foo WHERE p_key = 1;
+```
+
+- 실행계획도 아주 단순하다. 이해하기 쉽다.
+```
+Index Scan using foo_pkey on foo
+    Index Cond: (p_key = 1)
+```
+
+- 처리 시간도 매우 정밀하며, 실행 계획도 데이터양에 따라 바뀔 일도 거의 없다.
+- transaction 관리도 매우 쉽다.
+
+- 그럼 위의 sql보다 좀 더 복잡한 포장계는 어떻게 구성될까?
+- 바로 CASE WHEN과 window function을 사용한다.
+- 아래 sql 예시를 살펴보자.
+- 0 혹은 -1, 1 일 때 =, -, +를 붙여준다.
+```sql
+INSERT INTO Sales2
+SELECT company,
+        year,
+        sale,
+        CASE SIGN(sale - MAX(sale)
+                            OVER (PARTITION BY company
+                                    ORDER BY year
+                                    ROWS BETWEEN 1 PRECEDING
+                                            AND 1 PRECEDING))
+            WHEN 0 THEN '='
+            WHEN 1 THEN '+'
+            WHEN -1 THEN '-'
+            ELSE NULL END AS var
+FROM Sales;
+```
+
+- where 조건문이 없으니 full scan을 떄린다.
+- ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING으로 인해 직전 record를 기준으로 =, +, -가 붙게 된다.
+- ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING로 하면 2개 전 record를 기준으로 =, +, -가 붙게 된다.
+```
+Id          |           Operation           |       Name
+0           |           SELECT STATEMENT    |       
+1           |           WINDOW SORT         |       
+2           |           TABLE ACCESS FULL   |       SALES
+```
+
+- subquery로 바꾸면 아래와 같이 된다.
+
+```sql
+SELECT compnay,
+        year,
+        sale,
+        CASE SIGN(sale -(SELECT sale /** 직전 연도의 매상 선택 */
+                            FROM Sales SL2
+                            WHERE SL1.company = SL2.company
+                            AND SL2.year = /**직전 연도 선택 */
+                            (SELECT MAX(year)
+                                FROM Sales SL3
+                            WHERE SL1.company = SL3.company
+                            AND SL1.year > SL3.year )))
+        WHEN 0 THEN = '='
+        WHEN 1 THEN = '+'
+        WHEN -1 THEN = '-'
+        ELSE NULL END AS var
+FROM Sales;
+```
+
+- 진짜 복잡하고, 실행계획에서도 손해다.
+- 무조건 window function으로 바꿀 수 있다면 그렇게 하자.
+```
+Id          |           Operation                       |       Name
+0           |           SELECT STATEMENT                |       
+1           |            SORT AGGREGATE                 |       
+2           |             TABLE ACCESS BY INDEX ROWID   |       SALES
+3           |               INDEX UNIQUE SCAN           |       PK_SALES
+4           |                SORT AGGREGATE             |
+5           |                FIRST ROW                  |
+6           |                 INDEX RANGE SCAN(MIN, MAX)|       PK_SALES
+7           |           TABLE ACCESS FULL               |       SALES
+```               
+
+- 이와 비슷한 예제로 아래의 sql을 살펴보자.
+```sql
+SELECT company,
+        year,
+        sale,
+        MAX(company)
+            OVER (PARTITION BY company
+                ORDER BY year
+                ROWS BETWEEN 1 PRECEDING
+                        AND  1 PRECEDING) AS pre_company,
+        MAX(sale)
+            OVER (PARTITION BY company
+                    ORDER BY year
+                    ROWS BETWEEN 1 PRECEDING
+                            AND 1 PRECEDING) AS pre_sale
+FROM Sales;
+```
+
+```
+company     |year       |sale               |pre_company        |pre_sale
+A           |2002       |50                  |
+A           |2003       |52                 |A                  |50
+A           |2004       |55                 |A                  |55
+B           |2001       |27                 |                   |
+B           |2005       |28                 |B                  |27
+B           |2009       |30                 |B                  |28
+C           |2001       |40                 |                   |
+C           |2005       |39                 |C                  |40
+C           |2006       |38                 |C                  |39
+C           |2010       |35                 |C                  |38
+```
+
+
+- 상관 서브쿼리는 window 함수의 PARTITION BY와 ORDER BY와 같은 기능을 한다.
+- 그러나 성능이 문제다. 실행계획이 변동한다는 것도 리스크다.
+```sql
+SELECT company,
+        year,
+        sale,
+        (SELECT company
+        FROM Sales S2
+        WHERE S1.company = S2.company
+        AND year = (SELECT MAX(year)
+                            FROM Sales S3
+                            WHERE S1.company = S3.company
+                            AND S1.year > S3.year)) AS pre_company,
+        (SELECT sale
+                FROM Sales S2
+        WHERE S1.company = S2.company
+        AND year = (SELECT MAX(year)
+                            FROM Sales S3
+                            WHERE S1.company = S3.company
+                            AND S1.year > S3.year)) AS pre_sale
+FROM Sales S1;
+```
+
+- 포장계 sql의 다른 예시를 살펴보자.
+- 우편번호가 가장 유사한 것을 얻어오는 SQL을 반복문으로 짜본다고 해보자.
+- 그럼 5번을 반복해야 할 것이다.
+```sql
+SELECT pcode
+FROM Address
+WHERE pcode = '20178';
+
+UNION ALL
+
+SELECT pcode
+FROM Address
+WHERE pcode like '2017%';
+
+UNION ALL
+
+SELECT pcode
+FROM Address
+WHERE pcode like '201%';
+
+UNION ALL
+
+SELECT pcode
+FROM Address
+WHERE pcode like '20%';
+ 
+UNION ALL
+
+SELECT pcode
+FROM Address
+WHERE pcode = '2%';
+```
+
+- select를 무려 7번이나 실행한다.
+- 이건 성능에 매우 좋지 않다. 특히 데이터가 커질수록 말이다.
+- 포장계로 바꿔주자.
+
+```sql
+SELECT pcode,
+        district_name,
+FROM Address
+WHERE CASE WHEN pcode = '20178' TEHN 0
+            WHEN  pcode like '2017%' THEN 1
+            WHEN  pcode like '201%' THEN 2
+            WHEN  pcode like '20%' THEN 3
+            WHEN  pcode like '2%' THEN 4
+            ELSE NULL END = 
+            (SELECT MIN(CASE WHEN pcode = '20178' TEHN 0
+                            WHEN  pcode like '2017%' THEN 1
+                            WHEN  pcode like '201%' THEN 2
+                            WHEN  pcode like '20%' THEN 3
+                            WHEN  pcode like '2%' THEN 4
+                            ELSE NULL END)
+            FROM    Address);
+```
+
+- table full scan을 두 번 떄리고 있다.
+```
+Id          |Operation          |Name
+0           |SELECT SSTATEMENT  
+1           |TABLE ACCESS FULL  |Address
+2           |SORT AGGREGATE     |
+3           |TABLE ACCESS FULL  |Address
+```
+
+- SELECT 절에 index가 새겨진 field만 담았다면, 아래와 같은 실행계획이 나온다.
+- 이른바  Oracle에서INDEX FAST FULL SCAN이다.
+- 다만 이 접근은 select가 가져올 field가 모두 index가 있을 때만 사용가능하다.
+```
+Id          |Operation              |Name
+0           |SELECT SSTATEMENT  
+1           |TABLE ACCESS FULL      |Address
+2           |SORT AGGREGATE         |
+3           |INDEX FAST FULL SCAN   |PK_PCODE
+```
+
+
+
+- window function을 이용하면 table full scan을 한번으로 줄일 수 있다.
+```sql
+SELECT pcode,
+        district_name,
+FROM (SELECT pcode,
+            district_name,
+            CASE WHEN pcode = '20178' THEN 0
+                WHEN  pcode like '2017%' THEN 1
+                WHEN  pcode like '201%' THEN 2
+                WHEN  pcode like '20%' THEN 3
+                WHEN  pcode like '2%' THEN 4
+                ELSE NULL END AS hit_code,
+            MIN(CASE WHEN pcode = '20178' THEN 0
+                    WHEN  pcode like '2017%' THEN 1
+                    WHEN  pcode like '201%' THEN 2
+                    WHEN  pcode like '20%' THEN 3
+                    WHEN  pcode like '2%' THEN 4
+                    ELSE NULL END)
+            OVER(ORDER BY  CASE WHEN pcode = '20178'    THEN 0
+                                WHEN  pcode like '2017%' THEN 1
+                                WHEN  pcode like '201%' THEN 2
+                                WHEN  pcode like '20%' THEN 3
+                                WHEN  pcode like '2%' THEN 4
+                                ELSE NULL END) AS min_code
+    FROM Address) Foo
+WHERE hit_code = min_code;
+```
+
+- table full scan이 1회 줄어들었다. 다만 동시에 정렬이 추가로 사용됐다.
+- 하지만 table 크기가 크다면 table full scan을 줄이는 게 훨씬 나은 선택이다.
+- SELECT가 2개여도 table scan이 1회인 이유는 window function을 보고 optimizer가 최적화했기 때문이다.
+```
+Id          |Operation              |Name
+0           |SELECT STATEMENT  
+1           |VIEW                   |
+2           |WINDOW SORT            |
+3           |INDEX FAST FULL SCAN   |Address
+```
+
+# recursive 
+- 여태까지는 7번의 횟수가 정해져있었지만, n회반복이어야 할 경우는 어떻게 해야 할까?
+- db에 저장을 잘하는 게 첫번째다. 아래 테이블을 보자.
+```
+name            |pcode          |new_pcode(이사갈 곳)
+A               |20184          |20143
+A               |20143          |20155
+A               |20155          |
+B               |20455          |21113
+B               |21113          |14154
+C               |11561          |
+```
+
+- 이사한 곳과, 이사갈 곳의 주소 우편번호를 모두 한 record에 담는 것이다.
+- 그리고 이전의 pcode를 찾아가면서 계속 우편번호를 탐색한다.
+- A씨의 경우, 20184 -> 20143 -> 20155로 이사를 한 셈이다.
+- 반면 C씨의 경우, 이사를 하지 않았다.
+- 이렇게 포인터 체인 형식으로 이어가는 것을 인접 리스트 모델이라고 부른다.
+- 몇번 반복할 지를 모를때는 재귀로 찾아가는 수밖에 없다.
+- 아래 sql문을 활용하면 가장 처음의 주소지를 찾아낼 수 있다.
+```sql
+WITH RECURSIVE Explosion(name, pcode, new_pcode, depth)
+AS
+(SELECT name,pcode,new_pcode,1
+FROM AddressHistory
+Where name = 'A'
+AND new_code IS NULL
+
+UNION ALL
+
+SELECT Child.name, Child.pcode, Child.new_pcode, depth + 1
+FROM Explosion AS Parent, AddressHistory AS Child
+WHERE Parent.pcode = Child.new_pcode
+AND Parent.name = Child.name)
+
+SELECT name, pcode, new_pcode
+FROM Explosion
+WHERE depth = (SELECT MAX(depth) FROM Explosion);
+```
+
+
+- oracle join에서 ansi join으로 바꿔주자.
+- with로 묶인 query부터 실행된다. UNION ALL 이전의 식이 처음 발화식이다.
+- 거기서 explosion table의 pcode를 구해온다.
+- 그리고 UNION ALL 아래부터 재귀의 시작이다.
+- 재귀는 Parent.pcode = Child.new_pcode and Parent.name = Child.name 조건절이며, 해당 조건절에 맞는 row가 없을 때까지 진행된다.
+```sql
+WITH Explosion(name, pcode, new_pcode, depth)
+AS
+(SELECT name,pcode,new_pcode,1
+FROM AddressHistory
+Where name = 'A'
+AND new_code IS NULL /* 처음 검색 시작 조건 */
+
+UNION ALL
+
+SELECT Child.name, Child.pcode, Child.new_pcode, depth + 1
+FROM Explosion AS Parent
+Inner JOIN AddressHistory AS Child
+on Parent.pcode = Child.new_pcode
+AND Parent.name = Child.name)
+
+SELECT name, pcode, new_pcode
+FROM Explosion
+WHERE depth = (SELECT MAX(depth) FROM Explosion);
+```
+
+- 진행을 뜯어보면 다음과 같다.
+```
+A의 new_pcode가 null인 경우는 pcode가 20155일 떄다. 따라서 pcode가 20155일 떄가 처음 시작이다. 또한 그 때의 record가 Explosion에 쌓인다.
+그 record는 아래와 같다. Explosion이 Parent다.
+name        |pcode       |new_pcode      |depth
+A           |20155       |               |1
+
+
+이제부터 재귀의 시작이다. Parent.pcode = Child.new_pcode and Parent.name = Child.name을 만족하는 것을 모두 찾게 된다.
+Parent.pcode가 20155이므로, Child.new_pcode가 20155여야 한다. name도 똑같다. 그렇게 AddressHistory의 record를 가져온다.
+name        |pcode       |new_pcode      |depth
+A           |20155       |               |1
+A           |20143       |20155          |2
+
+다시 재귀한다.
+Parent.pcode가 20143이므로, Child.new_pcode가 20143여야 한다. name도 똑같다. 그렇게 AddressHistory의 record를 가져온다.
+name        |pcode       |new_pcode      |depth
+A           |20155       |               |1
+A           |20143       |20155          |2
+A           |20184       |20143          |3
+
+다시 재귀한다.
+Parent.pcode가 20184이므로, Child.new_pcode가 20184여야 한다. name도 똑같다. 그렇게 AddressHistory의 record를 가져온다.
+그러나 이번에는 찾지 못했다. 따라서 재귀가 끝나게 된다.
+name        |pcode       |new_pcode      |depth
+A           |20155       |               |1
+A           |20143       |20155          |2
+A           |20184       |20143          |3
+
+재귀테이블에서 가장 depth가 깊은, 재귀 마지막의 record를 가져온다. 
+여기선 가장 과거의 record라고 볼 수 있다. 최초의 주소지다.
+
+SELECT name, pcode, new_pcode
+FROM Explosion
+WHERE depth = (SELECT MAX(depth) FROM Explosion);
+```
+
+- 결과값은 아래와 같다.
+```
+name        |pcode       |new_pcode
+A           |20184       |20143
+```
+
+- 실행계획은 아래와 같다.
+```
+Id          |Operation                          |Name
+0           |SELECT STATEMENT                   |
+1           | TEMP TABLE TRANSFORMATION         |
+2           |  LOAD AS SELECT                   | SYS_TEMP_~~~ //inline view- Explosion
+3           |   UNION ALL (RECURSIVE WITH)~~    |
+4           |    TABLE ACCESS FULL              |AddressHistory //UNION ALL 위의 SELECT 문
+5           |    NESTED LOOPS                   |               //UNION ALL 아래의 SELECT 문. AddressHistory or Explosion
+6           |     NESTED LOOPS                  |               //UNION ALL 아래의 SELECT 문. AddressHistory or Explosion
+7           |     RECURSIVE WITH PUMP           |               //RECURSIVE 수행
+8           |     INDEX RANGE SCAN              |IDX_NEW_PCODE  //UNION ALL 아래의 SELECT문 where문에서 (pcode,name)이 PK이고, new_pcode는 index. 그런데 multiple rows라 INDEX RANGE SCAN.
+9           |    TABLE ACCESS BY INDEX ROWID    |AddressHistory //
+10          | VIEW                              |
+11          |   TABLE ACESS FULL                |SYS_TEMP~~~
+12          |   SORT AGGREGATE                  |
+13          |    VIEW                           |
+14          |     TABLE ACCESS FULL             |SYS_TEMP
+```
+- 다른 예시를 들어보자.
+- 데이터는 아래와 같다.
+```
+| employee_id | employee_name | manager_id |
+|-------------|---------------|------------|
+| 1           | Alice         |            |
+| 2           | Bob           | 1          |
+| 3           | Charlie       | 1          |
+| 4           | David         | 2          |
+| 5           | Eve           | 2          |
+```
+
+- RECURSIVE를 꼭 안 붙여도 된다. 재귀 테이블 이름도 Explosion 고정이 아니다. 원하는대로 줄 수 있다.
+```sql
+WITH RECURSIVE ReportingStructure AS (
+    SELECT 
+        employee_id,
+        employee_name,
+        manager_id,
+        1 AS depth
+    FROM Employees
+    WHERE employee_id = 1 -- Starting point: Alice
+
+    UNION ALL
+
+    SELECT 
+        e.employee_id,
+        e.employee_name,
+        e.manager_id,
+        rs.depth + 1
+    FROM ReportingStructure rs
+    JOIN Employees e ON rs.employee_id = e.manager_id
+)
+
+SELECT employee_id, employee_name
+FROM ReportingStructure
+WHERE depth = (SELECT MAX(depth) FROM ReportingStructure);
+```
+- 결과값은 아래와 같다.
+- depth를 계속 내려가면 말단 직원이 나오게 되는 경우다.
+```
+| employee_id | employee_name | manager_id |depth|
+| 4           | David         | 2          |3    |
+| 5           | Eve           | 2          |3    |
+```
+
+- 진행을 뜯어보면 다음과 같다.
+```
+employee_id = 1인 경우는 employee_name이 Alice일 떄다. 그 때의 record가 Explosion에 쌓인다.
+그 record는 아래와 같다. Explosion이 Parent다.
+| employee_id | employee_name | manager_id |depth|
+|-------------|---------------|------------|-----|
+| 1           | Alice         |            |1    |
+
+
+
+이제부터 재귀의 시작이다. rs.employee_id = e.manager_id을 만족하는 것을 모두 찾게 된다.
+rs.employee_id는 1이므로, Child.manager_id가 1이여야 한다. 그러한 Employees의 record를 가져온다.
+| employee_id | employee_name | manager_id |depth|
+|-------------|---------------|------------|-----|
+| 1           | Alice         |            |1    |
+| 2           | Bob           | 1          |2    |
+| 3           | Charlie       | 1          |2    |
+
+다시 재귀한다.
+rs.employee_id는 2이므로, Child.manager_id가 2이여야 한다. 그러한 Employees의 record를 가져온다.
+| employee_id | employee_name | manager_id |depth|
+|-------------|---------------|------------|-----|
+| 1           | Alice         |            |1    |
+| 2           | Bob           | 1          |2    |
+| 3           | Charlie       | 1          |2    |
+| 4           | David         | 2          |3    |
+| 5           | Eve           | 2          |3    |
+
+다시 재귀한다.
+rs.employee_id는 3이므로, Child.manager_id가 3이여야 한다. 그러한 Employees의 record를 가져온다.
+그러나 이번에는 찾지 못했다. 따라서 재귀가 끝나게 된다.
+| employee_id | employee_name | manager_id |depth|
+|-------------|---------------|------------|-----|
+| 1           | Alice         |            |1    |
+| 2           | Bob           | 1          |2    |
+| 3           | Charlie       | 1          |2    |
+| 4           | David         | 2          |3    |
+| 5           | Eve           | 2          |3    |
+
+재귀테이블에서 가장 depth가 깊은, 재귀 마지막의 record를 가져온다. 
+여기선 가장 직급이 낮은 사원이다.
+
+SELECT employee_id, employee_name
+FROM ReportingStructure
+WHERE depth = (SELECT MAX(depth) FROM ReportingStructure);
+```
+
+# 중첩 집합 모델
+- 재귀의 다른 방식으로는 좌표와 같은 방식을 사용하는 것이다.
+- 다만 이 방식은 언뜻보면 이해할 수 없는 column을 넣는 것이기 때문에 활용이 쉽지 않다.
+- 아래와 같이 범위 안에 중첩되게끔 중첩을 나타내는 데이터를 넣어준다.
+```
+name            |pcode           |lft             |rgt
+A               |20184           |12              |15
+A               |20143           |9               |18  
+A               |20155           |0               |27
+B               |20455           |12              |15
+B               |21113           |9               |18
+C               |11561           |12              |15
+```
+
+- 그럼 가장 외부의 원을 찾게 된다면, 그게 가장 오래된 최초의 주소지가 된다.
+```sql
+SELECT name,pcode
+FROM AddressHistory AH1
+WHERE name = 'A'
+AND NOT EXISTS(
+    SELECT *
+    FROM    AddressHistory AH2
+    WHERE AH.name = 'A'
+    AND AH1.lft > AH2.lft
+);
+```
+
+- 실행계획은 아래와 같다.
+```
+Id          |Operation                        |Name
+0           |SELECT STATEMENT  
+1           | NESTED LOOPS ANTI               |                // ANTI가 붙은 이유: NOT EXISTS라서. EXISTS보다 검색속도가 더 빠름. EXISTS는 찾을 때까지 해야하지만, not EXISTS는 일치하지 않는 것 찾는 순간 검색 중단
+2           |  TABLE ACCESS BY INDEX ROWID    |AddressHistory  // main query의 select문
+3           |   INDEX RANGE SCAN              |PK_NAME_PCODE2  // select field에 PK들을 명시하여 index scan으로 진행. 다만 multiple row라 range scan.
+4           |  TABLE ACCESS BY INDEX ROWID    |AddressHistory  // sub query의 select문
+5           |   INDEX RANGE SCAN              |UQ_NAME_LFT     // sub query의 where문에서 NOT EXISTS lft 조건 filtering
+```
+- 만약 가장 바깥의 원을 최신으로 나오게 데이터를 바꾼다면?
+```
+name            |pcode           |lft             |rgt
+A               |20184           |0               |27
+A               |20143           |9               |18  
+A               |20155           |12              |15
+B               |20455           |0               |27
+B               |21113           |9               |18
+C               |11561           |0               |27
+```
+
+- 이 떄는 가장 오래된 최초의 주소지를 찾는 sql을 <로 바꿔주면 된다.
+```sql
+SELECT name,pcode
+FROM AddressHistory AH1
+WHERE name = 'A'
+AND NOT EXISTS(
+    SELECT *
+    FROM    AddressHistory AH2
+    WHERE AH.name = 'A'
+    AND AH1.lft < AH2.lft
+);
+```
+
+
+# 결합
+- 결합은 SQL어로 JOIN이다.
+- NATRUAL JOIN은 INNER JOIN으로 쓰는 게 좋다.
+- CROSS JOIN은 거의 쓸일이 없다.
+- 가끔 쓰인다면, 그건 실수일 것이다.
+- 아래는 실수로 CROSS JOIN을 건 것이다. ANSI join을 썼다면 이럴 일이 없었을 것이다.
+```sql
+SELECT *
+FROM Employees, Departments
+```
+
+- 떄로 3가지 이상 table을 조합할 때도 cross join이 예기치 않게 끼어들 때가 있다.
+- 아래와 같이 A-B, A-C 간의 결합조건은 정했지만, B-C는 정하지 않았다.
+```sql
+SELECT A.col_a, B.col_b, C.col_c
+    FROM Table_A A
+    INNER JOIN TABLE_B B
+        ON A.col_a = B.col_b
+    INNER JOIN TABLE_C C
+        ON A.col_A = C.col_c;
+```
+
+- 그럼 optimizer에 따라 cross join이 수행되기도 한다.
+- MERGE JOIN CARTESIAN이 바로 cross join이다.
+```
+Id     |Operation                    |Name
+0       |SELECT STATEMENT            |
+1       | HASH JOIN                  |
+2       |  MERGE JOIN CARTESIAN      |
+3       |   TABLE ACCESS FULL        |TABLE_B
+4       |   BUFFER SORT              |              //disk 대신 memoery buffer에서 가져옴. 성능 향상. 디스크 I/O 안거치기 때문.
+5       |    TABLE ACCESS FULL       |TABLE_C
+6       |   TABLE ACCESS FULL        |TABLE_A   
+```
+- mysql은 아래와 같다. type이 ALL인데, possible_keys가 NULL인 경우 table full scan과 동일하다.
+- 그러면서 using join Buffer라면 보통 mysql에서 cross join을 의미한다.
+```
+Id | select_type | table | type        | possible_keys | key  | key_len | ref  | rows  | Extra
+-----------------------------------------------------------------------------------------
+1  | SIMPLE      | A     | ALL         | NULL          | NULL | NULL    | NULL | 1000  | 
+1  | SIMPLE      | B     | ALL         | NULL          | NULL | NULL    | NULL | 10000 | 
+1  | SIMPLE      | C     | ALL         | NULL          | NULL | NULL    | NULL | 100000| Using join buffer
+```
+- 물론 수행이 안 될 수도 있다.
+```
+Id      |Operation                    |Name
+0       |SELECT STATEMENT            |
+1       | NESTED LOOPS               |
+2       | NESTED LOOPS               |
+3       |  TABLE ACCESS FULL         |TABLE_A
+4       |  TABLE ACCESS FULL         |TABLE_B
+6       | TABLE ACCESS FULL          |TABLE_C  
+```
+- mysql은 아래와 같다. type이 ALL인데, possible_keys가 NULL인 경우 table full scan과 동일하다.
+- 여기선 using where라서 cross join이 된 것은 아닌 것으로 봐야 한다.
+- oracle처럼 명확하게 알려주지 않는다.
+```
+Id | select_type | table | type        | possible_keys | key  | key_len | ref  | rows  | Extra
+-----------------------------------------------------------------------------------------
+1  | SIMPLE      | A     | ALL         | NULL          | NULL | NULL    | NULL | 1000  | 
+1  | SIMPLE      | B     | ALL         | NULL          | NULL | NULL    | NULL | 10000 | 
+1  | SIMPLE      | C     | ALL         | NULL          | NULL | NULL    | NULL | 100000| Using where
+```
+- table 끼리 결합이 양이 많지않으면 상관없지만, 큰 테이블끼리 cross join을 하면 굉장히 오래 걸린다.
+- 그럴 때는 B와 C 간의 무의미한 조건절을 넣어서 실행계획을 변경할 수 있다.
+- 다만 결과에 영향이 없을 때만 가능한 기법이다.
+```sql
+SELECT A.col_a, B.col_b, C.col_c
+    FROM Table_A A
+    INNER JOIN TABLE_B B
+        ON A.col_a = B.col_b
+    INNER JOIN TABLE_C C
+        ON A.col_A = C.col_c
+    AND C.col_c = B.col_b; /**B와 C의 무의미한 결합 조건 추가 */
+```
+
+- 그럼 cross join이 사라진다.
+```
+Id      |Operation                    |Name
+0       |SELECT STATEMENT            |
+1       | NESTED LOOPS               |
+2       | NESTED LOOPS               |
+3       |  TABLE ACCESS FULL         |TABLE_A
+4       |  TABLE ACCESS FULL         |TABLE_B
+6       | TABLE ACCESS FULL          |TABLE_C  
+```
+
+
+- INNER JOIN은 자주 쓰인다.
+- INNER JOIN은 결합 대상을 최대한 축소하여 작동한다.
+- 우선 데이터가 아래와 같이 구성되었다고 해보자.
+```
+Employees
+emp_id          |emp_name           |dept_id
+001             |하린               |10
+002             |한미루             |11
+003             |사라               |11
+004             |중민               |12
+005             |웅식               |12
+006             |주아               |12
+
+//
+
+Department
+dept_id         |dept_name          
+10              |총무
+11              |인사
+12              |개발
+13              |영업
+```
+- CROSS JOIN을 다 해놓고 그 결과값을 축소하는 것은 매우 비효율적이기 때문이다.
+- INNER JOIN은 ANSI JOIN으로 아래와 같이 쓴다.
+```sql
+SELECT E.emp_id, E.emp_name, E.dept_id, D.dept_name
+FROM Employees E
+INNER JOIN Departments D
+on E.dept_id = D.dept_id
+```
+
+```
+emp_id          |emp_name           |dept_id            |dept_name
+001             |하린               |10                 |총무
+002             |한미루             |11                 |인사
+003             |사라               |11                 |인사
+004             |중민               |12                 |개발
+005             |웅식               |12                 |개발
+006             |주아               |12                 |개발
+```
+
+- 서브쿼리를 쓰면, 아래와 같이 쓸 수 있따.
+- 문제점이 많다. 실행 계획이 안정적이지 못하다.
+- table도 여러 번 scan해서 성능이 떨어질 가능성도 높다.
+```sql
+SELECT E.emp_id, E.emp_name, E.dept_id,
+    (SELECT D.dept_name
+        FROM Departments D
+        WHERE E.dept_id = D.dept_id) AS dept_name
+FROM Employees E;
+```
+
+- LEFT JOIN은 INNER JOIN과는 다르다.
+- dept_id가 없어도 강제로 끌고와서 Record로 만든다.
+- oracle에서는 NULL이 아니라 그냥 빈칸으로 뜬다.
+```
+emp_id          |emp_name           |dept_id            |dept_name
+001             |하린               |10                 |총무
+002             |한미루             |11                 |인사
+003             |사라               |11                 |인사
+004             |중민               |12                 |개발
+005             |웅식               |12                 |개발
+006             |주아               |12                 |개발
+NULL            |NULL               |13                 |영업
+```
+
+# 결합의 알고리즘
+- 결합 알고리즘으로는 3가지가 있다.
+  - Nest Loops
+  - Hash
+  - Sort merge
+- 데이터 크기, 결합 키의 분산에 따라 방식이 선택되는데, 보통 NL이 채택된다.
+- 그 다음으로 Hash고, 그 다음으로는 Sort merge다.
+
+- 우선 NL부터 다뤄보자.
+- SQL에서는 결합은 기본적으로 두 테이블의 결합이다.
+- driving table에서 driven table 하나하나 record를 scan해서 결합 조건에 맞으면 return한다.
+- 이 작업을 driving table의 모든 record에 대해서 반복한다.
+- 따라서 NL은 record 수가 많을 수록 느려진다.
+```
+접근 레코드수: A table Record X B table Record
+```
+- driving table(outer table)의 결합 키 필드에 인덱스가 있으면, driving table을 작게 하는 게 좋다.
+- 해당 index를 통해 driven table을 full scan하지 않고 효율적으로 index scan을 할 수 있기 때문이다.
+```
+최적의경우 -> 접근 레코드수: A table Record X 2
+해당 레코드를 drivent table의 index만으로 찾을 수 있는 경우
+```
+
+- 아까 다뤘던 inner join 쿼리를 다시 살펴보자.
+- INDEX UNIQUE SCAN은 해당 WHERE 혹은 ON절에서 비교하는 결과가 유일할 때 뜬다.
+- 즉, PK 혹은 UK로만 비교했을 때 INDEX UNIQUE SCAN이 뜨게 된다.
+- 그 외에는 INDEX RANGE SCAN이 뜬다.
+```sql
+SELECT E.emp_id, E.emp_name, E.dept_id, D.dept_name
+FROM Employees E INNER JOIN Departments D
+ON E.dept_id = D.dept_id;
+```
+
+```
+ID      |Operation                      |Name
+0       |SELECT STATEMENT               |
+1       | NESTED LOOPS                  |
+2       |  TABLE ACCESS FULL            |EMPLOYEES
+3       |   TABLE ACCESS BY INDEX ROWID |DEPARTMENTS
+4       |    INDEX UNIQUE SCAN          |PK_DEP     
+```
+
+- INDEX RANGE SCAN이 INDEX UNIQUE SCAN보다 안 좋은 이유는, 더 반복을 많이 하기 때문이다.
+- INDEX UNIQUE SCAN은 하나의 RECORD만 걸리기 때문에 늘 최적의 경우의 수가 된다.
+  - 즉, driving table Record X 2가 반복의 횟수다.
+- 반면에 INDEX RANGE SCAN은 하나가 아니라 MULTIPLE row가 걸리게 된다.
+  - 즉, driving table Record X2 < 반복의 횟수 <  A table Record X B table Record가 된다.
+
+# driving table의 역설
+- driving table을 작게 만드는 게 통상적으로 좋다.
+- 하지만, on절로 driven table을 조회하려 할때, 많은 record가 걸리게 된다면?
+  - 그 떄는 역설적으로 driving table을 큰 테이블로 선택하는 게 나을 수 있다.
+  - 따라서 선택률에 따라 driving table을 큰 테이블로 선택하는 게 나을 수도 있다.
+
+- 두 번째 해결법은 Hash다.
+- 해시결합은 작은 테이블을 스캔하고, 결합 키에 해시 함수를 적용해 해시값으로 반환한다.
+- 이어서 큰 테이블을 스캔하고, 결합 키가 해시값에 존재하는 지 확인하여 결합한다.
+- 작은 테이블에서 해시 테이블을 만드는 이유는 해시 테이블은 워킹 메모리에 저장되므로 크면 디스크 I/O로 넘어가버리기 떄문이다.
+- 물론 Hash가 사용될 정도면 큰 테이블과 작은 테이블의 크기 차이가 심하지 않다.
+```
+Departments
+dept_id
+10
+20
+30
+40
+------------------작은 table 스캔-------------------
+temp Hash table
+dept_id|        hash_dept
+10     |        1age35
+20      |       2014ss
+30      |       5ihj14
+40      |       51515fgs
+-----------------해시테이블 생성----------------
+Employees
+dept_id
+10
+10
+20
+20
+--------------큰 table과 매칭-------------
+```
+- HASH JOIN은 해시 테이블을 따로 만들기 때문에 메모리 소모가 NL에 비해 심하다.
+- 하지만 drivent table에 index가 없을 때, 선택율이 너무 높을 때, driving table 또한 작지 않을 때 사용하면 좋다.
+- 웹의 경우, 실시간처리인 OLTP방식이라 Hash를 사용하기에는 메모리가 부족할 가능성이 높습니다. 그 경우 디스크 I/O가 되어버려 느려진다.
+- 따라서 대용량을 다룰 야간 배치에 hash join을 자주 사용하게 된다.
+- 동치결합에서만 사용이 가능하다는 단점이 존재한다.
+- 또한 hash 결합은 보통 full scan이기 때문에 오래걸린다.
+
+``` 
+Id|                 |Operation                   |Name
+0 |                 |SELECT STATEMENT            |
+1 |                 | HASH JOIN                  |
+2 |                 |  TABLE ACCESS FULL         |DEPARTMENTS
+3 |                 |  TABLE ACCESS FULL         |EMPLOYEES
+```   
+
+- Hash 마저 느리면 Sort merge를 사용하기도 한다.
+- 우선 대상 테이블을 모두 정렬시킨다. 따라서 Hash보다 메모리 소모가 높다. 
+  - 워킹 메모리가 부족하면 디스크 I/O가 일어난다.
+- 거의 사용할 일이 없다.
+
+- 소규모 - 소규모인 경우에는 알고리즘에 따른 성능차가 없다.
+- 소규모 - 대규모인 경우에는 소규모 테이블을 driving table로 사용하는 NL을 써야한다.
+  - join table(inner table)의 결합 field에 index도 만들어줘야 한다.
+  - join table(drivent table)에 결합 레코드가 많다면 구동 테이블과 바꾸거나, Hash join을 쓰자
+- 대규모 - 대규모는 Hash join을 써야한다.
+- 물론 Mysql은 NL밖에 없어서 선택지가 없다.
+- 결합은 사실 성능 변동을 유발하는 주된 원인이다. 자제하는 게 제일 좋다.
+  - 대안으로 window 함수를 쓸 수 있다면 사용해보자.
+- Exists와 Not Exists는 특수한 결합이 사용된다.
+```sql
+SELECT dept_id, dept_name
+FROM    Departments D
+WHERE EXISTS (SELECT *
+                FROM Employees E
+                WHERE E.dept_id = D.dept_id);
+```
+
+- NL에 SEMI가 붙어있다.
+  - 해당 알고리즘은 결과에 driving table의 데이터만 포함된다.
+  - 1개의 record는 1개의 결과만 생성한다.
+  - 조건에 맞는 table을 발견하는 즉시 탐색을 중단한다. 따라서 일반 join보다 성능이 좋다.
+```
+Id|                 |Operation                   |Name
+0 |                 |SELECT STATEMENT            |
+1 |                 | NESTED LOOPS SEMI          |
+2 |                 |  TABLE ACCESS FULL         |DEPARTMENTS
+3 |                 |   INDEX RANGE SCAN         |IDX_DEPT_ID
+```
+
+- NL에 ANTI가 붙어있다.
+  - 해당 알고리즘은 결과에 driving table의 데이터는 제외된다.
+  - 1개의 record는 1개의 결과만 생성한다.
+  - 조건에 맞는 table을 발견하는 즉시 탐색을 중단한다. 따라서 일반 join보다 성능이 좋다.
+```sql
+SELECT dept_id, dept_name
+FROM Departments D
+WHERE NOT EXISTS (SELECT *
+                    FROM Employees E
+                    WHERE E.dept_id = D.dept_id);
+```                    
+
+```
+Id|                 |Operation                   |Name
+0 |                 |SELECT STATEMENT            |
+1 |                 | NESTED LOOPS ANTI          |
+2 |                 |  TABLE ACCESS FULL         |DEPARTMENTS
+3 |                 |   INDEX RANGE SCAN         |IDX_DEPT_ID
+```
+
+- EXISTS와 IN은 결과가 동일한 경우 실행계획이 동일하다.
+- 그러나 NOT EXISTS와 NOT IN은 NOT EXISTS가 성능이 더 좋다.

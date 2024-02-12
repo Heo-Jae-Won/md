@@ -1421,6 +1421,9 @@ public class GoodPractice {
 }
 ```
 
+- 이 프로그램을 실행하면 시작 멧지ㅣ가 나오고 나서 1초 후에 콜백 처리가 실시된다. 
+- AsyncProcess 스레드의 종료 메시지는 콜백 처리의 메시지 후에 표시된다. 
+- 콜백처리가 AsyncProcess 스레드에서 이뤄지고 있기 때문이다.
 ```java
 public class CallbackSample {
     public static void main(String... args) {
@@ -1450,3 +1453,104 @@ public class AsyncProcess implements Runnable {
         }
     }
 }
+```
+
+- 여기도 위와 같이 1초 후에 종료 메시지가 출력된다.
+  
+```java
+pbulic class FutureSamle {
+    public static void main(String ...args) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<String> future = executor.submit(new Callable<String>() {
+            @Override
+            public String call() {
+                try {
+                    Thread.sleep(1000L);
+                } catch (InterruptedException e) {
+                    return "Execution is failed";
+                }
+                return "Finished";
+            }
+        });
+
+        System.out.println("ExecutorEService is started");
+
+        try { 
+            String message = future.get();
+            System.out.println("ExecutorService is finished : message = " + message);
+        }  catch (InterruptedException | ExecutionException ex) {
+            ex.printStackTrace():
+        } finally {
+            executor.shutdown();
+        }
+    }
+}
+```
+
+
+- method 단위가 아니라 처리 단위에 대해 동기화를 해야 한다.
+- HashMap의 예시를 통해 살펴보자.
+- 아래와 같이 put만 synchronzied로 감싸면, 안된다. 
+```java
+public void increment() {
+    Integer counter = map.get("COUTNER");
+    counter++;
+    synchronized(this) {
+        map.put("COUNTER" , counter);
+    }
+}
+```
+
+```java
+private Map<String, Integer> map = new ConcureentHashMap<>();
+
+public void increment() {
+    Integer counter = map.get("COUNTER");
+    counter++;
+    map.put("COUNTER",counter);
+}
+```
+
+- 위의 두 소스코드처럼 하면 안 된다.
+- 처리를 동기화하고 싶다면 아래와 같이 처리와 관련된 임계영역을 반드시 설정해줘야 한다.
+```java
+private Map<String, Integer> map = new HashMap<>();
+
+public synchronized void increment() {
+    Integer counter = map.get("COUTNTER");
+    coutner ++;
+    map.put("COUNTER", counter);
+}
+```
+
+- 서로 다른 클래스의 synchronized 메서드는 동기화되지 않는다.
+- A class와 B class의  instance는 별개다. 따라서 synchronized를 해도 동일 클래스 내의 메서드끼리만 동기화된다.
+```java
+public class SomeProcessorA {
+    public synchronized void doSync1() {}
+    public synchronized void doSync2() {}
+}
+
+public class SomeProcessorB  {
+    public synchronized void doSync3() {}
+}
+```
+
+- 같은 instance가 아니어도 동기화가 되지 않는다.
+```java
+public class SomeProcessor {
+    public synchronized void doSync() {}
+}
+
+public class SomeConsumer {
+    public void doSync1() {
+        SomeProcessor proc = new SomeProcessor();
+        proc.doSync();
+    }
+
+    public void doSYnc2() {
+        SomeProcessor proc = new SomeProcessor();
+        proc.doSync();
+    }
+}
+```
