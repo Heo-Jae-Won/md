@@ -627,3 +627,81 @@ public class Main {
     }
 }
 ```
+
+- 하나의 Thread에서 sub-task로 나누는 것은 효율이 좋지 않다.
+- 방금 했던 이미지와 병렬 처리 작업이 그 예시다.
+```
+작업을 여러개로 나눈다
+스케줄링한다
+결과를 하나로 결합한다
+```
+- 이 과정이 처리량에 있어 불필요한 작업이라 오버헤드다.
+- 각 작업을 별개 스레드에 스케줄링하는 하는게 좋은 선택이다. 이것을 Thread pool로 달성할 수 있다.
+  - 스레드를 생성하고 미래 작업을 위해 다시 스레드를 사용한다.
+  - 매번 스레드를 생성할 필요가 없다.
+  - 스레드가 생성되면 풀에 쌓이고, 작업이 대기열을 통해 스레드 별로 분배된다.
+  - 모든 스레드가 바쁘면 대기열에 머무르며 스레드가 이용가능할 때까지 기다린다.
+- 이를 통해 낮은 오버헤드와 효율적인 대기열을 만들 수 있다.
+- Java에서는 Executor class가 그러한 예시다.
+- 예시는 아래와 같다.
+```java
+public class ThroughputHttpServer {
+    private static final String INPUT_FILE = "./resources/war_and_peace.txt";
+    private static final int NUMBER_OF_THREADS = 8;
+
+    public static void main(String[] args) throws IOException {
+        String text = new String(Files.readAllBytes(Paths.get(INPUT_FILE))); // text 파일 읽어오기
+        startServer(text);
+    }
+
+    public static void startServer(String text) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress(/*port번호*/8000), /*백로그 사이즈. 모든 요청이 대기열 없이 들어가야 하므로 0*/0);
+        server.createContext("/search", new WordCountHandler(text));
+        Executor executor = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
+        server.setExecutor(executor);
+        server.start();
+    }
+
+    private static class WordCountHandler implements HttpHandler { // 단어 검색 로직
+        private String text;
+
+        public WordCountHandler(String text) {
+            this.text = text;
+        }
+
+        @Override
+        public void handle(HttpExchange httpExchange) throws IOException {
+            String query = httpExchange.getRequestURI().getQuery(); // queryString 얻어옴
+            String[] keyValue = query.split("=");
+            String action = keyValue[0];    //queryString의 key
+            String word = keyValue[1];      //queryString의 value
+            if (!action.equals("word")) {
+                httpExchange.sendResponseHeaders(400, 0); //오류날시 400 return
+                return;
+            }
+
+            long count = countWord(word);
+
+            byte[] response = Long.toString(count).getBytes(); //직렬화하여 전송
+            httpExchange.sendResponseHeaders(200, response.length);
+            OutputStream outputStream = httpExchange.getResponseBody();
+            outputStream.write(response);
+            outputStream.close();
+        }
+
+        private long countWord(String word) {
+            long count = 0;
+            int index = 0;
+            while (index >= 0) {
+                index = text.indexOf(word, index);
+
+                if (index >= 0) {// index가 양수면 해당 단어가 존재함을 의미
+                    count++;
+                    index++;
+                }
+            }
+            return count;
+        }
+    }
+}
+```
