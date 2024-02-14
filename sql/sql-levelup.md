@@ -1812,3 +1812,444 @@ Id|                 |Operation                   |Name
   - 제약 혹은 인덱스가 적용되지 않기 때문에 복잡한 로직 혹은 데이터가 큰 resultset에 쥐약이다.
 - 그럼에도 자주 쓰이는 이유는, 간편하고 직관적이기 때문이다.
 
+- 고객의 구입 명세 정보를 기록하는 테이블이 있다. 순번 필드는 구입 시기가 오래될수록 작다.
+- 이 때 고객별 최소 순번 레코드를 구한다고 해보자.
+- 즉, 고객들이 구매했던 가장 오래된 구입 이력을 찾는 것이다.
+- 데이터를 아래와 같다.
+```
+cust_id(PK)         |seq(PK)            |price
+A                   |1              |500
+A                   |2              |1000
+A                   |3              |700
+B                   |5              |100
+B                   |6              |5000
+B                   |7              |300
+B                   |9              |200
+B                   |12             |1000
+C                   |10             |600
+C                   |20             |100
+C                   |45             |200
+C                   |70             |50
+D                   |3              |2000
+```
+
+- 나는 처음에 아래와 같은 query문을 생각했다.
+- 그런데 안타깝게도 group by절에 over()를 쓸 수가 없었다.
+```sql
+SELECT cust_id,
+min(seq) over(order by seq desc)
+from table
+group by cust_id
+```
+
+- 그래서 아래와 같이 바꿔봤다.
+- 그러나 내가 원하는 결과는 나오지 않았다.
+```sql
+SELECT cust_id, 
+min(seq)
+from 구매
+group by cust_id;
+```
+
+- 자꾸 아래와 같은 결과가 나왔는데, 보니까 group by로 썼을 떄, 처음 걸리는 cust_id와 seq 조합이 그냥 출력되었다.
+- 위로는 불가능했다.
+```
+A	1
+B	12
+C	10
+D	3
+```
+
+- 책에서는 아래와 같은 결합을 제시했다.
+```sql
+SELECT R1.cust_id, R1.seq, R1.price
+    FROM Receipts R1
+        INNER JOIN
+            (SELECT cust_id, MIN(seq) AS min_seq
+                FROM Receipts
+                GROUP BY cust_id) R2
+        ON R1.cust_id = R2.cust_id
+    AND R1.seq = R2.min_seq;
+```
+
+- 더 단순화하면 아래와 같다.
+```sql
+select cust_id, seq, price
+	FROM 구매 R1
+    WHERE seq = (SELECT MIN(seq)
+					FROM 구매 R2
+                    WHERE R1.cust_id = R2.cust_id);
+```     
+
+- window function을 쓴다면 아래와 같다.
+```sql
+SELECT cust_id, seq, price
+FROM (SELECT cust_id, seq,price,
+		ROW_NUMBER() 
+			OVER(PARTITION BY cust_id
+					ORDER BY seq) AS row_seq
+		FROM 구매 ) WORK
+WHERE WORK.row_seq = 1;
+```
+
+
+- 그런데도 똑같은 오류가 났다.
+- 원인을 찾아보니 seq를 내가 varchar로 정했기 때문이었다.
+- 문자열은 첫문자열부터 비교한다고 한다. 12와 5를 비교하면 1과 5를 비교하는 셈이 되는 것이었다.
+- int로 바꾸고 다시 쿼리를 실행해보니 잘 된다.
+```sql
+SELECT cust_id, 
+min(seq)
+from 구매
+group by cust_id;
+```
+
+```
+1	SIMPLE	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+```
+
+
+```sql
+SELECT R1.cust_id, R1.seq
+    FROM Receipts R1
+        INNER JOIN
+            (SELECT cust_id, MIN(seq) AS min_seq
+                FROM Receipts
+                GROUP BY cust_id) R2
+        ON R1.cust_id = R2.cust_id
+    AND R1.seq = R2.min_seq;
+```
+
+```
+1	PRIMARY	<derived2>		ALL					5	100.00	Using where
+1	PRIMARY	R1		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R2.min_seq	1	100.00	Using index
+2	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+```
+
+```sql
+select cust_id, seq, price
+	FROM 구매 R1
+    WHERE seq = (SELECT MIN(seq)
+					FROM 구매 R2
+                    WHERE R1.cust_id = R2.cust_id);
+```  
+
+```
+1	PRIMARY	R1		ALL					16	100.00	Using where
+2	DEPENDENT SUBQUERY	R2		ref	PRIMARY	PRIMARY	602	practice.R1.cust_id	4	100.00	Using index
+```
+
+
+```sql
+SELECT cust_id, seq, price
+FROM (SELECT cust_id, seq,price,
+		ROW_NUMBER() 
+			OVER(PARTITION BY cust_id
+					ORDER BY seq) AS row_seq
+		FROM 구매 ) WORK
+WHERE WORK.row_seq = 1;
+```
+```
+1	PRIMARY	<derived2>		ref	<auto_key0>	<auto_key0>	8	const	1	100.00	 //이건 table scan이 아니다. DERIVED를 이용했기 때문이다.
+2	DERIVED	구매		ALL					16	100.00	Using filesort
+```
+- min을 사용하고 group by를 쓴 게 실행계획은 가장 간단하다. group by로 index scan을 한번 한다.
+- 하지만 window functiond을 사용한 예제는 group by없이 table full scan을 한번 한다. 
+- 보통 크기가 클 수록 index scan이 중요하다. group by를 하더라도 말이다.
+- 따라서 첫 번째가 좋다고 한다.
+- 다만 내 생각에 디스크 I/O가 벌어지면 무조건 window function으로 바꿔야 할 것으로 보인다.
+```sql
+SELECT cust_id, 
+min(seq)
+from 구매
+group by cust_id;
+```
+
+
+- 서브쿼리의 단점을 보여주는 다른 예시를 살펴보자.
+- seq의 최솟값과 최댓값 사이의 가격 차이를 나타내보자.
+- 과거에 비해 얼마나 돈을 많이 쓰는지, 적게 쓰는지 보기 위한 것이다.
+```sql
+SELECT TMP_MIN.cust_id,
+        TMP_MIN.price - TMP_MAX.price AS diff
+FROM (SELECT R1.cust_id, R1.seq, R1.price
+        FROM 구매 R1
+            INNER JOIN
+                (SELECT cust_id, MIN(seq) AS min_seq
+                    FROM 구매
+                    GROUP BY cust_id) R2
+            ON R1.cust_id = R2.cust_id
+            AND R1.seq    = R2.min_seq) TMP_MIN
+        INNER JOIN
+            (SELECT R3.cust_id, R3.seq, R3.price
+                FROM 구매 R3
+                    INNER JOIN
+                        (SELECT cust_id, MAX(seq) AS min_seq
+                            FROM 구매
+                            GROUP BY cust_id) R4
+                    ON R3.cust_id = R4.cust_id
+                    AND R3.seq    = R4.min_seq) TMP_MAX
+        ON TMP_MIN.cust_id = TMP_MAX.cust_id;
+```
+
+```
+A	-200
+B	-900
+C	550
+D	0
+```
+
+```
+1	PRIMARY	<derived3>		ALL					5	100.00	Using where
+1	PRIMARY	R1		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R2.min_seq	1	100.00	
+1	PRIMARY	<derived5>		ref	<auto_key0>	<auto_key0>	602	R2.cust_id	2	100.00	Using where; Using index
+1	PRIMARY	R3		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R4.min_seq	1	100.00	
+5	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+3	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+```
+
+- 실행계획이 매우 길다. 딱봐도 불안정한 실행계획이다.
+- 테이블 접근과 결합을 최대한 줄여보자. 
+- 집약함수와 CASE WHEN을 사용한다.
+```sql
+SELECT cust_id,
+        SUM(CASE WHEN min_seq = 1 THEN price ELSE 0 END)
+        - SUM(CASE WHEN max_seq = 1 THEN price ELSE 0 END) AS diff
+FROM (SELECT cust_id, price,
+            ROW_NUMBER() OVER(PARTITION BY cust_id
+                                ORDER BY seq) AS min_seq,
+            ROW_NUMBER() OVER(PARTITION BY cust_id
+                                ORDER BY seq DESC) AS max_seq
+        FROM 구매 ) WORK
+WHERE WORK.min_seq = 1
+    OR WORK.max_seq = 1
+GROUP BY cust_id;
+```
+
+```
+1	PRIMARY	<derived2>		ALL					13	19.00	Using where; Using temporary            //scan이 아님. primary는 outer query라는 뜻. DERIVED가 수행하는 full scan이 저장된 결과가 memory 혹은 TEMP 영역(디스크)에 보관되는데, 거기서 정보를 가져옴. 
+                                                                                                    //당연히 TEMP에서 가져오면 디스크 I/O라서 속도가 확 갑자기 느려짐
+2	DERIVED	구매		ALL					13	100.00	Using filesort                              //여기서 full scan이 일어남. DERIVED는 sub query라는 뜻.
+```
+
+# subquery를 써야할 때
+- subquery를 써야할 때는 결합 대상 record를 줄여야할 때다.
+- 아래와 같은 테이블이 있다.
+```
+회사
+cd_cd(회사코드)         |district(지역)
+001                     |A
+002                     |B
+003                     |C
+004                     |D
+```
+```
+종업원
+cd_cd              |shop_id          |emp_nbr            |main_flg
+001                |1                |300                |Y
+001                |2                |400                |N
+001                |3                |250                |Y
+002                |1                |100                |Y
+002                |2                |20                 |N
+003                |1                |400                |Y
+003                |2                |500                |Y
+003                |3                |300                |N
+003                |4                |200                |Y
+004                |1                |999                |Y
+```
+- 주요사업소의 종업원 합계를 회사별로 보고 싶다고 해보자.
+```
+cd_cd           |district           |sum_emp
+001             |A                  |550
+002             |B                  |100
+003             |C                  |1100
+004             |D                  |999
+```
+
+```
+cd_cd              |shop_id          |emp_nbr            |main_flg
+001                |1                |300                |Y
+001                |3                |250                |Y
+002                |1                |100                |Y
+003                |1                |400                |Y
+003                |2                |500                |Y
+003                |4                |200                |Y
+004                |1                |999                |Y
+```
+
+- 그럼 아래와 같이 쿼리문을 짜게 된다.
+- 결합을 하고, 집약을 한다.
+- 결합 비용이 비싼 대신, 집약 비용이 싸다.
+- 메모리가 충분할 때는 성능이 떨어진다.
+```sql
+SELECT A.cd_cd, district, sum(emp_nbr)
+FROM 회사 A
+INNER JOIN 종업원 B
+ON A.cd_cd = B.cd_cd
+WHERE main_flg = 'Y'
+GROUP BY A.cd_cd
+```
+
+- 위의 쿼리는 회사 테이블과 사업소 테이블의 결합을 먼저 수행하고, 결과에 GROUP BY를 적용해서 집약했다.
+- 결답 대상 레코드는 사업소 테이블의 레코드, 즉 10개다.
+
+- 그럼 이번에는 집약을 먼저 해보자.
+- 집약을 먼저하고, 결합을 한다.
+- 결합 비용이 싼 대신, 집약 비용이 비싸다.
+- 메모리가 부족해 Disk I/O로 넘어가면 성능이 떨어진다.
+```sql
+SELECT A.cd_cd, A.district, sum_emp
+FROM 회사 A
+INNER JOIN
+    (SELECT cd_cd,
+            SUM(emp_nbr) as sum_emp
+        FROM 종업원
+        WHERE main_flg = 'Y'
+        GROUP BY cd_cd) CSUM
+ON A.cd_cd = CSUM.cd_cd;
+```
+
+- 결과는 똑같다.
+- 그런데 실행계획은 다르다.
+- 서브쿼리에서 먼저 결합한 쪽이 우수할 수도 있다.
+- 그 이유는 결합할 record가 4개로 줄었기 때문이다.
+- 물론 집약 비용이 두번째가 더 높다. subquery 안에서의 group by는 서브쿼리가 아닐때의 group by에 비해 추가 단계를 거친다.
+- 서브쿼리의 데이터를 메모리나 디스크 등에 저장한다던가 하는 형태로 말이다.
+ 
+- 때로 view merging이 일어나면 subquery를 써도 결합처럼 실행계획이 작동한다.
+- 아래와 같이 sql을 짰어도,
+```sql
+SELECT A.cd_cd, A.district, sum_emp
+FROM 회사 A
+INNER JOIN
+    (SELECT cd_cd,
+            SUM(emp_nbr) as sum_emp
+        FROM 종업원
+        WHERE main_flg = 'Y'
+        GROUP BY cd_cd) CSUM
+ON A.cd_cd = CSUM.cd_cd;
+```
+
+- 실제 실행계획은 아래처럼 되는 셈이다.
+```sql
+SELECT A.cd_cd, district, sum(emp_nbr)
+FROM 회사 A
+INNER JOIN 종업원 B
+ON A.cd_cd = B.cd_cd
+WHERE main_flg = 'Y'
+GROUP BY A.cd_cd
+```
+
+- 그 이유는 partition이나, index 설정, 결합이 record 수를 더 줄일 때 view merging이 일어난다.
+- subquery는 inline view다.
+
+# record에 순번 붙이기
+- 기본키가 한개의 필드일 경우, record에 순서를 붙이는 것은 간단하다.
+- student_id가 PK라고 해보자.
+```sql
+SELECT student_id, ROW_NUMBER() OVER(ORDER BY student_id) AS seq
+FROM Weights;
+```
+
+- mysql에서는 ROW_NUMBER()가 없다.
+- 아래와 같이 서브쿼리를 사용할 수밖에 없다.
+- 다만, window function이 성능 상유리하다.
+- index only scan에다가 scan이 1회밖에 없기 때문이다.
+```sql
+SELECT student_id,
+    (SELECT COUNT(*)
+        FROM Weights W2
+            WHERE W2.student_id <= W1.student_id) AS seq
+    FROM Weights W1;
+```
+
+```
+student_id          |seq
+A100                |1
+A101                |2
+A124                |3
+B343                |4
+B346                |5
+C345                |6
+C563                |7
+```
+
+- 기본키가 여러개의 필드 결합으로 이뤄진 경우, orderby에 둘 모두 적고, select에도 둘 모두 적는다.
+```sql
+SELECT class, student_id,
+    ROW_NUMBER() OVER(ORDER BY class, student_id) AS seq
+FROM Weights2;
+```
+
+- 그럼 이때 subquery는 어떻게 될까?
+```sql
+SELECT class, student_id,
+    (SELECT COUNT(*)
+        FROM Weights W2
+            WHERE (W2.class, W2.student_id) <= (W1.class, W1.student_id) ) AS seq
+    FROM Weights W1;
+```
+
+```
+class               |student_id         |seq
+A                   |100                |1
+A                   |101                |2
+A                   |124                |3
+B                   |343                |4
+B                   |346                |5
+C                   |345                |6
+C                   |563                |7
+```
+
+- 그룹마다 순번을 붙이는 경우는 어떻게 될까?
+```sql
+SELECT class, student_id,
+    ROW_NUMBER() OVER(PARTITION BY class ORDER BY student_id) AS seq
+FROM Weigths2;
+```
+
+- subquery로는 아래와 같다.
+- W2.class = W1.class로 조건이 바뀌었다.
+```sql
+SELECT class, student_id,
+    (SELECT COUNT(*)
+        FROM Weights2 W2
+        WHERE W2.class = W1.class
+        AND W2.student_id <= W1.student_id) AS seq
+    FROM Weights2 W1;
+```
+
+```
+class               |student_id         |seq
+A                   |100                |1
+A                   |101                |2
+A                   |124                |3
+B                   |343                |1
+B                   |346                |2
+C                   |345                |1
+C                   |563                |2
+```
+
+- 순번을 갱신할 떄는 어떻게 해야할까?
+```sql
+UPDATE Weigths3
+    SET seq = (SELECT seq
+                FROM (SELECT class, student_id,
+                                ROW_NUMBER()
+                                    OVER(PARTITION BY class
+                                    ORDER BY student_id) AS seq
+                        FROM Weigths3) SeqTbl
+    WHERE Weigths3.class = SeqTbl.class
+    AND Weights3.student_id = SeqTbl.student_id);
+```
+
+
+- subquery는 아래와 같이 간단하다.
+- 하지만 Mysql에서는 안된다. update에서는 자기 자신 table을 subquery로 참조할 수 없다.
+```sql
+UPDATE Weigths3
+    SET seq = (SELECT COUNT(*)
+                FROM Weigths3 W2
+                WHERE W2.class = Weights3.class
+                AND W2.student_id <= Weights3.student_id);
+```

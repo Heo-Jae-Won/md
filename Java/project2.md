@@ -1124,3 +1124,106 @@ $('.popup').each(function() {
     })
 })
 ```
+
+
+- 아래 서브쿼리는 서브쿼리가 아주 깊다.
+- 안내
+```sql
+SELECT
+    DECODE(new_ds, 1, '안내', 2, '혜택') AS new_nm,
+    sub.*
+FROM
+    (
+        SELECT
+            '1' AS new_ds,
+            bbrd_sqno AS new_id,
+            CASE
+                WHEN (TO_CHAR(SYSDATE, 'yyyymmdd') - TO_CHAR(TO_DATE(rg_dtm, 'yyyymmddhh24miss'), 'yyyymmdd')) <= 7 THEN 'y'
+                ELSE 'n'
+            END AS new_yn
+        FROM
+            (
+                SELECT
+                    rg_dtm,
+                    bbrd_sqno
+                FROM
+                    board
+                WHERE
+                    bltn_yn = 'y'
+                    AND TO_CHAR(SYSDATE, 'yyyymmddhh24miss') <= ed_dtm
+                ORDER BY
+                    rg_dtm DESC NULLS LAST
+            )
+        WHERE
+            ROWNUM <= 1
+        UNION ALL
+        SELECT
+            '2' AS new_ds,
+            bbrd_sqno AS new_id,
+            CASE
+                WHEN (TO_CHAR(SYSDATE, 'yyyymmdd') - TO_CHAR(TO_DATE(req_dtm, 'yyyymmddhh24miss'), 'yyyymmdd')) <= 7 THEN 'y'
+                ELSE 'n'
+            END AS new_yn
+        FROM
+            (
+                SELECT
+                    req_dtm
+                FROM
+                    push
+                WHERE
+                    cusno = '10'
+                    AND del_yn = 'n'
+                ORDER BY
+                    req_dtm DESC NULLS LAST
+            )
+        WHERE
+            ROWNUM <= 1
+    ) sub;
+```
+
+- 위의 서브쿼리를 아래와 같이 window function을 이용해 단순하게 만들자.
+- 그리고 WITH까지 사용하면 매우 깔끔해진다.
+```java
+WITH board_cte AS (
+    SELECT
+        bbrd_sqno AS new_id,
+        TO_DATE(rg_dtm, 'yyyymmddhh24miss') AS rg_date,
+        ROW_NUMBER() OVER (ORDER BY rg_date DESC NULLS LAST) AS rn_board
+    FROM
+        board
+    WHERE
+        bltn_yn = 'y'
+        AND TO_CHAR(SYSDATE, 'yyyymmddhh24miss') <= ed_dtm
+),
+push_cte AS (
+    SELECT
+        bbrd_sqno AS new_id,
+        TO_DATE(req_dtm, 'yyyymmddhh24miss') AS req_date,
+        ROW_NUMBER() OVER (ORDER BY req_date DESC NULLS LAST) AS rn_push
+    FROM
+        push
+    WHERE
+        cusno = '10'
+        AND del_yn = 'n'
+)
+SELECT
+    DECODE(new_ds, 1, '안내', 2, '혜택') AS new_nm,
+    sub.*
+FROM
+    (
+        SELECT '1' AS new_ds, new_id, CASE WHEN rg_date >= SYSDATE - 7 THEN 'y' ELSE 'n' END AS new_yn
+        FROM board_cte WHERE rn_board = 1
+
+        UNION ALL
+
+        SELECT '2' AS new_ds, new_id, CASE WHEN req_date >= SYSDATE - 7 THEN 'y' ELSE 'n' END AS new_yn
+        FROM push_cte WHERE rn_push = 1
+    ) sub;
+```
+
+- 그저 해당 문자열이 있는지만 비교할 거라면, substring.eqauls를 쓸 필요가 없다.
+- indexOf로 가져오면 된다.
+```java
+string.substring().equals() //substring creation overhead
+string.indexOf() >= 1       //better
+```
