@@ -2253,3 +2253,71 @@ UPDATE Weigths3
                 WHERE W2.class = Weights3.class
                 AND W2.student_id <= Weights3.student_id);
 ```
+
+# record에 순번 붙이기 심화
+- 중앙 값을 구하려고 한다면, 모집합을 상위와 하위로 분할한다.
+- 다만 아래 sql은 복잡해서 이해하기 어렵고, 성능도 나쁘다.
+```sql
+SELECT AVG(weight)
+    FROM (SELECT W1.weight
+            FROM Weigths W1, Weigths W2
+                GROUP BY W1.weigth
+                HAVING SUM(CASE WHEN W2.weight >= W1.weigth THEN 1 ELSE 0 END) >= COUNT(*) /2 /**하위 집합의 조건 */
+                AND HAVING SUM(CASE WHEN W2.weight <= W1.weigth THEN 1 ELSE 0 END) >= COUNT(*) /2) TMP;/**상위 집합의 조건 */
+```
+
+
+
+- 이럴 떄는 절차지향을 쓰게 된다.
+- 양쪽 끝에서 계속 나아가서 만나는 지점이 중앙값이기에, 그걸 sql로 구현하는 것이다.
+- 홀수라면 hi IN (lo)면 되겠지만, 짝수는 균형이 안맞아서 lo+1, lo-1도 붙여준다.
+- 홀수는 50, 짝수는 49 +51 /2 로 중앙값이 계산되는 식이다.
+- 이렇게 아래와 같이 짜면 Weigths 테이블 접근이 1회로 감소하고, 결합이 사용되지 않는다. 
+- 대신 정렬이 2회 늘어나지만, Weights가 충분히 크다면 scan을 덜하는 게 더 이득이다.
+```sql
+SELECT AVG(weight) AS median
+    FROM (SELECT weight,
+    ROW_NUMBER() OVER (ORDER BY weight ASC, student_id ASC) AS hi,
+    ROW_NUMBER() OVER (ORDER BY weight DESC, student_id DESC) AS lo
+    FROM Weights) TMP
+    WHERE hi IN (lo, lo+1, lo-1);
+```
+
+- 여기서 결합을 1번 더 줄일 수 있다.
+- record의 갯수를 세서 count한다.
+- record마다 순번을 매기고 2를 곱한뒤 위의 count와 뺀다.
+- 그렇게 구한 diff 중 0~2에 해당하는 값이 바로 중앙 값이다.
+- 짝수인 경우 0과 2, 홀수인 경우 1이므로 어느 경우에도 구하려면 평균을 내준다.
+```sql
+SELECT AVG(weigth)
+    FROM (SELECT weight,
+                    2 * ROW_NUMBER() OVER(ORDER BY weight)
+                        - COUNT(*) OVER() AS diff
+                FROM Weights) TMP
+WHERE diff BETWEEN 0 AND 2;
+```
+
+- 이번에는 비어있는 숫자를 맞춰보자.
+```
+Numbers
+num
+1
+3
+4
+7
+8
+9
+12
+```
+- 다음 숫자와 1을 비교했을 떄, -1을 해서 1이 안 나오면 비어있다고 보면 된다.
+- 3에서 1을 빼도 1이 나오지 않으므로 단절이 있다. 비어있는 숫자인 것이다.
+- 7에서 1을 빼도 4가 나오지 않으므로 단절이 있다. 비어있는 숫자인 것이다.
+```sql
+SELECT (N1.num + 1) AS gap_start,
+        '~',
+        (MIN(N2.num) - 1) AS gap_end
+    FROM Numbers N1 INNER JOIN Numbers N2
+    ON N2.num > N1.num
+GROUP BY N1.num
+HAVING(N1.num + 1) < MIN(N2.num);
+```
