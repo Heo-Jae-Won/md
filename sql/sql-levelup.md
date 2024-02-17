@@ -1,5 +1,5 @@
-
-# 실행계획
+## <span style="color:#802548">_실행계획_</span>
+    this.roleType = RoleType.MEMBER;
 - 어떤 순서로 기억장치의 데이터에 접근할 지에 관한 계획
 - 실행계획을 읽는 순서를 sql을 통해 알아보자.
 
@@ -24,7 +24,8 @@ Id  Operation                               Name            Rows    Bytes   Cost
   - RESERVATION table은 driven table로 full scan된다. 
   - SHOPS TABLE은 driving table로 index scan이 된다.
 
-# 버퍼
+## <span style="color:#802548">_버퍼_</span>
+    this.roleType = RoleType.MEMBER;
 - DB는 데이터 접근 속도가 좋은 메모리에 정보를 저장하고 싶어함.
 - 그러나 데이터를 메모리에 저장하면 비용이 듦.
   - 메모리 자체가 용량이 크지 않은데, 그걸 써야 하기 때문.
@@ -50,13 +51,13 @@ Id  Operation                               Name            Rows    Bytes   Cost
     - 특히 하나의 sql문만으로는 데이터가 많지 않지만, 여러개의 sql문을 한꺼번에 수행하는 순간 메모리가 부족해져 디스크 I/O가 일어나기도 한다.
     - 즉 동접자가 많은 경우에 갑자기 성능 이슈가 생길수 있다는 의미다.
 
-# = null은 왜 안될까?
+## <span style="color:#802548">_= null은 왜 안될까?_</span>
 - =은 데이터에 적용할 수 있는 연산자다.
 - null은 unknown 상태의 데이터다. 당연히 column = null을 적용할 수가 없다.
 - 그럼? IS NULL + IS NOT NULL로 써줘야 한다.
 
 
-# 옵티마이저
+## <span style="color:#802548">_옵티마이저_</span>
 - 옵티마이저는 DBMS의 핵심이다. 실행계획을 세우기 때문이다.
 - 특히 인덱스, 데이터 분산 정도, SQL 수행 통계 정보, 데이터 양 등을 활용한다.
 - SQL 수행 정보 같은 통계 정보 갱신은 특히 데이터가 크게 바뀔 떄 매우 중요하다.
@@ -70,7 +71,7 @@ EXEC DBMS_STATS.GATHER_DATABASE_STATS;
 ANALYZE TABLE [tableName]
 ```
 
-# 객체 조작
+## <span style="color:#802548">_객체조작_</span>
 - 객체는 table, index, partition, sequence 등을 의미.
 - table scan의 종류는 2가지가 있다.
   - TABLE ACCESS FULL은 full scan을 의미한다.
@@ -81,7 +82,7 @@ ANALYZE TABLE [tableName]
   - index scan은 logn 복잡도고, full scan은 n 복잡도라 index scan을 성능 상 많이 쓴다.
   - 다만 index scan의 선택률이 5% 미만일 때가 좋고, 20%를 넘으면 index를 안 쓰고 full scan을 때리는 게 더 성능이 좋다.
 
-# 결합
+## <span style="color:#802548">_결합_</span>
 - nested loop, sort meger, hash가 있다.
   - nested loop는 한 테이블을 읽으면서 해당 테이블의 레코드마다, 결합 조건에 맞는 레코드를 다른 테이블에서 찾는 형태다.
   - sort merge는 레코드를 on절(결합키)로 정렬하고, 순차적으로 테이블을 결합한다. 정렬 시 워킹메모리를 사용하게 된다.
@@ -89,7 +90,7 @@ ANALYZE TABLE [tableName]
 
 
 
-# group by
+## <span style="color:#802548">_group by_</span>
 - group by로 나누면 count, sum, avg, max, min와 같은 집약(aggregation)함수를 쓰기 쉬워진다.
 
 ```sql
@@ -131,7 +132,7 @@ count
 9
 ```
 
-# HAVING
+## <span style="color:#802548">_HAVING_</span>
 - groupy by로 나눴다면, where문이 아닌 HAVING으로 filtering을 한다.
 
 ```sql
@@ -147,13 +148,13 @@ address | count
 서귀포시 |  1
 ```
 
-# ORDER BY 구
+## <span style="color:#802548">_order by_</span>
 - select문은 어떤 순서로 출력하는가? 정확한 규칙이 없다. 
 - 따라서 지멋대로 나온다.
 - 그게 싫다면 order by로 반드시 순서를 지정해줘야 한다.
 - 참고로 order by date desc하면 최신순으로 정렬된다.
 
-# 매칭
+## <span style="color:#802548">_매칭_</span>
 - table과 table 간의 관계를 filtering 조건으로 걸고 싶다면?
 - 그럴 때 상수로 wherer column = "해당상수";로 하면 해당상수가 바뀌면 망한다.
 - 따라서 매칭을 실행한다. 구체적 예시를 살펴보자.
@@ -178,7 +179,7 @@ WHERE EXISTS (
 );
 ```
 
-# CASE WHEN
+## <span style="color:#802548">_CASE WHEN_</span>
 - 교환 정의를 위해 사용하며, 성능에 매우 긍정적이다.
 - 간단한 예시를 살펴보자.
 
@@ -347,7 +348,7 @@ Id              Operation                   NAME
 2               TABLE ACCESS FULL           EMPOYEES
 ```
 
-# union
+## <span style="color:#802548">_union_</span>
 - CASE WHEN을 쓰는게 더 좋지만, union을 써야할 때도 있다.
 - 바로 table 자체가 다를 때 결과값을 통합하는 경우다.
 - table 자체가 다른 때에는 결과를 아래와 같이 union으로 통합해야 한다.
@@ -456,7 +457,7 @@ ID              Operation                           Name
 - 다만 이 경우는 date_n, flg_n 값 중 1개만이 제대로 된 값이고 나머지는 (null, null)일 때 제대로 성능을 발휘한다.
 
 
-# CASE WHEN과 GROUP BY
+## <span style="color:#802548">_CASE WHEN과 GROUP BY_</span>
 - sum, count, avg, max, min가 표준 집약 함수다.
 - 이들을 이용해서 union으로는 합칠 수 없는 값을 합쳐서 나타낼 수 있다.
 - union은 field의 갯수가 다르면 합칠수가 없다.
@@ -530,7 +531,7 @@ Id          |           Operation       |       Name
 ```
 
 
-# 집약함수와 GROUP BY
+## <span style="color:#802548">_집약함수와 GROUP BY_</span>
 - 범위를 커버하는 것도 집약함수와 GROUP BY로 가능하다.
 ```
 product_id      low_age     high_age        price
@@ -660,7 +661,7 @@ BMI         |   COUNT(*)
 ```
 
 
-# PARTITION BY
+## <span style="color:#802548">_PARTITION BY_</span>
 - GROUP BY는 집약을 하지만, PARTITION BY는 집약하지 않는다.
 - 다만 정보를 추가 할 뿐이다.
 
@@ -696,7 +697,7 @@ Bates       |       87      |노인           |   1
 Chris       |       90      |노인           |   2
 ```
 
-# 왜 DB는 반복문을 제공하지 않을까?
+## <span style="color:#802548">_DB는 반복계가 아니다._</span>
 - DB에서 반복문을 거의 제공하지 않는데, 그 이유는 DB 자체가 집합의 원리를 구현하려 했기 때문이다.
 - 물론 내부적으로는 반복문을 사용한다. 특히 FK 제약에서 CASCADE가 재둎적이다.
 - 이들을 갱신할 때, 만약 대량의 데이터를 건든다면 실제로 성능저하가 발생한다. 반복문으로 돌아가기 때문이다.
@@ -978,7 +979,7 @@ Id          |Operation              |Name
 3           |INDEX FAST FULL SCAN   |Address
 ```
 
-# recursive 
+## <span style="color:#802548">_RECURSIVE_</span>
 - 여태까지는 7번의 횟수가 정해져있었지만, n회반복이어야 할 경우는 어떻게 해야 할까?
 - db에 저장을 잘하는 게 첫번째다. 아래 테이블을 보자.
 ```
@@ -1200,7 +1201,7 @@ FROM ReportingStructure
 WHERE depth = (SELECT MAX(depth) FROM ReportingStructure);
 ```
 
-# 중첩 집합 모델
+## <span style="color:#802548">_중첩 집합 모델_</span>
 - 재귀의 다른 방식으로는 좌표와 같은 방식을 사용하는 것이다.
 - 다만 이 방식은 언뜻보면 이해할 수 없는 column을 넣는 것이기 때문에 활용이 쉽지 않다.
 - 아래와 같이 범위 안에 중첩되게끔 중첩을 나타내는 데이터를 넣어준다.
@@ -1262,7 +1263,7 @@ AND NOT EXISTS(
 ```
 
 
-# 결합
+## <span style="color:#802548">_결합_</span>
 - 결합은 SQL어로 JOIN이다.
 - NATRUAL JOIN은 INNER JOIN으로 쓰는 게 좋다.
 - CROSS JOIN은 거의 쓸일이 없다.
@@ -1416,7 +1417,7 @@ emp_id          |emp_name           |dept_id            |dept_name
 NULL            |NULL               |13                 |영업
 ```
 
-# 결합의 알고리즘
+## <span style="color:#802548">_결합의 알고리즘_</span>
 - 결합 알고리즘으로는 3가지가 있다.
   - Nest Loops
   - Hash
@@ -1464,7 +1465,7 @@ ID      |Operation                      |Name
 - 반면에 INDEX RANGE SCAN은 하나가 아니라 MULTIPLE row가 걸리게 된다.
   - 즉, driving table Record X2 < 반복의 횟수 <  A table Record X B table Record가 된다.
 
-# driving table의 역설
+## <span style="color:#802548">_driving table의 역설_</span>
 - driving table을 작게 만드는 게 통상적으로 좋다.
 - 하지만, on절로 driven table을 조회하려 할때, 많은 record가 걸리게 된다면?
   - 그 떄는 역설적으로 driving table을 큰 테이블로 선택하는 게 나을 수 있다.
@@ -1571,7 +1572,7 @@ Id|                 |Operation                   |Name
 - 그러나 NOT EXISTS와 NOT IN은 NOT EXISTS가 성능이 더 좋다.
 
 
-# subquery
+## <span style="color:#802548">_subquery_</span>
 - subquery는 단점이 많다.
   - subquery는 실제 데이터를 저장하지 않는다. 따라서 서브쿼리에 접근할 때마다 SELECT문이 실행된다.
   - 연산 결과를 저장하기 위해 메모리 혹은 디스크를 사용해야 하는데, 디스크를 사용하게 되면 속도가 느려진다.
@@ -1798,7 +1799,7 @@ GROUP BY cust_id;
 2	DERIVED	구매		ALL					13	100.00	Using filesort                              //여기서 full scan이 일어남. DERIVED는 sub query라는 뜻.
 ```
 
-# subquery를 써야할 때
+## <span style="color:#802548">_subquery를 써야할 떄_</span>
 - subquery를 써야할 때는 결합 대상 record를 줄여야할 때다.
 - 아래와 같은 테이블이 있다.
 ```
@@ -1909,7 +1910,7 @@ GROUP BY A.cd_cd
 - 그 이유는 partition이나, index 설정, 결합이 record 수를 더 줄일 때 view merging이 일어난다.
 - subquery는 inline view다.
 
-# record에 순번 붙이기
+## <span style="color:#802548">_record에 순번 붙이기_</span>
 - 기본키가 한개의 필드일 경우, record에 순서를 붙이는 것은 간단하다.
 - student_id가 PK라고 해보자.
 ```sql
@@ -2020,7 +2021,7 @@ UPDATE Weigths3
                 AND W2.student_id <= Weights3.student_id);
 ```
 
-# record에 순번 붙이기 심화
+## <span style="color:#802548">_record에 순번 붙이기 심화_</span>
 - 중앙 값을 구하려고 한다면, 모집합을 상위와 하위로 분할한다.
 - 다만 아래 sql은 복잡해서 이해하기 어렵고, 성능도 나쁘다.
 ```sql
@@ -2133,7 +2134,7 @@ SELECT MIN(num) AS low,
     GROUP BY gp;
 ```
 
-# sequence는 그만...
+## <span style="color:#802548">_sequence는 그만..._</span>
 - 시퀀스의 문제는, 성능문제가 있다.
 - 시퀀스는 유일성, 연속성, 순서성을 만족해야 해서 다음 시퀀스를 만들 때 lock이 필요하다.
 - 동시에 여러 사람이 시퀀스를 만들경우, 락 충돌로 성능 저하가 발생한다.
@@ -2150,7 +2151,7 @@ CURRENT VALUE를 1만큼 증가
 - 사실 auto_increment 혹은 idenetiy field도 마찬가지다.
 
 
-# 빈 값을 효율적으로 채우기
+## <span style="color:#802548">_빈 값을 효율적으로 채우기_</span>
 ```
 keycol          |seq            |val
 A               |1
@@ -2165,7 +2166,7 @@ B
 ```
 
 
-# select문을 최대로 줄인 다중 필드 update
+## <span style="color:#802548">_select문을 최대로 줄인 다중 필드 update_</span>
 - 한 과목씩 값을 갱신하는 sql이 있다고 해보자.
 - sql을 세번씩이나 쓰는 건 좋은 방식이 아니다.
 ```sql
@@ -2341,7 +2342,8 @@ update ScoreRows
                 where student_id = ScoreRows.student_id);
 ```
 
-# 한 테이블의 record를 다른 table로 옮기기
+
+## <span style="color:#802548">_한 테이블의 record를 다른 table로 옮기기_</span>
 
 - 원 테이블을 두고 다른 테이블에 특정 field를 추가하여 data를 관리하는 경우가 있다.
 - 주가가 대표적이다. 
@@ -2399,7 +2401,7 @@ from Stocks S2;
 - 하지만 저장소 늘리는 건 싸기 때문에 성능을 늘리는 게 더 이득이다.
 
 
-# 데이터 모델링의 중요성
+## <span style="color:#802548">_데이터 모델링의 중요성_</span>
 - 3일이 넘은 순간에 배송이 지연된다고 판단한다면, flag column이 없다면 구해오기가 매우 불편하다.
 - 아래와 같이 긴 쿼리문을 작성해서 매번 가져와야 한다.
 - 실행계획도 당연히 나쁠 것이다.
@@ -2473,7 +2475,7 @@ order_id            |order_name         |item_count
 - 실시간성이 강력하게 요구된다. 그럼 insert와 동시에 update를 쳐야하니 성능이 떨어질 수밖에 없다.
 
 
-# index
+## <span style="color:#802548">_index_</span>
 - index의 종류는 3가지다.
   - 거의 대부분 B-tree다. 균형잡혀 있기 때문이다. 균형 잡혀 있고 데이터가 정렬상태를 유지하여 검색 성능이 뛰어나다.
   - 비트맵 인덱스는 갱신이 잘 일어나지 않는 환경에서만 사용한다.
@@ -2550,13 +2552,13 @@ SELECT *
 - 기간 검색을 1개월 단위로만 하여 partition을 설정해준다.
 - 특정 쿼리를 위해 필요한 데이터를 긁어 모은 table을 만든다. 농좆의 스크래핑이다. 데이터 마트라고 한다.
 
-# 데이터 마트
+## <span style="color:#802548">_데이터 마트_</span>
 - 보통 데이터 마트는 테이블 크기를 줄이는 게 목적이다. 그래야 I/O가 줄어 성능이 좋아지기 때문이다.
 - 실제로는 해쉬와 정렬 등을 사용하면, 검색도 쓰기가 일어나기 때문에 I/O 성능이 중요하다.
 - 따라서 SELECT * 혹은 선택률이 높아지면 절대 안된다. 데이터 마트를 만드는 이유가 없는 셈이다.
 
 
-# 커버링 인덱스
+## <span style="color:#802548">_커버링 인덱스_</span>
 - covering index는 table이 아닌 index만을 스캔 대상으로 삼기 때문에 성능이 매우 뛰어나다.
 - 원래 같았다면 아래와 같은 sql은 성능 발휘가 어렵다.
 ```sql

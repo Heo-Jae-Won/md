@@ -13,7 +13,18 @@
 - 그렇게 인증에 성공했고 api가 정상으로 작동한다.
 
 https://velog.io/@minwest/%EC%84%9C%EB%B9%84%EC%8A%A4-%EA%B3%84%EC%A0%95%EC%9C%BC%EB%A1%9C-Google-Calendar-API-%EC%82%AC%EC%9A%A9%ED%95%98%EA%B8%B0
-
+```java
+private Calendar getServiceAuth() throws FileNotFoundException, IOException, GeneralSecurityException {
+		String keyFileName = "credentials.json";
+		InputStream keyFile = ResourceUtils.getURL("classpath:calendar/" + keyFileName).openStream();
+		GoogleCredentials credentials = GoogleCredentials.fromStream(keyFile)
+				.createScoped(Arrays.asList(CalendarScopes.CALENDAR));
+		HttpRequestInitializer requestInitializer = new HttpCredentialsAdapter(credentials);
+		NetHttpTransport transport = GoogleNetHttpTransport.newTrustedTransport();
+		return new Calendar.Builder(transport, JacksonFactory.getDefaultInstance(), requestInitializer)
+				.setApplicationName("heo-jae-won").build();
+	}
+```
  
 ## <span style="color:#802548">_2. 캘린더 설정_</span>
 - 그런데 캘린더에 따로 또 설정을 해줘야만 인증이 service account가 제역할을 할 수 있었다. 
