@@ -1,238 +1,4 @@
 
-# select문을 최대로 줄인 다중 필드 update
-- 한 과목씩 값을 갱신하는 sql이 있다고 해보자.
-- sql을 세번씩이나 쓰는 건 좋은 방식이 아니다.
-```sql
-update ScoreCols
-    set score_en = (select score 
-                    from ScoreRows SR
-                    where SR.student_id = ScoreCols.student_id
-                    and subject = '영어'),
-        score_nl = (select score
-                    from ScoreRows SR
-                    where SR.student_id = ScoreCols.student_id
-                    and subject = '국어'),
-        score_mt = (select score
-                    from ScoreRows SR
-                    where SR.student_id = ScoreCols.student_id
-                    and subject = '수학');
-```
-
-- 다중 필드 할당을 아래와 같이 해주면 select query 하나로 3개의 field를 update
-- 이건 oracle에서의 구문
-
-```sql
-update ScoreCols
-    set (score_en, score_nl, score_mt)
-        = (select   max(case when subject = '영어'
-                        then score
-                        else null end) as score_en,
-                    max(case when subject = '국어'
-                        then score
-                        else null end) as score_nl,
-                    max(case when subject = '수학'
-                        then score
-                        else null end) as score_mt
-        from scoreRows SR
-        where SR.student_id = ScoreCols.student_id);
-```
-
-- mysql의 구문은 아래와 같음.
-
-
-```sql
-UPDATE ScoreCols
-JOIN (
-    SELECT
-        student_id,
-        MAX(CASE WHEN subject = '영어' THEN score ELSE NULL END) AS score_en,
-        MAX(CASE WHEN subject = '국어' THEN score ELSE NULL END) AS score_nl,
-        MAX(CASE WHEN subject = '수학' THEN score ELSE NULL END) AS score_mt
-    FROM scoreRows
-) AS Subquery
-ON ScoreCols.student_id = Subquery.student_id
-SET
-    ScoreCols.score_en = Subquery.score_en,
-    ScoreCols.score_nl = Subquery.score_nl,
-    ScoreCols.score_mt = Subquery.score_mt;
-```
-
-
-- 하지만 위의 경우들로는 not null의 경우를 대응할 수 가 없다.
-- 이제는 not null도 대응할 수 있게 만들어보자.
-- 아래와 같이 바꾸면 여전히 select문을 3번 쓴다. table scan이 3번 일어난다.
-
-```sql
-update ScoreColsNN
-    set score_en = coalesce( (select score
-                                from ScoreRows
-                                where student_id = ScoreColsNN.student_id
-                                and subject = '영어'),0),
-        score_nl = coalesce( (select score
-                                from ScoreRows
-                                where student_id = ScoreColsNN.student_id
-                                and subject = '수학'),0),
-        score_mt = coalesce( (select score
-                                from ScoreRows
-                                where student_id = ScoreColsNN.student_id
-                                and subject = '수학'), 0)
-where exists (select *  /*처음부터 학생이 존재하지 않는 떄의 null 대응 */
-                from ScoreRows 
-                where student_id = ScoreColsNN.student_id);
-```
-
-
-- table scan을 1번으로 줄여주었던 이전의 query문을 이용해 null 처리를 해주자.
-- where문이 가장 먼저 읽히므로, 거기서 학생 field가 존재하는지 판별해준다. 
-  - 학생이 없다면 애초에 update 할 필요 자체가 없다.
-- 그리고 나서 update를 할 때 이제는 학생은 있지만, 과목 점수가 null인 경우를 다뤄야 한다.
-  - 그 때는 과목 점수가 0인 경우를 coalesce함수로 감싸서 0으로 만들어준다.
-- coalesce는 ifnull과 같은데, 어느 RDB에서나 쓸 수 있다. 따라서 해당 함수를 쓰도록 하자.
-- coalesce(column , default value)와 같은 형식으로, 해당 record가 null이면 default value로 대체된다.
-
-
-```sql
-update ScoreCols
-    set (score_en, score_nl, score_mt)
-        = (select  coalesce(max(case when subject = '영어'
-                        then score
-                        else null end),0) as score_en,
-                    coalesce(max(case when subject = '국어'
-                        then score
-                        else null end),0) as score_nl,
-                    coalesce(max(case when subject = '수학'
-                        then score
-                        else null end),0) as score_mt
-        from scoreRows SR
-        where SR.student_id = ScoreCols.student_id)
-where exists (select *
-                    from ScoreRows
-                    where student_id = ScoreCols.student_id);
-```                    
-
-- mysql에서는 아래와 같다.
-
-
-```sql
-UPDATE ScoreCols
-JOIN (
-    SELECT
-        student_id,
-        coalesce(MAX(CASE WHEN subject = '영어' THEN score ELSE NULL END),0) AS score_en,
-        coalesce(MAX(CASE WHEN subject = '국어' THEN score ELSE NULL END),0) AS score_nl,
-        coalesce(MAX(CASE WHEN subject = '수학' THEN score ELSE NULL END),0) AS score_mt
-    FROM scoreRows
-) AS Subquery
-ON ScoreCols.student_id = Subquery.student_id
-SET
-    ScoreCols.score_en = Subquery.score_en,
-    ScoreCols.score_nl = Subquery.score_nl,
-    ScoreCols.score_mt = Subquery.score_mt
-where exists (select *
-                    from ScoreRows
-                    where student_id = ScoreColsNN.student_id); 
-```
-
-- 굳이 update를 하지 않아도 된다.
-- merge into를 활용하면 된다.
-- merge into를 활용하면 향후 코드를 변경할 때 수정 실수도 줄일 수 있다.
-
-```sql
-merge into ScoreColsNN
-    using (select student_id,
-                coalesce(max(case when subject = '영어'
-                                    then score
-                                    else null end),0) as score_en,
-                coalesce(max(case when subject = '국어'
-                                    then score
-                                    else null end),0) as score_nl,
-                coalesce(max(case when subject = '수학'
-                                    then score
-                                    else null end),0) as score_mt
-                from ScoreRows
-                group by student_id) SR
-    on (ScoreColsNN.student_id = SR.student_id)
-when matched then
-    update set ScoreColsNN.score_en = SR.score_en,
-                ScoreColsNN.score_nl = SR.score_nl,
-                ScoreColsNN.score_mt = SR.score_mt;
-```
-
-
-- 이번에는 위와 다르게 record -> field update를 살펴보자.
-- 이때는 비교적 단순하다.
-- 테이블 접근이 1번이고, 그 또한 기본키 index를 쓴다. join도 없다.
-
-```sql
-update ScoreRows
-    set score = (select case ScoreRows.subject
-                        when '영어' then score_en
-                        when '국어' then score_nl
-                        when '수학' then score_mt
-                        else null
-                    end
-                from ScoreCols
-                where student_id = ScoreRows.student_id);
-```
-
-# 한 테이블의 record를 다른 table로 옮기기
-
-- 원 테이블을 두고 다른 테이블에 특정 field를 추가하여 data를 관리하는 경우가 있다.
-- 주가가 대표적이다. 
-- 브랜드, 거래일, 종가를 기준으로 원 테이블을 관리한다.
-- 그리고 그 관리되는 테이블에 가격 상승하락 field를 넣어 추가 테이블을 만든다.(이거 농좆에서는 scrapping이라고 하는듯)
-
-- 그럼 아래와 같이 상관 subquery를 사용할 수 있다.
-- 하지만 상관 subquery는 테이블 접근이 많아진다.
-  - index range scan(MIN/MAX)- PK index only scan
-  - TABLE ACCESS by index ROWID - PK index를 이용한 table scan 
-  - table access full - 풀 스캔
-- 윈도우 함수로 바꿔주자.
-
-```sql
-insert into stock2
-select brand,sale_date, price,
-    case sign(price - (select price 
-                        from Stocks S1
-                        where brand = Stocks.brand
-                        and sale_date = (select MAX(sale_date)
-                                            from Stocks S2
-                                            where brand = Stocks.brand
-                                            and sale_date < Stocks.sale_date)))
-        when -1 then '아래 화살표'
-        when 0 then '오른쪽 화살표'
-        when 1 then '위 화살표'
-        else null
-    end
-from Stocks;
-```
-
-- 윈도우 함수로 바꾸면 아래와 같이 된다.
-- 그럼 테이블 접근이 1회로 줄어든다.
-    - table access full - 풀 스캔
-```sql
-insert into Stock2
-select brand, sale_date, price,
-    case sign(price - MAX(price) over (partition by brand 
-                                        order by sale_date
-                                    rows between 1 PRECEDING
-                                            and 1 PRECEDING))
-        when -1 then '아래 화살표'
-        when 0 then '오른쪽 화살표'
-        when 1 then '위 화살표'
-        else null
-    end
-from Stocks S2;
-```
-
-- update로도 가능하다.
-  - 하지만 insert select가 update보다 더 빠른 편이다.
-  - mysql은 자기참조가 안 되는 DB라서 update로 불가능하다.
-
-- 단점은 복제 테이블이 필요하기 때문에 저장소 용량이 2배가 된다는 점이다.
-- 하지만 저장소 늘리는 건 싸기 때문에 성능을 늘리는 게 더 이득이다.
-
-
 # 실행계획
 - 어떤 순서로 기억장치의 데이터에 접근할 지에 관한 계획
 - 실행계획을 읽는 순서를 sql을 통해 알아보자.
@@ -2312,6 +2078,7 @@ num
 - 다음 숫자와 1을 비교했을 떄, -1을 해서 1이 안 나오면 비어있다고 보면 된다.
 - 3에서 1을 빼도 1이 나오지 않으므로 단절이 있다. 비어있는 숫자인 것이다.
 - 7에서 1을 빼도 4가 나오지 않으므로 단절이 있다. 비어있는 숫자인 것이다.
+- 다만 이렇게 하면 NL이기 때문에 실행계획이 불안정하다. table scan도 2번일어난다.
 ```sql
 SELECT (N1.num + 1) AS gap_start,
         '~',
@@ -2321,3 +2088,505 @@ SELECT (N1.num + 1) AS gap_start,
 GROUP BY N1.num
 HAVING(N1.num + 1) < MIN(N2.num);
 ```
+
+- 위의 쿼리를 절차 지향으로 바꾸면 성능이 개선된다.
+- 결합을 사용하지 않고, 테이블 스캔도 한번만 발생한다.
+```sql
+SELECT num + 1 AS gap_start,
+    '~',
+    (num + diff - 1) AS gap_end
+    FROM (SELECT num,
+                MAX(num)
+                OVER(ORDER BY num
+                    ROWS BETWEEN 1 FOLLOWING
+                    AND 1 FOLLOWING) - num AS diff
+            FROM Numbers) TMP
+WHERE diff <> 1;
+```
+
+- 위의 쿼리는 아래와 동일하다.
+```sql
+SELECT num + 1 AS gap_start,
+    '~',
+    (num + diff - 1) AS gap_end
+    FROM (SELECT num,
+                MAX(num)
+                OVER(ORDER BY num
+                    ROWS BETWEEN 1 FOLLOWING
+                    AND 1 FOLLOWING) - num 
+            FROM Numbers) TMP(num,diff)
+WHERE diff <> 1;
+```
+
+- 테이블에 존재하는 시퀀스 구하기는 집합 지향이나, 절차 지향이나 모두 성능이 비슷하다.
+- 그러나 절차 지향으로 쓰면 쿼리가 너무 길어지므로 집합 지향으로 쓰자.
+```sql
+SELECT MIN(num) AS low,
+        '~',
+        MAX(num) AS high
+    FROM (SELECT N1.num,
+                COUNT(N2.num) - N1.num
+            FROM Numbers N1
+            INNER JOIN Numbers N2
+            ON N2.num <= N1.num
+            GROUP BY N1.num) N(num,gp)
+    GROUP BY gp;
+```
+
+# sequence는 그만...
+- 시퀀스의 문제는, 성능문제가 있다.
+- 시퀀스는 유일성, 연속성, 순서성을 만족해야 해서 다음 시퀀스를 만들 때 lock이 필요하다.
+- 동시에 여러 사람이 시퀀스를 만들경우, 락 충돌로 성능 저하가 발생한다.
+```
+sequence 객체에 배타 락을 적용
+NEXT VALUE를 검색
+CURRENT VALUE를 1만큼 증가
+시퀀스 객체에 배타 락을 해제
+```
+
+- 또한 순번처럼 비슷한 데이터를 연속으로 INSERT할 때, 물리적으로 같은 영역에 저장된다.
+- 저장소의 특정 물리 블록에만 I/O가 발생하여 성능이 악화된다.
+- 특히 sequence를 이용한 대량의 batch insert 시 이 문제가 심각하다.
+- 사실 auto_increment 혹은 idenetiy field도 마찬가지다.
+
+
+# 빈 값을 효율적으로 채우기
+```
+keycol          |seq            |val
+A               |1
+A               |
+A               |
+A               |
+B               |   
+B
+B
+B
+B
+```
+
+
+# select문을 최대로 줄인 다중 필드 update
+- 한 과목씩 값을 갱신하는 sql이 있다고 해보자.
+- sql을 세번씩이나 쓰는 건 좋은 방식이 아니다.
+```sql
+update ScoreCols
+    set score_en = (select score 
+                    from ScoreRows SR
+                    where SR.student_id = ScoreCols.student_id
+                    and subject = '영어'),
+        score_nl = (select score
+                    from ScoreRows SR
+                    where SR.student_id = ScoreCols.student_id
+                    and subject = '국어'),
+        score_mt = (select score
+                    from ScoreRows SR
+                    where SR.student_id = ScoreCols.student_id
+                    and subject = '수학');
+```
+
+- 다중 필드 할당을 아래와 같이 해주면 select query 하나로 3개의 field를 update
+- 이건 oracle에서의 구문
+
+```sql
+update ScoreCols
+    set (score_en, score_nl, score_mt)
+        = (select   max(case when subject = '영어'
+                        then score
+                        else null end) as score_en,
+                    max(case when subject = '국어'
+                        then score
+                        else null end) as score_nl,
+                    max(case when subject = '수학'
+                        then score
+                        else null end) as score_mt
+        from scoreRows SR
+        where SR.student_id = ScoreCols.student_id);
+```
+
+- mysql의 구문은 아래와 같음.
+
+
+```sql
+UPDATE ScoreCols
+JOIN (
+    SELECT
+        student_id,
+        MAX(CASE WHEN subject = '영어' THEN score ELSE NULL END) AS score_en,
+        MAX(CASE WHEN subject = '국어' THEN score ELSE NULL END) AS score_nl,
+        MAX(CASE WHEN subject = '수학' THEN score ELSE NULL END) AS score_mt
+    FROM scoreRows
+) AS Subquery
+ON ScoreCols.student_id = Subquery.student_id
+SET
+    ScoreCols.score_en = Subquery.score_en,
+    ScoreCols.score_nl = Subquery.score_nl,
+    ScoreCols.score_mt = Subquery.score_mt;
+```
+
+
+- 하지만 위의 경우들로는 not null의 경우를 대응할 수 가 없다.
+- 이제는 not null도 대응할 수 있게 만들어보자.
+- 아래와 같이 바꾸면 여전히 select문을 3번 쓴다. table scan이 3번 일어난다.
+
+```sql
+update ScoreColsNN
+    set score_en = coalesce( (select score
+                                from ScoreRows
+                                where student_id = ScoreColsNN.student_id
+                                and subject = '영어'),0),
+        score_nl = coalesce( (select score
+                                from ScoreRows
+                                where student_id = ScoreColsNN.student_id
+                                and subject = '수학'),0),
+        score_mt = coalesce( (select score
+                                from ScoreRows
+                                where student_id = ScoreColsNN.student_id
+                                and subject = '수학'), 0)
+where exists (select *  /*처음부터 학생이 존재하지 않는 떄의 null 대응 */
+                from ScoreRows 
+                where student_id = ScoreColsNN.student_id);
+```
+
+
+- table scan을 1번으로 줄여주었던 이전의 query문을 이용해 null 처리를 해주자.
+- where문이 가장 먼저 읽히므로, 거기서 학생 field가 존재하는지 판별해준다. 
+  - 학생이 없다면 애초에 update 할 필요 자체가 없다.
+- 그리고 나서 update를 할 때 이제는 학생은 있지만, 과목 점수가 null인 경우를 다뤄야 한다.
+  - 그 때는 과목 점수가 0인 경우를 coalesce함수로 감싸서 0으로 만들어준다.
+- coalesce는 ifnull과 같은데, 어느 RDB에서나 쓸 수 있다. 따라서 해당 함수를 쓰도록 하자.
+- coalesce(column , default value)와 같은 형식으로, 해당 record가 null이면 default value로 대체된다.
+
+
+```sql
+update ScoreCols
+    set (score_en, score_nl, score_mt)
+        = (select  coalesce(max(case when subject = '영어'
+                        then score
+                        else null end),0) as score_en,
+                    coalesce(max(case when subject = '국어'
+                        then score
+                        else null end),0) as score_nl,
+                    coalesce(max(case when subject = '수학'
+                        then score
+                        else null end),0) as score_mt
+        from scoreRows SR
+        where SR.student_id = ScoreCols.student_id)
+where exists (select *
+                    from ScoreRows
+                    where student_id = ScoreCols.student_id);
+```                    
+
+- mysql에서는 아래와 같다.
+
+
+```sql
+UPDATE ScoreCols
+JOIN (
+    SELECT
+        student_id,
+        coalesce(MAX(CASE WHEN subject = '영어' THEN score ELSE NULL END),0) AS score_en,
+        coalesce(MAX(CASE WHEN subject = '국어' THEN score ELSE NULL END),0) AS score_nl,
+        coalesce(MAX(CASE WHEN subject = '수학' THEN score ELSE NULL END),0) AS score_mt
+    FROM scoreRows
+) AS Subquery
+ON ScoreCols.student_id = Subquery.student_id
+SET
+    ScoreCols.score_en = Subquery.score_en,
+    ScoreCols.score_nl = Subquery.score_nl,
+    ScoreCols.score_mt = Subquery.score_mt
+where exists (select *
+                    from ScoreRows
+                    where student_id = ScoreColsNN.student_id); 
+```
+
+- 굳이 update를 하지 않아도 된다.
+- merge into를 활용하면 된다.
+- merge into를 활용하면 향후 코드를 변경할 때 수정 실수도 줄일 수 있다.
+
+```sql
+merge into ScoreColsNN
+    using (select student_id,
+                coalesce(max(case when subject = '영어'
+                                    then score
+                                    else null end),0) as score_en,
+                coalesce(max(case when subject = '국어'
+                                    then score
+                                    else null end),0) as score_nl,
+                coalesce(max(case when subject = '수학'
+                                    then score
+                                    else null end),0) as score_mt
+                from ScoreRows
+                group by student_id) SR
+    on (ScoreColsNN.student_id = SR.student_id)
+when matched then
+    update set ScoreColsNN.score_en = SR.score_en,
+                ScoreColsNN.score_nl = SR.score_nl,
+                ScoreColsNN.score_mt = SR.score_mt;
+```
+
+
+- 이번에는 위와 다르게 record -> field update를 살펴보자.
+- 이때는 비교적 단순하다.
+- 테이블 접근이 1번이고, 그 또한 기본키 index를 쓴다. join도 없다.
+
+```sql
+update ScoreRows
+    set score = (select case ScoreRows.subject
+                        when '영어' then score_en
+                        when '국어' then score_nl
+                        when '수학' then score_mt
+                        else null
+                    end
+                from ScoreCols
+                where student_id = ScoreRows.student_id);
+```
+
+# 한 테이블의 record를 다른 table로 옮기기
+
+- 원 테이블을 두고 다른 테이블에 특정 field를 추가하여 data를 관리하는 경우가 있다.
+- 주가가 대표적이다. 
+- 브랜드, 거래일, 종가를 기준으로 원 테이블을 관리한다.
+- 그리고 그 관리되는 테이블에 가격 상승하락 field를 넣어 추가 테이블을 만든다.(이거 농좆에서는 scrapping이라고 하는듯)
+
+- 그럼 아래와 같이 상관 subquery를 사용할 수 있다.
+- 하지만 상관 subquery는 테이블 접근이 많아진다.
+  - index range scan(MIN/MAX)- PK index only scan
+  - TABLE ACCESS by index ROWID - PK index를 이용한 table scan 
+  - table access full - 풀 스캔
+- 윈도우 함수로 바꿔주자.
+
+```sql
+insert into stock2
+select brand,sale_date, price,
+    case sign(price - (select price 
+                        from Stocks S1
+                        where brand = Stocks.brand
+                        and sale_date = (select MAX(sale_date)
+                                            from Stocks S2
+                                            where brand = Stocks.brand
+                                            and sale_date < Stocks.sale_date)))
+        when -1 then '아래 화살표'
+        when 0 then '오른쪽 화살표'
+        when 1 then '위 화살표'
+        else null
+    end
+from Stocks;
+```
+
+- 윈도우 함수로 바꾸면 아래와 같이 된다.
+- 그럼 테이블 접근이 1회로 줄어든다.
+    - table access full - 풀 스캔
+```sql
+insert into Stock2
+select brand, sale_date, price,
+    case sign(price - MAX(price) over (partition by brand 
+                                        order by sale_date
+                                    rows between 1 PRECEDING
+                                            and 1 PRECEDING))
+        when -1 then '아래 화살표'
+        when 0 then '오른쪽 화살표'
+        when 1 then '위 화살표'
+        else null
+    end
+from Stocks S2;
+```
+
+- update로도 가능하다.
+  - 하지만 insert select가 update보다 더 빠른 편이다.
+  - mysql은 자기참조가 안 되는 DB라서 update로 불가능하다.
+
+- 단점은 복제 테이블이 필요하기 때문에 저장소 용량이 2배가 된다는 점이다.
+- 하지만 저장소 늘리는 건 싸기 때문에 성능을 늘리는 게 더 이득이다.
+
+
+# 데이터 모델링의 중요성
+- 3일이 넘은 순간에 배송이 지연된다고 판단한다면, flag column이 없다면 구해오기가 매우 불편하다.
+- 아래와 같이 긴 쿼리문을 작성해서 매번 가져와야 한다.
+- 실행계획도 당연히 나쁠 것이다.
+```sql
+SEELCT O.order_id,
+        O.order_name,
+        ORC.delivery_date - O.order_date AS diff_days
+    FROM Orders O
+        INNER JOIN OrderReceipts ORC
+            ON O.order_id = ORC.order_id
+WHERE ORC.delivery_date - O.order_date >= 3;
+```
+
+```
+order_id            |order_name         |diff_days
+10000               |윤인성              |3
+10000               |윤인성             |4
+10001               |연하진             |3
+10003               |한빛미디어         |5
+1003                |한빛미디어         |5
+```
+
+- 하지만 지연 플래그를 넣어주면 select자체는 매우 간단해진다.
+- 보통 지연이 흔하지 않기 때문에 선택률이 낮을 것이다.
+  - index를 걸어주면 검색 성능이 훨씬 좋아질 것이다.
+```sql
+SELECT * 
+    FROM Orders
+WHERE delay_flag = 'Y';
+```
+
+- 다만 문제는 저 flag들을 모두 갱신해줘야 한다는 점이다.
+- 언제 갱신되는 지가 중요하다. 실시간으로 갱싱해야하는지, 아니면 시차를 두는지가 말이다.
+- 야간 배치 작업으로 갱신한다면 시차가 꽤나 커질 것이다.
+
+- flag가 아닌 field를 추가하는 경우도 있다.
+- count를 세는 field가 대표적이다. 이 경우, 확장성은 부족하지만 그 상황에 한정해 굉장히 편리하다. 
+- 예를 들어, count를 세는 sql이 있다고 해보자.
+- select문을 아래와 같이 join을 통해 가져와야 한다.
+```sql
+SELECT O.oredr_id,
+        MAX(O.order_name) AS order_name,
+        COUNT(*) AS item_count
+    FROM Orders O
+        INNER JOIN OrderReceipts ORC
+                ON O.order_id = ORC.order_id
+    GROUP BY O.order_id;
+```
+
+- 혹은 window function을 사용할 것이다.
+```sql
+SELECT O.order_id,
+        O.order_name,
+        O.oredr_date,
+        COUNT(*) OVER (PARTITION BY O.oredr_id) AS item_count
+    FROM Orders O
+        INNER JOIN OrderReceipts ORC
+            ON O.order_id = ORC.order_id;
+```
+```
+order_id            |order_name         |item_count
+10000               |윤인성              |3
+10000               |윤인성             |3
+10001               |연하진             |3
+10003               |한빛미디어         |1
+10003                |한빛미디어         |2
+```
+
+- 만약 처음 Order를 할 때 item_count를 넣었다면 복잡한 select문이 필요없었을 것이다.
+- 그러나 문제는 flag 떄와 같다. 만약 주문이 향후에 바뀐다면? 그 때는 주문이 바뀌는 순간 바로 update를 쳐줘야 한다.
+- 실시간성이 강력하게 요구된다. 그럼 insert와 동시에 update를 쳐야하니 성능이 떨어질 수밖에 없다.
+
+
+# index
+- index의 종류는 3가지다.
+  - 거의 대부분 B-tree다. 균형잡혀 있기 때문이다. 균형 잡혀 있고 데이터가 정렬상태를 유지하여 검색 성능이 뛰어나다.
+  - 비트맵 인덱스는 갱신이 잘 일어나지 않는 환경에서만 사용한다.
+  - 해시 인덱스는 거의 쓰이지 않는다.
+- index는 PK field에 자동으로 걸린다.
+  - 유일하기 때문에, 선택률이 매우 낮다. 카디널리티가 높은 것이다.
+  - 따라서 PK가 검색 조건으로 가장 좋다.
+
+
+- index를 활용할 수 없는 경우도 있다.
+- 저 조건에 따른 선택률이 20%라면 너무 높아서 index 검색이 오히려 성능이 나쁘다.
+```sql
+SELECT order_id, receive_date
+    FROM Orders
+    WHERE process_flg = '5';
+```
+
+- 마찬가지 이유로 매개변수에 따라 선택률이 달라지면 index가 큰 의미가 없다.
+- 선택률이 어떤 날짜에는 50%가 걸리고, 어떤 날짜에는 1%가 걸리는 경우, 극단적인 성능이 차이가 난다.
+```sql
+SELECT oredr_id 
+    FROM Orders
+    WHERE receive_date BETWEEN :start_date AND :end_date;
+```
+
+- LIKE 연산자를 사용할 때도 전방일치가 아니면 index가 작동하지 않는다.
+```sql
+SELECT order_id
+    FROM Orders
+    WHERE shop_name LIKE '%대공원%';
+```
+```sql
+SELECT order_id
+    FROM Orders
+    WHERE shop_name LIKE '%대공원';
+```
+- LIKE 연산자가 작동하는 경우는 전방일치 뿐이다.
+```sql
+SELECT order_id
+    FROM Orders
+    WHERE shop_name LIKE '대공원%';
+```
+
+- index field로 연산하는 경우도 index가 풀린다.
+```sql
+SELECT *
+    FROM SomeTable
+    WHERE index_column > 100;
+```
+
+- IS NULL을 사용해도 index가 풀린다.
+```sql
+SELECT *
+    FROM SomeTable
+    WHERE index_column IS NULL
+```
+
+- 함수를 사용해도 index가 풀린다.
+```sql
+SELECT * 
+    FROM SomeTable
+    WHERE LENGTH(index_column) = 10;
+```
+
+- 부정형을 사용해도 index가 풀린다.
+```sql
+SELECT *
+    FROM SomeTable
+    WHERE index_column <> 100;
+```
+
+- index를 성능이 안나오는 경우에는 UI 설계를 통해 검색 성능 저하를 해결해야 한다.
+- 점포 ID만으로 검색하지 않고, 주문일도 함께 입력하게 바꿔서 선택률을 낮춰 index 성능을 높인다.
+- 기간 검색을 1개월 단위로만 하여 partition을 설정해준다.
+- 특정 쿼리를 위해 필요한 데이터를 긁어 모은 table을 만든다. 농좆의 스크래핑이다. 데이터 마트라고 한다.
+
+# 데이터 마트
+- 보통 데이터 마트는 테이블 크기를 줄이는 게 목적이다. 그래야 I/O가 줄어 성능이 좋아지기 때문이다.
+- 실제로는 해쉬와 정렬 등을 사용하면, 검색도 쓰기가 일어나기 때문에 I/O 성능이 중요하다.
+- 따라서 SELECT * 혹은 선택률이 높아지면 절대 안된다. 데이터 마트를 만드는 이유가 없는 셈이다.
+
+
+# 커버링 인덱스
+- covering index는 table이 아닌 index만을 스캔 대상으로 삼기 때문에 성능이 매우 뛰어나다.
+- 원래 같았다면 아래와 같은 sql은 성능 발휘가 어렵다.
+```sql
+SELECT oredr_id, receive_date
+    FROM Orders;
+```
+
+- 하지만 select 되는 field에 index를 넣어주면 index로 검색하는 효과를 얻을 수 있다.
+- 테이블이 아닌 index만을 scan 대상으로 하면, INDEX FAST FULL SCAN이라는 execution plan이 뜬다.
+- 
+```sql
+CREATE INDEX CoveringIndex ON Orders (order_id, receive_date);
+```
+
+
+- 그럼 위에서 보았던 index 효과를 얻지 못하는 검색절도 다시 index 효과를 받을 수 있다.
+```sql
+CREATE INDEX CoveringIndex ON Orders (process_flg, order_id, receive_date);
+SELECT oredr_id, receive_date
+    FROM Orders
+    WHERE process_flg = '5'
+```
+
+```sql
+CREATE INDEX CoveringIndex ON Orders (shop_name, order_id, receive_date);
+SELECT order_id, receive_date
+    FROM Orders
+    WHERE shop_name LIKE '%대공원%';
+```
+
+- 다만 index는 테이블의 update 부하가 커진다.
+- 또한 covering index의 경우, SQL문에 field 변동이 일어나는 순간 무용지물이 되어버린다.
+- 따라서 covering index만 따로 관리하는 유지관리 정책이 필요하다.
