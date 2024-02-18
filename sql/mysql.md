@@ -579,3 +579,201 @@ from 급여;
 	id	select_type	table	partitions	type	possible_keys	  key	      key_len	ref	    rows	filtered	Extra
 	1	    SIMPLE	  급여	null      	index	I_사용여부        null	   4		   null    2838398	100.00	Using index
 ```
+
+
+## <span style="color:#802548">_sql 성능 튜닝_</span>
+### <span style="color:#802548">_where에 함수X_</span>
+- 사원번호가 1100으로 시작하면서 사원번호가 5자리인 사람을 출력해봅시다.
+
+```sql
+SELECT * 
+FROM 사원
+WHERE SUBSTRING(사원번호,1,4) = 1100
+AND LENGTH(사원번호) = 5
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		ALL					299379	100.00	Using where
+```
+- WHERE절에 함수를 쓰지 않습니다.
+- 함수를 쓰면 index를 타지 않습니다. 그 결과 type이 range에서 ALL이 되었습니다.
+- 아래와 같이 바꿔줍니다.
+```sql
+SELECT *
+FROM 사원
+WHERE 사원번호 BETWEEN 11000 AND 11009
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		range	PRIMARY	PRIMARY	4		10	100.00	Using where
+```
+
+### <span style="color:#802548">_IFNULL이 필요한지 고민_</span>
+- 성별이 null이면 No Data라고 출력해봅시다.
+```sql
+SELECT IFNULL(성별, 'NO DATA') AS 성별, COUNT(1) 건수
+FROM 사원
+GROUP BY IFNULL(성별, 'NO DATA')
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index; 
+```
+
+
+- 성별 column은 not null 컬럼입니다.
+- IFNULL을 쓰면 해당 처리를 위한 temp table이 생성됩니다. 그 결과 Using temporary가 추가되었습니다.
+```sql
+SELECT 성별, COUNT(1) 건수
+FROM 사원
+GROUP BY 성별
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
+```
+
+### <span style="color:#802548">_묵시적형변환을 없애라_</span>
+- 유효한 급여 정보만 조회해봅시다.
+```sql
+SELECT COUNT(1)
+FROM 급여
+WHERE 사용여부 = 1
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	급여		index	I_사용여부	I_사용여부	4		2838398	10.00	Using where; Using index
+```
+
+- 사용여부는 varchar입니다.
+- 따라서 그냥 1로 비교하면 '1'로 바꾸기 위한 묵시적 형변환이 일어나게 됩니다. 
+- 형변환 함수를 쓰면 적절한 index를 타지 않습니다. 그 결과 type이 ref가 아닌 index가 되었습니다.
+```sql
+SELECT COUNT(1)
+FROM 급여
+WHERE 사용여부 = '1'
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	급여		ref	I_사용여부	I_사용여부	4	const	82824	100.00	Using index
+```
+
+### <span style="color:#802548">_PK가 포함된 row는 DISTINCT X_</span>
+- 부서 관리자의 사원번호와 이름, 성, 부서번호 데이터를 중복 제거하여 조회해봅시다.
+```sql
+SELECT DISTINCT 사원.사원번호, 사원.이름, 사원.성, 부서관리자.부서번호
+FROM 사원
+JOIN 부서관리자
+ON (사원.사원번호 = 부서관리자.사원번호)
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	부서관리자		index	PRIMARY	I_부서번호	12		24	100.00	Using index; Using temporary
+	1	SIMPLE	사원		eq_ref	PRIMARY	PRIMARY	4	tuning.부서관리자.사원번호	1	100.00	
+```
+
+- 사원번호는 PK입니다. 따라서 row들은 중복이 있을 수가 없습니다.
+- 그럼에도 DISTINCT를 사용하는 바람에 정렬- 삭제 작업을 위한 temp table이 추가됐습니다.
+- 실행계획에서 Using temporary가 추가되었습니다.
+```sql
+SELECT 사원.사원번호, 사원.이름, 사원.성, 부서관리자.부서번호
+FROM 사원
+JOIN 부서관리자
+ON (사원.사원번호 = 부서관리자.사원번호)
+```
+
+
+### <span style="color:#802548">_겹치지 않는다면 UNION ALL_</span>
+- 성별이 남자이며 성이 Baba인 경우, 성이 Baba이며 성별이 여자인 경우를 조회해봅시다.
+```sql
+SELECT 'M' AS 성별, 사원번호
+FROM 사원
+WHERE 성별 = 'M'
+AND 성 = 'Baba'
+
+UNION
+
+SELECT 'F', 사원번호
+FROM 사원
+WHERE 성별 = 'F'
+AND 성 = 'Baba'
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	PRIMARY	사원		ref	I_성별_성	I_성별_성	51	const,const	135	100.00	Using index
+	2	UNION	사원		ref	I_성별_성	I_성별_성	51	const,const	91	100.00	Using index
+	3	UNION RESULT	<union1,2>		ALL							Using temporary
+```
+
+- UNION은 DISTINCT와 마찬가지입니다.
+- 정렬 후 중복 삭제를 위해 temp table을 만듭니다.
+- 그래서 UNION RESULT select_type이 추가되었습니다.
+- 그러나 성별이 남자이면서 여자인 경우는 없습니다. 중복제거가 무의미한 셈입니다.
+- 아래와 같이 단순히 합치는 걸로 바꿔주면 UNION RESULT는 사라집니다.
+```sql
+SELECT 'M' AS 성별, 사원번호
+FROM 사원
+WHERE 성별 = 'M'
+AND 성 = 'Baba'
+
+UNION ALL
+
+SELECT 'F', 사원번호
+FROM 사원
+WHERE 성별 = 'F'
+AND 성 = 'Baba'
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	PRIMARY	사원		ref	I_성별_성	I_성별_성	51	const,const	135	100.00	Using index
+	2	UNION	사원		ref	I_성별_성	I_성별_성	51	const,const	91	100.00	Using index
+```
+
+### <span style="color:#802548">_index 순서대로 GROUP BY해라_</span>
+- 성과 성별로 묶어서 조회해보자.
+```sql
+SELECT 성, 성별, COUNT(1) AS 카운트
+FROM 사원
+GROUP BY 성, 성별
+```
+
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index; Using temporary
+```
+
+- index를 활용하면 보통 temp table이 필요없습니다. 그런데도 Using temporary가 있습니다.
+- 그 이유는 I_성별_성 index가 성별, 성 순으로 정렬되었기 때문입니다.
+- show index from 사원으로 보면 알 수 있습니다.
+- 즉 group by를 할 때 성먼저하고 성별이 아니라, 성별 먼저 하고 성이어야 합니다.
+- 그렇지 않으면 다시 임시테이블을 생성해 group by에 쓰인 순서에 맞게 정렬하는 과정이 필요한 것입니다.
+
+```
+	Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+	사원	0	PRIMARY	1	사원번호	A	299379				BTREE			YES	
+	사원	1	I_입사일자	1	입사일자	A	4645				BTREE			YES	
+	사원	1	I_성별_성	1	성별	A	1				BTREE			YES	
+	사원	1	I_성별_성	2	성	A	3154				BTREE			YES	
+```
+
+- 아래와 같이 바꿔줍니다.
+- using temp가 사라졌습니다.
+```sql
+SELECT 성, 성별, COUNT(1) AS 카운트
+FROM 사원
+GROUP BY 성별, 성
+```
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
+```
+
+### <span style="color:#802548">_많이 filter할 수 있는 조건을 앞으로_</span>
+- 입사일자와 사원번호를 기준으로 filtering을 해 조회해보자.
+```sql
+SELECT 사원번호
+FROM 사원
+WHERE 입사일자 LIKE '1989%'
+AND 사원번호 > 100000;
+```
+
