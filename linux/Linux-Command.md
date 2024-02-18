@@ -171,6 +171,8 @@ kill -9 [프로세스아이디] :
 ```sh
 find / -name [파일명] :
 ## 해당 파일명이 들어있는 path를 보여준다.
+find /etc/home -name jenkins 
+#/etc/home 아래에 jenkins라는 파일이 존재하는지 확인하여 경로를 알려준다.
 ```
 ```sh
 ㅡ which [명령어] :
@@ -256,23 +258,24 @@ wget [도메인] :
 
 - 예를 들어 아래와 같이 쓸 수 있다. cfr은 decompiler다. 
 ```sh
-wget http://www.benf.org/other/cfr/cfr-0.152.jar﻿
+wget http://www.benf.org/other/cfr/cfr-0.152.jar
+# 웹 상의 파일 다운로드
+curl -0 https://www.example.com/index.html 
+# 웹 상의 파일 다운로드
 ```
 
 ```sh
 tar -xvzf apache-tomcat-8.5.85.tar.gz : 
-## tar 압축을 푼다. tar 파일을 wget으로 받게되면 해당 명령어를 사용해 압축을 해제한다.
+# tar 압축을 푼다. tar 파일을 wget으로 받게되면 해당 명령어를 사용해 압축을 해제한다.
 ```
-
- 
 
 ## <span style="color:#802548">_7. 네트워크_</span>
 ```sh
-ping -c 5 [domain] : 
+ping -c 5 [domain or IP] : 
 ## 해당 domain이 dns서버에 등록되어 있는지 확인한다.
 ```
 - 만약 없다면 아래와 같이 name resolution fail오류가 뜬다. 
-
+- ping이 안된다고 늘 접속 문제는 아니다. 보안을 이유로 ICMP 패킷에 응답하지 않는 서버도 존재한다.
 
 ​
 ```sh
@@ -299,6 +302,10 @@ netstat -tnlp
 - 아래와 같이 줄여서 정보가 나온다.
 - 참고로 telnet은 보안 상 문제가 있어 쓰지 않는 것을 권장한다고 한다. 
 
+```sh
+ifconfig 
+# 네트워크 ip주소 확인
+```
 ​
 
 
@@ -362,4 +369,59 @@ jar -cvf myclass.jar BoardDAO.class BoardDTO.class  :
 ```sh
 jar -xvf myclass.jar : 
 ## jar 압축풀어 class 파일로 나누기
+```
+
+## <span style="color:#802548">_10. 압축관련_</span>
+```sh
+zcat rgb.txt.gz 
+#gz압축풀지 않고 안의 내용물만 출력
+xzcat rgb.txt.gz 
+#tz압축풀지 않고 안의 내용물만 출력
+tar xzf jenkins.tar.gz 
+#gz압축을 풀기
+```
+
+## <span style="color:#802548">_11. 표준입출력_</span>
+```sh
+ps > ps.txt 
+# ps 명령어의 결과를 ps.txt라는 파일로 전환. 만약에 ps.txt가 존재한다면 덮어쓰고 없다면 새로 생성
+ps >> ps.txt 
+# ps 명령어의 결과를 ps.txt라는 파일로 전환. ps.txt가 존재한다면 그 끝에 append 없다면 새로 생성
+ls 2> errfile.txt 
+#표준 에러 출력을 errfile.txt 파일에 출력합니다. 에러가 없다면 errfile에는 내용이 없다.
+ls 2>&1 > normalfile.txt 
+# 표준 출력을 normalfile.txt에 저장하고, 그 뒤에 오류도 표준 출력에 포함하여 터미널에 나타낸다. 즉 일단 표준 출력만 file에 저장된다.
+ls > allfile.txt 2>&1 #표준 에러출력과 표준 출력을 모두 file에 저장합니다.
+ls >& file #표준 에러출력과 표준 출력을 모두 file에 저장합니다.
+ls 2> /dev/null #에러를 출력하지 않습니다.
+```
+
+## <span style="color:#802548">_12. 변수확인_</span>
+```sh
+declare 
+# 유효한 쉘 변수 표시
+printenv 
+# 유효한 환경 변수 표시
+VARNAME=value123 
+# 변수명 = 값/ 쉘 변수 설정 띄어쓰기 없이 다 붙여써야함.
+unset VARNAME 
+# 쉘 변수 해제
+export name=value 
+# 환경변수 설정
+source ~/.bashrc 
+# 셸 재시작 없이 설정파일 변경 반영
+```
+
+## <span style="color:#802548">_13. 서버 접속_</span>
+```sh
+ssh rrr@111.11.231.11 -p 1110 
+# 해당 서버에 해당 계정으로 접속한다.
+sftp id@[ip or domain]  
+# 파일을 전송하기 위해 해당 서버 접속
+mget file 
+# 내 서버로 파일을 가져온다. sftp 접속 이후 process에서 사용 가능한 command
+mput file 
+# 해당 서버로 파일을 보낸다. sftp 접속 이후 process에서 사용 가능한 command
+scp root@111.223.44.11:~/file 
+# 해당 서버로 파일을 암호화하여 전송. sftp와 별개
 ```
