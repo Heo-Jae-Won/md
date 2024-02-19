@@ -582,7 +582,7 @@ from 급여;
 
 
 ## <span style="color:#802548">_sql 성능 튜닝_</span>
-### <span style="color:#802548">_where에 함수X_</span>
+## <span style="color:#802548">_where에 함수X_</span>
 - 사원번호가 1100으로 시작하면서 사원번호가 5자리인 사람을 출력해봅시다.
 
 ```sql
@@ -608,7 +608,7 @@ WHERE 사원번호 BETWEEN 11000 AND 11009
 	1	SIMPLE	사원		range	PRIMARY	PRIMARY	4		10	100.00	Using where
 ```
 
-### <span style="color:#802548">_IFNULL이 필요한지 고민_</span>
+## <span style="color:#802548">_IFNULL이 필요한지 고민_</span>
 - 성별이 null이면 No Data라고 출력해봅시다.
 ```sql
 SELECT IFNULL(성별, 'NO DATA') AS 성별, COUNT(1) 건수
@@ -633,7 +633,7 @@ GROUP BY 성별
 	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
 ```
 
-### <span style="color:#802548">_묵시적형변환을 없애라_</span>
+## <span style="color:#802548">_묵시적형변환을 없애라_</span>
 - 유효한 급여 정보만 조회해봅시다.
 ```sql
 SELECT COUNT(1)
@@ -658,7 +658,7 @@ WHERE 사용여부 = '1'
 	1	SIMPLE	급여		ref	I_사용여부	I_사용여부	4	const	82824	100.00	Using index
 ```
 
-### <span style="color:#802548">_PK가 포함된 row는 DISTINCT X_</span>
+## <span style="color:#802548">_PK가 포함된 row는 DISTINCT X_</span>
 - 부서 관리자의 사원번호와 이름, 성, 부서번호 데이터를 중복 제거하여 조회해봅시다.
 ```sql
 SELECT DISTINCT 사원.사원번호, 사원.이름, 사원.성, 부서관리자.부서번호
@@ -683,7 +683,7 @@ ON (사원.사원번호 = 부서관리자.사원번호)
 ```
 
 
-### <span style="color:#802548">_겹치지 않는다면 UNION ALL_</span>
+## <span style="color:#802548">_겹치지 않는다면 UNION ALL_</span>
 - 성별이 남자이며 성이 Baba인 경우, 성이 Baba이며 성별이 여자인 경우를 조회해봅시다.
 ```sql
 SELECT 'M' AS 성별, 사원번호
@@ -729,7 +729,7 @@ AND 성 = 'Baba'
 	2	UNION	사원		ref	I_성별_성	I_성별_성	51	const,const	91	100.00	Using index
 ```
 
-### <span style="color:#802548">_index 순서대로 GROUP BY해라_</span>
+## <span style="color:#802548">_index 순서대로 GROUP BY해라_</span>
 - 성과 성별로 묶어서 조회해보자.
 ```sql
 SELECT 성, 성별, COUNT(1) AS 카운트
@@ -768,12 +768,220 @@ GROUP BY 성별, 성
 	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
 ```
 
-### <span style="color:#802548">_많이 filter할 수 있는 조건을 앞으로_</span>
+## <span style="color:#802548">_where 조건문은 access와 filter로 나뉜다_</span>
 - 입사일자와 사원번호를 기준으로 filtering을 해 조회해보자.
+- 아래와 같이 두개를 쓸 수 있다.
 ```sql
 SELECT 사원번호
 FROM 사원
 WHERE 입사일자 LIKE '1989%'
 AND 사원번호 > 100000;
 ```
+```sql
+SELECT 사원번호
+FROM 사원
+where 사원번호 > 100000;
+and 입사일자 LIKE '1989%'
+```
 
+- 두 개의 조건 중 어떤 걸 앞으로 놓는게 좋을까?
+- index를 쓰는 column 혹은 more selective(row가 작은 것)이 좋다.
+- 그를 알기 위해서는 아래와 같이 select나 show가 필요하다.
+```sql
+show index from 사원;
+```
+- cardinality가 높은 게 좋다. 
+- 그럼 more selective하기 때문이다. 그만큼 unique하다는 것이다. 사실 PK라서 높은 것이다.
+- 다만 여기선 =가 아니라 >로 비교하기 때문에 index range scan이 되어 이점이 깎인다.
+```
+	Table	Non_unique	Key_name	  Seq_in_index	Column_name	 Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible	Expression
+	사원	0	          PRIMARY	    1	            사원번호	    A	          299379				                      BTREE			                        YES	
+	사원	1	          I_입사일자	 1	           입사일자	     A	         4645				                         BTREE			                       YES	
+	사원	1	          I_성별_성	   1	           성별	        A	           1				                          BTREE			                         YES	
+	사원	1	          I_성별_성	   2	           성	          A	           3154				                        BTREE			                         YES	
+```
+
+- 이젠 filtering을 얼마나 많이 해주냐를 봐야 한다.
+- 입사일자 LIKE '1989%'가 더 많이 filtering해준다.
+```sql
+SELECT COUNT(1) FROM 사원
+WHERE 입사일자 LIKE '1989%'; 	
+```
+```
+COUNT(1)
+	28394
+```
+```sql
+SELECT COUNT(1) FROM 사원
+WHERE 사원번호 > 100000;
+```
+```
+COUNT(1)
+	210024
+```
+
+- 이 경우에는 많이 filtering하는 조건이 더 좋을 것이다.
+- 입사일자도 index가 있기 때문이다.
+```sql
+SELECT 사원번호
+FROM 사원
+WHERE 입사일자 LIKE '1989%'
+AND 사원번호 > 100000;
+```
+```
+	1	SIMPLE	사원		range	PRIMARY,I_입사일자	PRIMARY	4		149689	11.11	Using where
+```
+- LIKE 후방일치보다는 아래와 같이 조건식을 써주는 게 좋다.
+- 그럼 Using index가 추가된다. type은 range여도, table scan이 아니라 index를 이용해 가져오게 바뀐다.
+- Using index라는 것은 테이블에 접근하지 않고 스토리지 엔진에서 I_입사일자(key) 라는 index에 있는 데이터만 가져옴을 의미한다.
+- 그 뒤 mysql 엔진에서 사원번호에 대한 필터 조건으로 데이터를 추출한다.
+```sql
+SELECT 사원번호
+FROM 사원
+WHERE '1989-01-01' <= 입사일자 AND 입사일자 < '1990-01-01' /** storage engine access 조건 */
+AND 사원번호 > 100000; /** mysql engine filtering 조건 */
+```
+```
+	1	SIMPLE	사원		range	PRIMARY,I_입사일자	I_입사일자	7		49820	50.00	Using where; Using index
+```
+- 아래가 chatGPT의 답변이다.
+- where문에 쓰이는 조건은 access조건일 수도, filtering 조건일 수도 있다는 점이다.
+- 주로 access조건에는 index가 있는 column이 쓰인다. explain에서 key로 되어있는 column이 곧 access condition으로 쓰인 것이다.
+- 무조건 처음 오는 조건이 access condition이라고 optimizer가 해석하지는 않는다. 다만 그렇게 하는 게 읽기 좋은 쿼리문이다.
+```
+Access Conditions:
+
+Access conditions are used to retrieve specific rows from tables by directly accessing indexes or table partitions.
+These conditions are typically based on columns that are indexed or partitioned, allowing the database optimizer to efficiently locate and retrieve relevant rows.
+Examples of access conditions include conditions on primary keys, unique keys, or columns with indexes.
+Access conditions are often placed first in the WHERE clause to maximize index usage and minimize the number of rows accessed.
+Filtering Conditions:
+
+Filtering conditions are used to further refine the result set by applying additional criteria to the rows retrieved through access conditions.
+These conditions are applied after accessing the relevant rows and are used to filter out rows that do not meet certain criteria.
+Filtering conditions are typically based on columns that are not indexed or are less selective, such as text columns or columns with complex data types.
+Examples of filtering conditions include conditions based on non-indexed columns, functions, or expressions.
+Filtering conditions are often applied after access conditions and may involve more intensive processing, such as scanning large portions of the table or performing complex calculations.
+To determine which conditions belong to access and which belong to filtering, consider the following guidelines:
+
+Access conditions typically involve conditions on indexed or partitioned columns that are used to efficiently locate specific rows in the table.
+Filtering conditions typically involve additional criteria applied to the rows retrieved through access conditions to further refine the result set.
+Additionally, you can analyze the execution plan generated by the database optimizer to understand how the conditions are being processed. The execution plan provides insights into how the query is being executed, including the access methods used and the order of condition evaluation. This can help identify opportunities for optimization and ensure that access and filtering conditions are being applied effectively.
+```
+
+## <span style="color:#802548">_선택률이 높다면 index를 쓰지 말라_</span>
+- index가 있는 column이라고 해도, 선택률이 높으면 full scan만도 못하다.
+```sql
+SELECT *
+FROM 사원출입기록
+WHERE 출입문 = 'B'
+```
+
+- 아래와 같이 index를 없애는 hint를 주자.
+```sql
+SELECT * /*+ IGNORE_INDEX(I_출입문)*/ 
+FROM 사원출입기록
+WHERE 출입문 = 'B';
+```
+- oracle은 아래와 같다.
+```sql
+SELECT /*+ INDEX(사원출입기록 NO_INDEX(I_출입문)) */ *
+FROM 사원출입기록
+WHERE 출입문 = 'B';
+```
+
+- 다른 예시를 들어보자.
+- 우변을 가공해서 사용하는 경우는 index를 불러오는 데 문제가 되진 않는다.
+- 다만 입사일자라는 indexed column, 좌변을 함수로 가공하면 그 땐 index를 잃어버린다.
+```sql
+select 이름,성
+FROM 사원
+WHERE 입사일자 BETWEEN STR_TO_DATE('1994-01-01', '%Y-%m-%d') AND STR_TO_DATE('2000-12-31', '%Y-%m-%d');
+```
+- 물론 그래도 함수를 쓰면 overhead가 생기니 안 쓸수 있다면 안 쓰는게 좋다.
+```sql
+select 이름, 성
+FROM 사원
+WHERE 입사일자 BETWEEN '1994-01-01' AND '2000-12-31'
+```
+
+- 만약 indexed date type column을 썼는데 선택률이 높다면?
+- 오히려 좌변에 함수를 써야 한다. full scan으로 바꿔서 성능을 올려야 한다.
+```sql
+select 이름, 성
+FROM 사원
+WHERE year(입사일자) BETWEEN '1994' AND '2000';
+```
+
+- 참고로 현재 내 optimizer는 알아서 ALL scan 때리게 최적화해주고 있다.
+
+
+
+## <span style="color:#802548">_불필요한 서브쿼리 지우기-WHERE_</span>
+- 사원번호가 450,000보다 크고 최대연봉이 100,000보다 큰 사원을 조회해보자.
+```sql
+SELECT 사원.사원번호, 사원.이름, 사원.성
+FROM 사원
+WHERE 사원번호 > 450000
+AND (SELECT MAX(연봉)
+      FROM 급여
+      WHERE 사원번호 = 사원.사원번호
+      ) > 100000;
+```
+
+```
+	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+	1	PRIMARY	사원		range	PRIMARY	PRIMARY	4		104330	100.00	Using where
+	2	DEPENDENT SUBQUERY	급여		ref	PRIMARY	PRIMARY	4	tuning.사원.사원번호	9	100.00	
+```
+
+- 실행계획을 보면 상관서브쿼리가 사용되었음을 알 수 있다. 실행계획을 살펴보면 아래와 같다.
+```
+1. FROM 절의 main table인 사원 테이블에 접근. 
+2. 접근 방식은 사원 테이블의 PK이며, range scan을 활용.
+3. 다음으로 급여 테이블에 접근
+4. 급여 테이블은 PK는 (사원번호, 시작일자)다. 시작일자가 아니라 사원번호로 조회하기 때문에 index를 타게 된다.
+```
+
+- 서브쿼리를 join으로 바꿔보자.
+- join으로 바꾸는 이유는 안정적인 실행계획을 만들기 위해서다.
+```sql
+SELECT 사원.사원번호, 사원.이름, 사원.성
+FROM 사원, 급여
+WHERE 사원.사원번호 > 450000
+AND 사원.사원번호 = 급여.사원번호
+GROUP BY 사원.사원번호
+HAVING MAX(급여.연봉) > 100000;
+```
+
+
+## <span style="color:#802548">_불필요한 서브쿼리 지우기-FROM_</span>
+- 불필요한 서브쿼리는 from절에도 자주 나타난다.
+- A출입문으로 출입한 사원이 총 몇명인지 구해보자.
+```sql
+SELECT COUNT(DISTINCT 사원.사원번호) AS 데이터건수
+FROM 사원, (SELECT 사원번호
+            FROM 사원출입기록 기록
+            WHERE 출입문 = 'A'
+            ) 기록
+WHERE 사원.사원번호 = 기록.사원번호;
+```
+
+- 사실 위의 sql문은 view-merging되어 아래와 같이 join으로 수행된다.
+```sql
+SELECT COUNT(DISTINCT 기록.사원번호) AS 데이터건수
+FROM 사원, 사원출입기록 기록
+WHERE 사원.사원번호 = 기록.사원번호
+AND 출입문 = 'A';
+```
+
+- 그걸 아래와 같이 WHERE EXISTS로 바꿔주자.
+- DISTINCT는 필요가 없으니 지워준다. 사원번호는 어차피 PK라 DISTINCT가 필요가 없다.
+```sql
+SELECT COUNT(1) AS 데이터건수
+FROM 사원
+WHERE EXISTS (SELECT 1
+              FROM 사원출입기록 기록
+              WHERE 출입문 = 'A'
+              AND 기록.사원번호 = 사원.사원번호);
+```              

@@ -95,3 +95,98 @@ ORDER BY 연도 DESC, 종류, 차수;
 1	PRIMARY	            t1		ALL					10	100.00	Using filesort
 2	DEPENDENT SUBQUERY	t2		ALL					10	10.00	Using where
 ```
+
+
+## <span style="color:#802548">_해당 디바이스 아이디의 고객번호를 찾아주세요!_</span>
+- 서브쿼리를 아래와 같이 쓸 수 있다.
+
+```sql
+select cusno, grdc
+from entry
+where cusno = (
+    select cusno
+    from device
+    where devcId = #{devcId}
+)
+```
+
+- where exists로 검색해야하는 양이 적다면, where exists가 효율성은 더 좋다.
+```sql
+select cusno, grdc
+from entry en
+where exists (
+    select 1
+    from device de
+    where devcId = #{devcId}
+    and en.cusno = de.cusno
+)
+```
+
+- 만약 cusno가 entry와 device가 공유하는 컬럼이라면, join으로 가져올 수 있다.
+- 3개 중에는 join이 가장 효율적일 수도 있다.
+```sql
+select en.cusno, en.grdc
+from entry en
+inner join device de
+on en.cusno = de.cusno
+where de.devcId = #{devcId}
+```
+
+## <span style="color:#802548">_해당 디바이스아이디의 고객번호의 비밀번호 오류를 초기화할게요!_</span>
+
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE cusno = (
+    SELECT cusno
+    FROM device
+    WHERE deviceid = #(devcid)
+    AND devcuyn = 'y'
+);
+```
+
+- where exists로 바꾸면 아래와 같이 된다.
+- where exists를 쓰는 이유는 optimizer가 제대로 작동하지 않을 때 더 나은 방식이기 때문이다.
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE EXISTS (
+    SELECT 1
+    FROM device
+    WHERE device.deviceid = #(devcid)
+    AND device.devcuyn = 'y'
+    AND device.cusno = entry.cusno
+);
+```
+
+- devcuyn이 y인 deviceId는 한개 밖에 없다면, 맨 밑의 cusno 조건도 필요없다.
+- 하지만 저 조건을 넣어서 안 타던 index를 탈 수 있다면 넣는게 좋다.
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE EXISTS (
+    SELECT 1
+    FROM device
+    WHERE device.deviceid = #(devcid)
+    AND device.devcuyn = 'y'
+);
+```
+
+- 참고로 IN문도 WHERE EXIST로 바꿀 수 있다.
+```sql
+SELECT name
+    FROM Address
+    WHERE name in (SELECT name FROM Address2)
+```
+```sql
+SELECT name
+FROM Address AS A
+WHERE EXISTS (
+    SELECT 1
+    FROM Address2 AS A2
+    WHERE A.name = A2.name
+);
+```

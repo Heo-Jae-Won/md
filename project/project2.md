@@ -1,3 +1,5 @@
+## <span style="color:#802548">_파일을 만들고 권한 주기_</span>
+
 - 옛날버전
 
 ```java
@@ -51,6 +53,7 @@ public class Main {
 }
 ```
 
+## <span style="color:#802548">_stream으로 sum하기_</span>
 - stream으로 특정 field를 sum할 때
 
 ```java
@@ -110,6 +113,7 @@ class ConviDto {
 }
 ```
 
+## <span style="color:#802548">_server에서 다른 server로 request_</span>
 - resttemplate은 옛날 버전
 ```java
 public class Main {
@@ -197,6 +201,8 @@ public class Main {
     }
 }
 ```
+
+## <span style="color:#802548">_만 나이 계산_</span>
 - 옛날 기준 만나이 계산
 ```java
 public static int getAge(int birthYear, int birthMonth, int birthDay){
@@ -236,6 +242,7 @@ public class Main {
 }
 ```
 
+## <span style="color:#802548">_enum의 constant_</span>
 - enum constant는 subclass이므로 field를 protected로 줘야 한다.
 ```java
 public enum Trash {
@@ -294,6 +301,7 @@ public enum Trash {
 }
 ```
 
+## <span style="color:#802548">_if문 refactoring_</span>
 - 아래 방식은 코드 반복은 줄어드나, 읽기에 매우 안 좋은 방식이니 비추천.
 ```java
 String deviceOS = dao.selectDevcOS();
@@ -671,6 +679,7 @@ if("Y".equals(registered) && ("99".equals(responseCode) || "0".eqauls(value1)) )
 }
 ```
 
+## <span style="color:#802548">_파일을 하나만 등록하고 여러곳에서 사용하는 query_</span>
 - 등록해 둔 배너 이미지, 내용을 3개의 다른 곳에서 사용할 수 있게 조회하는 쿼리
 ```sql
 select RN as BNNR_DS,
@@ -704,6 +713,8 @@ select RN as BNNR_DS,
         on to_char(sysdate, 'YYYYMMDDHH24MISS') BETWEEN BNNR_ST_DTM AND BNNR_ED_DTM
 ```
 
+
+## <span style="color:#802548">_날짜는 char가 아닌 date type으로_</span>
 - 사실 날짜는 db에 char 타입으로 저장하는 게 매우 좋지 않다.
 - 오늘 날짜와 비교하려는 경우, to_char와 같이 불필요한 function이 들어간다.
 - date type이 char type보다 index를 활용할 때 더 optimizer가 잘 최적화해준다.
@@ -740,6 +751,7 @@ select RN as BNNR_DS,
         on sysdate BETWEEN BNNR_ST_DTM AND BNNR_ED_DTM
 ```
 
+## <span style="color:#802548">_특정 값 먼저노출되게 정렬하는 query_</span>
 - 자기 회사 우선하여 가져오기(여기선 project1)
 ```sql
 SELECT UP_C_ID,
@@ -789,6 +801,7 @@ WHERE UP_C_ID = 13
 ORDER BY ORDER_NO, COMN_CNM, COMN_C_ID, RMK_CNTN2;
 ```
 
+## <span style="color:#802548">_tomcat bio과 nio_</span>
 - tomcat connector는 nio가 더 좋다.
 - bio는 예전 시대의 산물이다.
 - nio를 써야 동접자(CCU)가 많아도 처리가 가능하다. 반응성도 높아진다. 다만 비동기인지라 예측하지 못하는 상황도 생긴다.
@@ -909,6 +922,8 @@ public class BioServerExample {
 }
 ```
 
+
+## <span style="color:#802548">_파일 비동기로 다루기_</span>
 - 위의 예시는 network에 관한 예시다.
 - file은 사실 Java에서는 대부분 BIO방식을 쓴다.
 - 하지만 비동기 IO도 가능하다.
@@ -1088,6 +1103,7 @@ public class AsyncFileUploadRetryExample {
 }
 ```
 
+## <span style="color:#802548">_다른 상위 분류 선택시 하위 분류 선택 css 초기화_</span>
 - 핸드폰 팝업에서 select 같이 보이는 것들 선택했을 떄, 다른 선택 css 처리 초기화
 ```js
 $('.popup').each(function() {
@@ -1125,7 +1141,7 @@ $('.popup').each(function() {
 })
 ```
 
-
+## <span style="color:#802548">_서로 다른 내용 합치는 query refactoring_</span>
 - 아래 서브쿼리는 서브쿼리가 아주 깊다.
 - 안내
 ```sql
@@ -1221,9 +1237,125 @@ FROM
     ) sub;
 ```
 
+## <span style="color:#802548">_효율적인 Java method 사용_</span>
 - 그저 해당 문자열이 있는지만 비교할 거라면, substring.eqauls를 쓸 필요가 없다.
 - indexOf로 가져오면 된다.
 ```java
 string.substring().equals() //substring creation overhead
 string.indexOf() >= 1       //better
 ```
+
+
+
+## <span style="color:#802548">_js literal map 활용하기_</span>
+- if문으로 전개하면 아래와 같은 형태일 것이다.
+```js
+if (payload.responseCode =='0') {
+    //logic
+    openFailLayer();
+} else if(payload.responseCode == '1') {
+    //logic
+    location.href = '/성공';
+} else {
+    //logic
+    openFailLayer();
+}
+```
+
+- magic number를 피해주자.
+```js
+const IDENTITY_NOT_AUTHENTICATED = '0';
+const IDENTITY_AUTHENTICATED = '1';
+const IDENTITY_NOT_OWNED = '2';
+if (payload.responseCode == IDENTITY_NOT_AUTHENTICATED) {
+    //logic
+    openFailLayer();
+} else if (payload.responseCode == IDENTITY_AUTHENTICATED) {
+    //logic
+    location.href = '/성공';
+} else if (payload.responseCode == IDENTITY_NOT_OWNED) {
+    //logic
+    openFailLayer();
+}
+```
+
+- if문도 좋지만, 아래와 같이 객체에 넣어서 좀 더 잘게 쪼개는 것도 가능하다.
+```js
+const IDENTITY_NOT_AUTHENTICATED = '0';
+const IDENTITY_AUTHENTICATED = '1';
+const IDENTITY_NOT_OWNED = '2';
+const authenticationMap = {
+    IDENTITY_NOT_AUTHENTICATED: function() {
+        //logic
+        return false;
+    },
+    IDENTITY_AUTHENTICATED: function() {
+        //logic
+        return true;
+    },
+    IDENTITY_NOT_OWNED: function() {
+        //logic
+        return false;
+    }
+}
+
+function executePostAuthentication(resultCode) {
+    authenticationMap[resultCode]();
+}
+
+function authAjax() {
+    $.ajax({
+
+    }),
+    success: function(res,status,xhr) {
+        var payload = JSON.parse(res.payload);
+
+        if (executePostAuthentication(payload.resultCode) == false) {
+            openFailLayer();
+        }
+    }
+}
+```
+
+
+
+## <span style="color:#802548">_controller가 아닌 service에서 refacotring_</span>
+- 가입 조건이 바뀌어 로직을 추가해야 했다.
+- 그러나 갑사의 convention에 묶여 controller단에서는 중첩 if가 강제였다.
+- finally에서 encPayload를 해서 return을 해야했기 때문이다. early return이 불가능했다.
+```java
+HashMap<String, Object> checkPasswordMap = new HashMap<>();
+if( "2".equals(dscCode) ) {
+    checkPasswordMap = Service.checkPassword(payloadMap);
+    String responseCode = String.valueOf(checkPasswordMap.get("RT_CD"));
+    if( "0000".equals(responseCode) ) {
+        outputMap = Service.requestCard(inputMap);
+    } else {
+        outputMap.putAll(checkPasswordMap);
+    }
+} else {
+    outputMap = Service.requestCard(inputMap);
+}
+```
+
+- convention을 준수하면서 소스코드를 좀 더 깔끔하게 쓰려면 Service단으로 분기 로직을 옮겨야 했다.
+- 그럼 early return을 활용해 좀 더 깔끔하게 코드를 쓸 수 있다.
+```java
+HashMap<String, Object> retMap = new HashMap<>();
+String responseCode = "";
+if( "1".equals(dscCode) ) {
+    retMap = IF_A();
+    
+    return retMap
+} else if( "2".equals(dscCode)) {
+    retMap = Service.checkPassword(inputMap);
+    responseCode = String.valueOf(retMap.get("RT_CD"));
+}
+
+if( "0000".equals(responseCode)) {
+    retMap = IF_A();
+}
+
+return retMap;
+```
+
