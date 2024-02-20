@@ -107,8 +107,8 @@ EXPLAIN query문
 ```
 
 ```
-id      |select_type        |table      |partitions     |type       |possible_keys      |key            |key_len        |ref        |rows       |filterd        |extra
-1       |SIMPLE             |사원       |NULL           |range      |primary            |primary        |4              |NULL       |20080      |100.00         |Using Where
+id      |select_type        |table                |type       |possible_keys      |key            |ref     |extra
+1       |SIMPLE             |사원                 |range      |primary            |primary         |NULL   |Using Where
 ```
 
 - id
@@ -124,10 +124,10 @@ WHERE 사원.사원번호 = 10001
 AND 사원.사원번호 = 급여.사원번호; /**oracle join은 from의 앞이 driving table이다. */
 ```
 ```
-id      |select_type        |table      |partitions     |type       |possible_keys       |key            |key_len        |ref         |rows        |filterd        |extra
-1       |PRIMARY             |사원       |NULL           |const      |primary            |primary        |4              |const       |1           |100.00         |null
-1       |PRIMARY             |급여       |NULL           |ref        |primary            |primary        |4              |const       |17          |100.00         |null
-2       |DEPENDENT SUBQUERY  |사원       |NULL           |null       |null               |null           |null           |NULL        |20080       |100.00         |Select tables optimized away
+id      |select_type         |table        |type      |possible_keys       |key                 |ref       |extra
+1       |PRIMARY             |사원         |const      |primary            |primary             |const     |null
+1       |PRIMARY             |급여         |ref        |primary            |primary             |const     |null
+2       |DEPENDENT SUBQUERY  |사원         |null       |null               |null                |NULL      |Select tables optimized away
 ```
 
 ## <span style="color:#802548">_selecttype_</span>
@@ -151,8 +151,8 @@ id      |select_type        |table      |partitions     |type       |possible_ke
 SELECT * FROM 사원
 ```
 ```
-	id	select_type	  table	partitions	type	possible_keys	key	key_len	ref	  rows	filtered	Extra
-	1	SIMPLE	사원		ALL		 null			  null  null          null  null  null  299379	100.00	null
+	id	select_type	  table		type	possible_keys	key		ref	  Extra
+	1	  SIMPLE	      사원		ALL		 null			    null  null   null
 ```
 
 - subquery인데도 SIMPLE로 뜨는 경우도 있다.
@@ -167,9 +167,9 @@ SELECT 사원.사원번호, 사원.이름, 사원.성, 급여.연봉
     AND 사원.사원번호 BETWEEN 10001 AND 10010;
 ```
 ```
-	id	select_type	table	partitions	  type	    possible_keys	  key	           key_len	ref	                    rows	filtered	    Extra
-	1	  SIMPLE	    사원		null        range	    PRIMARY	        PRIMARY	        4	      null                    10	     100.00	    Using where
-	1	  SIMPLE	    급여		null        ref	      PRIMARY	        PRIMARY	        4	      tuning.사원.사원번호	    9	       33.33	    Using where
+	id	select_type	table		  type	    possible_keys	  key	           ref	                    Extra
+	1	  SIMPLE	    사원	    range	    PRIMARY	        PRIMARY	       null                     Using where
+	1	  SIMPLE	    급여	    ref	      PRIMARY	        PRIMARY	       tuning.사원.사원번호	     Using where
 ```
 - PRIMARY의 첫번쨰 예시다.
 ```sql
@@ -179,10 +179,10 @@ SELECT 사원.사원번호, 사원.이름, 사원.성, 급여.연봉, /** 사원
     FROM 사원, 급여
 ```
 ```
-	id	select_type	table	    partitions	type	possible_keys	key	  key_len	ref	 rows	        filtered	Extra
-	1	PRIMARY	사원		ALL			nuil	      null	 null         null   null         299379	    100.00	    null
-	1	PRIMARY	급여		ALL	    null        null   null         null   null         2838398	    100.00	    Using join buffer (hash join)
-	2	DEPENDENT SUBQUERY	매핑		ref	PRIMARY	PRIMARY	4	tuning.사원.사원번호	1	100.00	 Using index
+	id	select_type	              table	    type	      possible_keys	  key	   	      ref	  	              Extra
+	1	  PRIMARY	                  사원		  null        ALL		          nuil	        null	                null
+	1	  PRIMARY	                  급여		  null        ALL	            null          null                  Using join buffer (hash join)
+	2	  DEPENDENT SUBQUERY	      매핑		  ref	        PRIMARY	        PRIMARY	      tuning.사원.사원번호	 Using index
 ```
 
 - PRIMARY의 두번쨰 예시다.
@@ -199,9 +199,9 @@ SELECT 사원2.사원번호, 사원2.이름, 사원2.성
 WHERE 사원2.사원번호 = 100001
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	    key	    key_len	ref	    rows	filtered	Extra
-	1	  PRIMARY	    사원1		null       const	PRIMARY	        PRIMARY	 4	    const	  1	    100.00	    null
-	2	  UNION	      사원2		null       const	PRIMARY	        PRIMARY	 4	    const	  1	    100.00	    null
+	id	select_type	table	  type	  possible_keys	     key	     ref	    		Extra
+	1	  PRIMARY	    사원1	  const	  PRIMARY	           RIMARY	   const	  	  null
+	2	  UNION	      사원2	  const	  PRIMARY	           PRIMARY	 const	      null
 ```
 
 - subquery의 예시다.
@@ -215,10 +215,10 @@ SELECT (SELECT COUNT(*)
 ```
 
 ```
-	id	select_type	table	partitions	type	 possible_keys	key	          key_len	  ref	    rows	    filtered	  Extra
-	1	  PRIMARY			null  null        null   null           null          null      null  	null        null      No tables used
-	3	  SUBQUERY	  급여	null	      ALL	   null           null          null			null    2838398	    100.00	   null
-	2	  SUBQUERY	  매핑  null		    index	 null	          I_부서번호	    12       null		 331143	     100.00	    Using index
+	id	select_type	table		  type	 possible_keys	key	          ref	      Extra
+	1	  PRIMARY			null      null   null           null          null  	  No tables used
+	3	  SUBQUERY	  급여	    ALL	   null           null         	null      null
+	2	  SUBQUERY	  매핑      index	 null	          I_부서번호	   null		   Using index
 ```
 
 - derived의 예시다.
@@ -235,10 +235,10 @@ WHERE   사원.사원번호 = 급여.사원번호;
 - dervied2는 id가 2번이면서 select_type이 derived인 것이다. 즉 사실상 급여 table이다.
 - subquery로 가져온 것을 다시 쓰는 것이다.
 ```
-	id	select_type	table	partitions	type	possible_keys	    key	        key_len	ref	        rows	filtered	Extra
-	1	PRIMARY	<derived2>		        ALL					                                        184756	100.00	
-	1	PRIMARY	사원		            eq_ref	PRIMARY	            PRIMARY	    4	    급여.사원번호	1	100.00	Using index
-	2	DERIVED	급여		            range	PRIMARY,I_사용여부	 PRIMARY	4		             184756	100.00	Using where
+	id	select_type	table		      type	  possible_keys	      key	       ref	          Extra
+	1	  PRIMARY	    <derived2>		 ALL		null			          null       null      
+	1	  PRIMARY	    사원		       eq_ref	PRIMARY	            PRIMARY	   급여.사원번호    Using index
+	2	  DERIVED	    급여		       range	PRIMARY,I_사용여부	 PRIMARY	  null            Using where
 ```
 
 
@@ -274,11 +274,11 @@ SELECT 사원_통합.*
 - 여기서는 FROM 절 이전의 SELECT가 되겠다.
 - UNION 중복값 삭제는 temp table에서 이뤄지기 때문에 Extra가 Using temporary다.
 ```
-	id	select_type	  table	    partitions	type	possible_keys	key	    key_len	ref	  rows	  filtered	Extra
-	1	  PRIMARY	      <derived2>	null	    ALL		null			    null     2	  null  null    100.00	
-	2	  DERIVED	      사원1		    null      ref	    I_성별_성	  I_성별_성	1	    const	149689	100.00	
-	3	  UNION	        사원2		    null      ref	    I_성별_성	  I_성별_성	1	    const	149689	100.00	
-	4	  UNION RESULT	<union2,3>	null	    ALL			null				 null   null    null   null             Using temporary
+	id	select_type	  table	    	type	possible_keys	  key	  	    ref	    Extra
+	1	  PRIMARY	      <derived2>  ALL		null			      null        null    
+	2	  DERIVED	      사원1		    ref	  I_성별_성	       I_성별_성   const	
+	3	  UNION	        사원2		    ref	  I_성별_성	       I_성별_성   const	
+	4	  UNION RESULT	<union2,3>  ALL	  null				    null        null    Using temporary
 ```
 
 - union의 예시다.
@@ -302,10 +302,10 @@ SELECT 사원_통합.*
 - UNION ALL은 중복값이 없다는 가정 하에 합치는 것이라서 중복값을 제거하는 과정이 없다.
 - 따라서 UNION RESULT가 빠진다. 
 ```
-	id	select_type	  table	    partitions	type	possible_keys	key	    key_len	ref	  rows	  filtered	Extra
-	1	  PRIMARY	      <derived2>	null	    ALL		null			    null     2	  null  null    100.00	
-	2	  DERIVED	      사원1		    null      ref	    I_성별_성	  I_성별_성	1	    const	149689	100.00	
-	3	  UNION	        사원2		    null      ref	    I_성별_성	  I_성별_성	1	    const	149689	100.00	
+	id	select_type	  table	    	type	possible_keys	key	      	ref	  	Extra
+	1	  PRIMARY	      <derived2>  ALL		null			    null        null     null
+	2	  DERIVED	      사원1		    ref	  I_성별_성	     I_성별_성	 const	  null
+	3	  UNION	        사원2		    ref	  I_성별_성	     I_성별_성   const    null	
 ```
 
 
@@ -329,10 +329,10 @@ SELECT 관리자.부서번호,
   ```
 
 ```
-id	select_type	          table	      partitions	type	possible_keys	      key	  key_len	ref	            rows	filtered	Extra
-1	    PRIMARY	            관리자	    null	      index		I_부서번호	        null  12		  null            24	  100.00	Using index
-2	    DEPENDENT SUBQUERY	 사원1		  null        eq_ref	PRIMARY,I_성별_성	PRIMARY	4	tuning.관리자.사원번호	1	  50.00	Using where
-3	    DEPENDENT UNION	    사원2	      null	      eq_ref	PRIMARY,I_성별_성	PRIMARY	4	tuning.관리자.사원번호	1	  50.00	Using where
+id	select_type	          table	     	 type	    possible_keys	      key	    	  ref	                 	Extra
+1	    PRIMARY	            관리자	     index		I_부서번호	         null   		 null                  Using index
+2	    DEPENDENT SUBQUERY	사원1		     eq_ref	  PRIMARY,I_성별_성	  PRIMARY	    tuning.관리자.사원번호  Using where
+3	    DEPENDENT UNION	    사원2	       eq_ref	  PRIMARY,I_성별_성	  PRIMARY	    tuning.관리자.사원번호  Using where
 ```
 
 - materialized의 예시다.
@@ -343,10 +343,10 @@ SELECT *
 ```
 
 ```
-	id	select_type	  table	        partitions	type	  possible_keys	        key	                  key_len	ref	          rows	filtered	Extra
-	1	  SIMPLE	      사원		       null       ALL	    PRIMARY				         null                 null    null          299379	100.00	
-	1	  SIMPLE	      <subquery2>		null        eq_ref	<auto_distinct_key>	  <auto_distinct_key>	  4	      사원.사원번호	  1	    100.00	
-	2	  MATERIALIZED	급여		       null       index	  PRIMARY	              I_사용여부	4		        null   null           2838398	33.33	Using where; Using index
+	id	select_type	  table	        	type	  possible_keys	        key	                  ref	          	Extra
+	1	  SIMPLE	      사원		        ALL	    PRIMARY				         null                 null          	
+	1	  SIMPLE	      <subquery2>		  eq_ref	<auto_distinct_key>	  <auto_distinct_key>	  사원.사원번호		
+	2	  MATERIALIZED	급여		        index	  PRIMARY	              I_사용여부	           null         	 Using where; Using index
 ```
 
 ## <span style="color:#802548">_type_</span>
@@ -387,9 +387,9 @@ AND 매핑.사원번호 BETWEEN 100001 AND 100010;
 100010	d009
 ```
 ```
-	id	select_type	table	partitions	type	  possible_keys	          key	    key_len	  ref	        rows	filtered	Extra
-	1	    SIMPLE	  매핑	null	      range	  PRIMARY,I_부서번호	     PRIMARY	4		     null         12	100.00	Using where; Using index
-	1	    SIMPLE	  부서  null		    eq_ref	PRIMARY	                PRIMARY	  12	    매핑.부서번호	1	100.00	
+	id	select_type	table		type	  possible_keys	          key	    	 ref	        	 Extra
+	1	    SIMPLE	  매핑	  range	  PRIMARY,I_부서번호	     PRIMARY    null        	  Using where; Using index
+	1	    SIMPLE	  부서    eq_ref	PRIMARY	                PRIMARY	   매핑.부서번호
 ```
 
 - ref의 예시다.
@@ -408,9 +408,9 @@ AND 사원.사원번호 BETWEEN 10001 AND 10010;
 10005	Staff
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	    key_len	ref	        rows	filtered	Extra
-	1	  SIMPLE	    사원	  null	    range	PRIMARY	      PRIMARY	  4		  null        10	100.00	      Using where; Using index
-	1	  SIMPLE	    직급		null      ref	  PRIMARY	      PRIMARY	  4	    사원.사원번호	1	100.00	       Using index
+	id	select_type	table		type	possible_keys	  key	    	  ref	        	  Extra
+	1	  SIMPLE	    사원	  range	PRIMARY	        PRIMARY	    null             Using where; Using index
+	1	  SIMPLE	    직급	  ref	  PRIMARY	        PRIMARY	    사원.사원번호     Using index
 ```
 
 - ref의 다른 예시다.
@@ -421,8 +421,8 @@ FROM 사원
 WHERE 입사일자 = '1985-11-21'
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	      key_len	ref	  rows	filtered	Extra
-	1	    SIMPLE	  사원	null        ref	  I_입사일자	   I_입사일자	3	      const	119	100.00	
+	id	select_type	table		type	possible_keys	 key	        ref	  	    Extra
+	1	  SIMPLE	    사원	   ref	 I_입사일자	    I_입사일자	  const
 ```
 
 
@@ -435,8 +435,8 @@ WHERE 출입문 IS NULL
 OR 출입문 = 'A';
 ```
 ```
-	id	select_type	table	      partitions	  type	      possible_keys	  key	      key_len	ref	rows	    filtered	Extra
-	1	    SIMPLE	사원출입기록	  null        ref_or_null	I_출입문	        I_출입문	4	      const	329468	100.00	Using index condition
+	id	select_type	table	       type	          possible_keys	  key	      ref	   Extra
+	1	    SIMPLE	사원출입기록	  ref_or_null	   I_출입문	        I_출입문  const	 Using index condition
 ```
 
 - range의 에시다.
@@ -447,8 +447,8 @@ WHERE 사원번호 BETWEEN 10001 AND 100000;
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	key	      key_len	ref	rows	filtered	Extra
-	1	    SIMPLE	  사원	null        range	PRIMARY	      PRIMARY	    4		      149689	100.00	Using where
+	id	select_type	table	type	possible_keys	key	    	ref	        Extra
+	1	    SIMPLE	  사원  range	PRIMARY	      PRIMARY	  null        Using where
 ```
 
 
@@ -463,19 +463,19 @@ WHERE 직급명 = 'Manager'
 ```
 - 직급 table은 사원번호, 직급명, 시작일자를 묶어 PK로 만든 자연키다.
 - 여기서 사원번호는 int고, 직급명은 varchar(50)이다.
-- 위의 sql은 사원번호와 직급명만 사용되었다. 사원번호는 4byte고, 직급명은 (50 + 1) x3이므로 159로 key_len과 동일하다.
+- 위의 sql은 사원번호와 직급명만 사용되었다. 사원번호는 4byte고, 직급명은 (50 + 1) x3이므로 159로 과 동일하다.
 - 또한 PK를 사용한 조회도 아니었으므로 type이 index로 나온다. 효율적인 ref가 아니라 index full scan을 할수밖에 없었다.
 ```
-	id	select_type	table	partitions	type	possible_keys	key	        key_len	ref	  rows	filtered	Extra
-	1	      SIMPLE	직급	null	      index	PRIMARY       PRIMARY	    159		  null  442426	10.00	  Using where; Using index
+	id	select_type	table	  type	  possible_keys	 key	    ref	 Extra
+	1	      SIMPLE	직급	  index	   PRIMARY       PRIMARY	null  Using where; Using index
 ```
 
 
 - 만약 직급명에 index를 만들면 아래와 같이 실행계획이 바뀐다.
 - type이 index가 아니라 ref가 된다. index를 효율적으로 scan할 수 있게 된 것이다.
 ```
-	id	select_type	table	partitions	type	possible_keys	          key	          key_len	  ref	rows	filtered	Extra
-	1	  SIMPLE	    직급	null        ref	  PRIMARY,idx_직급_직급명	idx_직급_직급명	152	      const	24	100.00	  Using index
+	id	select_type	table		type	possible_keys	            key	            ref	  	Extra
+	1	  SIMPLE	    직급	  ref	  PRIMARY,idx_직급_직급명	   idx_직급_직급명  const   Using index
 ```
 
 ## <span style="color:#802548">_ref_</span>
@@ -493,9 +493,9 @@ AND 사원.사원번호 BETWEEN 10001 AND 10100;
 - driving table인 사원의 경우, ref가 null이다. index를 사용해 특정 범위의 데이터를 모두 가져온다.
 - driven table인 직급의 경우, on절에 쓰인 field를 기준으로 데이터를 검색한다. 따라서 사원번호가 ref에 쓰인다.
 ```
-	id	select_type	table	partitions	type	possible_keys	key	    key_len	ref	        rows	      filtered	Extra
-	1	    SIMPLE	  사원	null	      range	PRIMARY	      PRIMARY	 4		  null         100	        100.00	Using where; Using index
-	1	    SIMPLE	  직급	null  	    ref	PRIMARY	        PRIMARY	 4	    사원.사원번호	1	            100.00	Using index
+	id	select_type	table	  type	  possible_keys	  key	     ref	        	 Extra
+	1	    SIMPLE	  사원	  range	  PRIMARY	        PRIMARY	 null            Using where; Using index
+	1	    SIMPLE	  직급	  ref	    PRIMARY	        PRIMARY	 사원.사원번호	  Using index
 ```
 
 - const인 경우를 보자.
@@ -506,8 +506,8 @@ FROM 직급
 WHERE 직급명 = 'Manager'
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	      key_len	ref	  rows	filtered	Extra
-	1	    SIMPLE	  사원	 null     	ref	  I_입사일자	  I_입사일자	3	      const	119	  100.00	
+	id	select_type	table		type	possible_keys	key	        ref	  	Extra
+	1	  SIMPLE	    사원		ref	  I_입사일자	   I_입사일자   const	
 ```
 
 - WHERE 조건문을 range로 바꾸면 ref는 null이 된다.
@@ -518,8 +518,8 @@ WHERE 사원번호 >=10010;
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	      key	      key_len	ref	    rows	filtered	Extra
-	1	  SIMPLE	    급여	null	      range	PRIMARY,I_사용여부	I_사용여부	8		    null    946038	100.00	Using where; Using index for skip scan
+	id	select_type	table	  type	possible_keys	      key	          ref	    Extra
+	1	  SIMPLE	    급여	  range	PRIMARY,I_사용여부	 I_사용여부	    null  	Using where; Using index
 ```
 
 - range가 아니라 명확한 조건을 =으로 넣으면 다시 ref가 나온다.
@@ -530,8 +530,8 @@ WHERE 사원번호 =10010;
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	    key	    key_len	ref	rows	filtered	Extra
-	1	  SIMPLE	    급여	null        ref	  PRIMARY,I_사용여부	PRIMARY	4	    const	6	    100.00	Using index
+	id	select_type	table	  type	possible_keys	     key	      ref	    Extra
+	1	  SIMPLE	    급여	  ref	  PRIMARY,I_사용여부	PRIMARY	   const   Using index
 ```
 
 
@@ -564,20 +564,21 @@ from 직급
 where 사원번호 = 100000;
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	             key	      key_len	    ref	rows	filtered	Extra
-	1	  SIMPLE	    직급	null	      ref	   PRIMARY,idx_직급_직급명	  PRIMARY	    4	         const	1	  100.00	Using index
+	id	select_type	table		type	  possible_keys	             key	      	    ref	   Extra
+	1	  SIMPLE	    직급	  ref	     PRIMARY,idx_직급_직급명	  PRIMARY	         const	Using index
 ```
 
 - 급여 table은 PK가 (사원번호, 시작일자)로 되어있다.
 - 시작일자가 없어도 Using index로 충분하다. covering index가 된다는 의미다.
+- PK가 아니라 I_사용여부로 조회하기 때문이다.
 ```sql
 select 사원번호
 from 급여;
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	  key	      key_len	ref	    rows	filtered	Extra
-	1	    SIMPLE	  급여	null      	index	I_사용여부        null	   4		   null    2838398	100.00	Using index
+	id	select_type	table		type	  possible_keys	  key	      	    ref	    Extra
+	1	    SIMPLE	  급여	  index	  null            I_사용여부       null	   Using index
 ```
 
 
@@ -592,8 +593,8 @@ WHERE SUBSTRING(사원번호,1,4) = 1100
 AND LENGTH(사원번호) = 5
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		ALL					299379	100.00	Using where
+	id	select_type	table		type	possible_keys	key		ref         Extra
+	1	  SIMPLE	    사원		ALL				                            Using where
 ```
 - WHERE절에 함수를 쓰지 않습니다.
 - 함수를 쓰면 index를 타지 않습니다. 그 결과 type이 range에서 ALL이 되었습니다.
@@ -604,8 +605,8 @@ FROM 사원
 WHERE 사원번호 BETWEEN 11000 AND 11009
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		range	PRIMARY	PRIMARY	4		10	100.00	Using where
+	id	select_type	  table		type	    possible_keys	    key		      ref	  Extra
+	1	  SIMPLE	      사원		range	    PRIMARY	          PRIMARY	    null   Using where
 ```
 
 ## <span style="color:#802548">_IFNULL이 필요한지 고민_</span>
@@ -616,8 +617,8 @@ FROM 사원
 GROUP BY IFNULL(성별, 'NO DATA')
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index; 
+	id	select_type	table		type	  possible_keys	  key		      ref	    Extra
+	1	  SIMPLE	    사원		index	  I_성별_성	       I_성별_성	  null    Using index; Using temporary;
 ```
 
 
@@ -629,8 +630,8 @@ FROM 사원
 GROUP BY 성별
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
+	id	select_type	  table		type	  possible_keys	    key		      ref	  Extra
+	1	  SIMPLE	      사원		index	  I_성별_성	        I_성별_성	   null	  Using index
 ```
 
 ## <span style="color:#802548">_묵시적형변환을 없애라_</span>
@@ -641,8 +642,8 @@ FROM 급여
 WHERE 사용여부 = 1
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	급여		index	I_사용여부	I_사용여부	4		2838398	10.00	Using where; Using index
+	id	select_type	table		type	possible_keys	  key		    ref	    	Extra
+	1	  SIMPLE	    급여		index	I_사용여부	     I_사용여부	null		  Using where; Using index
 ```
 
 - 사용여부는 varchar입니다.
@@ -654,8 +655,8 @@ FROM 급여
 WHERE 사용여부 = '1'
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	급여		ref	I_사용여부	I_사용여부	4	const	82824	100.00	Using index
+	id	select_type	table		type	possible_keys	   key		      ref	    Extra
+	1	  SIMPLE	    급여		ref	  I_사용여부	      I_사용여부	  const		Using index
 ```
 
 ## <span style="color:#802548">_PK가 포함된 row는 DISTINCT X_</span>
@@ -667,9 +668,9 @@ JOIN 부서관리자
 ON (사원.사원번호 = 부서관리자.사원번호)
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	부서관리자		index	PRIMARY	I_부서번호	12		24	100.00	Using index; Using temporary
-	1	SIMPLE	사원		eq_ref	PRIMARY	PRIMARY	4	tuning.부서관리자.사원번호	1	100.00	
+	id	select_type	  table		      type	    possible_keys	      key		       ref	                      Extra
+	1	  SIMPLE	      부서관리자		 index	   PRIMARY	           I_부서번호	   null                     	Using index; Using temporary
+	1	  SIMPLE	      사원		      eq_ref	  PRIMARY	            PRIMARY	      tuning.부서관리자.사원번호	
 ```
 
 - 사원번호는 PK입니다. 따라서 row들은 중복이 있을 수가 없습니다.
@@ -699,10 +700,10 @@ WHERE 성별 = 'F'
 AND 성 = 'Baba'
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	PRIMARY	사원		ref	I_성별_성	I_성별_성	51	const,const	135	100.00	Using index
-	2	UNION	사원		ref	I_성별_성	I_성별_성	51	const,const	91	100.00	Using index
-	3	UNION RESULT	<union1,2>		ALL							Using temporary
+	id	select_type	      table		      type	possible_keys	    key		       ref	  Extra
+	1	  PRIMARY	          사원		       ref	I_성별_성	        I_성별_성	    const	  Using index
+	2	  UNION	            사원		       ref	I_성별_성	        I_성별_성	    const 	Using index
+	3	  UNION RESULT	    <union1,2>  	 ALL							                           Using temporary
 ```
 
 - UNION은 DISTINCT와 마찬가지입니다.
@@ -724,9 +725,9 @@ WHERE 성별 = 'F'
 AND 성 = 'Baba'
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	PRIMARY	사원		ref	I_성별_성	I_성별_성	51	const,const	135	100.00	Using index
-	2	UNION	사원		ref	I_성별_성	I_성별_성	51	const,const	91	100.00	Using index
+	id	select_type	table		type	  possible_keys	    key		       ref		   Extra
+	1	  PRIMARY	    사원		ref	    I_성별_성	         I_성별_성		const	    Using index
+	2	  UNION	      사원		ref	    I_성별_성	         I_성별_성		const     Using index
 ```
 
 ## <span style="color:#802548">_index 순서대로 GROUP BY해라_</span>
@@ -738,8 +739,8 @@ GROUP BY 성, 성별
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index; Using temporary
+	id	select_type	  table		type	      possible_keys	    key		          ref	   Extra
+	1	  SIMPLE	      사원		index	      I_성별_성	         I_성별_성	     null   Using index; Using temporary
 ```
 
 - index를 활용하면 보통 temp table이 필요없습니다. 그런데도 Using temporary가 있습니다.
@@ -764,8 +765,8 @@ FROM 사원
 GROUP BY 성별, 성
 ```
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	SIMPLE	사원		index	I_성별_성	I_성별_성	51		299379	100.00	Using index
+	id	select_type	  table		type	  possible_keys	    key		         ref	  Extra
+	1	  SIMPLE	      사원		index	  I_성별_성	         I_성별_성	    null    Using index
 ```
 
 ## <span style="color:#802548">_where 조건문은 access와 filter로 나뉜다_</span>
@@ -829,7 +830,8 @@ WHERE 입사일자 LIKE '1989%'
 AND 사원번호 > 100000;
 ```
 ```
-	1	SIMPLE	사원		range	PRIMARY,I_입사일자	PRIMARY	4		149689	11.11	Using where
+	id	select_type	  table		type	  possible_keys	      key		         ref	  Extra
+	1	  SIMPLE	      사원		range	  PRIMARY,I_입사일자	 PRIMARY	      null   Using where
 ```
 - LIKE 후방일치보다는 아래와 같이 조건식을 써주는 게 좋다.
 - 그럼 Using index가 추가된다. type은 range여도, table scan이 아니라 index를 이용해 가져오게 바뀐다.
@@ -842,7 +844,8 @@ WHERE '1989-01-01' <= 입사일자 AND 입사일자 < '1990-01-01' /** storage e
 AND 사원번호 > 100000; /** mysql engine filtering 조건 */
 ```
 ```
-	1	SIMPLE	사원		range	PRIMARY,I_입사일자	I_입사일자	7		49820	50.00	Using where; Using index
+	id	select_type	  table		type	  possible_keys	           key		         ref	  Extra
+	1	  SIMPLE	      사원		range	   PRIMARY,I_입사일자	      I_입사일자	     null   Using where; Using index
 ```
 - 아래가 chatGPT의 답변이다.
 - where문에 쓰이는 조건은 access조건일 수도, filtering 조건일 수도 있다는 점이다.
@@ -851,7 +854,7 @@ AND 사원번호 > 100000; /** mysql engine filtering 조건 */
 ```
 Access Conditions:
 
-Access conditions are used to retrieve specific rows from tables by directly accessing indexes or table partitions.
+Access conditions are used to retrieve specific rows from tables by directly accessing indexes or table .
 These conditions are typically based on columns that are indexed or partitioned, allowing the database optimizer to efficiently locate and retrieve relevant rows.
 Examples of access conditions include conditions on primary keys, unique keys, or columns with indexes.
 Access conditions are often placed first in the WHERE clause to maximize index usage and minimize the number of rows accessed.
@@ -930,9 +933,9 @@ AND (SELECT MAX(연봉)
 ```
 
 ```
-	id	select_type	table	partitions	type	possible_keys	key	key_len	ref	rows	filtered	Extra
-	1	PRIMARY	사원		range	PRIMARY	PRIMARY	4		104330	100.00	Using where
-	2	DEPENDENT SUBQUERY	급여		ref	PRIMARY	PRIMARY	4	tuning.사원.사원번호	9	100.00	
+	id	select_type	          table		type	    possible_keys	    key		      ref	                    Extra
+	1	  PRIMARY	              사원		range	    PRIMARY	          PRIMARY	    null                     Using where
+	2	  DEPENDENT SUBQUERY	  급여		ref	      PRIMARY	          PRIMARY	    tuning.사원.사원번호	    null
 ```
 
 - 실행계획을 보면 상관서브쿼리가 사용되었음을 알 수 있다. 실행계획을 살펴보면 아래와 같다.
@@ -985,3 +988,339 @@ WHERE EXISTS (SELECT 1
               WHERE 출입문 = 'A'
               AND 기록.사원번호 = 사원.사원번호);
 ```              
+
+## <span style="color:#802548">_너무 많은 데이터를 가져오지 않게 indexed filtering을 거쳐라_</span>
+- 사원번호가 10,001번부터 10,100번까지인 사원들의 평균연봉과 최고연봉, 최저연봉을 구해보자.
+```sql
+SELECT 사원.사원번호,
+      급여.평균연봉,
+      급여.최고연봉,
+      급여.최저연봉
+FROM 사원,
+    (
+      SELECT 사원번호,
+            ROUND(AVG(연봉),0) 평균연봉,
+            ROUND(MAX(연봉),0) 최고연봉,
+            ROUND(MIN(연봉),0) 최저연봉
+      FROM 급여
+      GROUP BY 사원번호
+      ) 급여
+WHERE 사원.사원번호 = 급여.사원번호
+AND 사원.사원번호 BETWEEN 10001 AND 10100;
+```
+
+- index full scan을 수행하는데, GROUP BY를 동반합니다.
+- 조건절이 없는 GROUP BY로 너무 많은 데이터에 접근하지는 않는지 봐야 합니다.
+```
+	id	select_type	    table		      type	      possible_keys	         key		      ref	                Extra
+	1	  PRIMARY	        사원		      range	       PRIMARY	             PRIMARY	    null                 Using where; Using index
+	1	  PRIMARY	        <derived2>		ref	        <auto_key0>	           <auto_key0>	tuning.사원.사원번호	null
+	2	  DERIVED	        급여		      index	       PRIMARY,I_사용여부	    PRIMARY      null                 null
+```
+
+- GROUP BY를 바꿔서 서브쿼리로 만들고, index를 타게 설정합니다.
+- 조건절은 선택률이 매우낮을 떄, 즉 PK일 때 성능 향상 폭이 더 커진다.
+- 3번을 scan한다고 해도 별로 부담되지도 않는 scan이다.
+```sql
+SELECT 사원.사원번호,
+( SELECT ROUND(AVG(연봉),0)
+ FROM 급여 AS 급여1
+ WHERE 사원번호 = 사원.사원번호
+ ) AS 평균연봉,
+ ( SELECT ROUND(MAX(연봉),0)
+ FROM 급여 AS 급여2
+ WHERE 사원번호 = 사원.사원번호
+ ) AS 최고연봉,
+ ( SELECT ROUND(MIN(연봉),0)
+ FROM 급여 AS 급여3
+ WHERE 사원번호 = 사원.사원번호
+ ) AS 최저연봉
+ FROM 사원
+ WHERE 사원.사원번호 BETWEEN 10001 AND 10100;
+ ```
+
+
+```
+	id	select_type	            table		type	    possible_keys	                key		        ref	                    Extra
+	1	  PRIMARY	                사원		range	    PRIMARY,I_입사일자,I_성별_성	  PRIMARY	      null               	    Using where; Using index
+	4	  DEPENDENT SUBQUERY	    급여3		ref	      PRIMARY	                       PRIMARY	     tuning.사원.사원번호	    null
+	3	  DEPENDENT SUBQUERY	    급여2		ref	      PRIMARY	                       PRIMARY	     tuning.사원.사원번호	    null
+	2	  DEPENDENT SUBQUERY	    급여1		ref	      PRIMARY	                       PRIMARY	     tuning.사원.사원번호	    null
+```
+
+
+## <span style="color:#802548">_join을 깨고 서브쿼리를 써도 driving table은 작게 유지하자_</span>
+- 사원번호가 10,001번부터 50,000번 사이에 해당하는 데이터를 사원번호 기준으로 묶어 연봉 합계 기준으로 내림차순한다. 그중 150번째 데이터부터 10건의 데이터만 가져온다.
+```sql
+SELECT 사원.사원번호, 사원.이름, 사원.성, 사원.입사일자
+FROM 사원, 급여
+WHERE 사원.사원번호 = 급여.사원번호
+AND 사원.사원번호 BETWEEN 10001 AND 50000
+GROUP BY 사원.사원번호
+ORDER BY SUM(급여.연봉) DESC
+LIMIT 150,10;
+```
+- 실행계획 자체는 큰 문제가 없다.
+- 그러나 문제는 join을 할 때 driven table이 너무 크다는 것이다.
+- 급여 table이 driven table인데, 2844047로 2백만 건이 넘는다.
+- 그럼 304,000 x 2,844,047 만큼 반복이 일어난다.
+```
+	id	select_type	      table	  type	      possible_keys	                key		      ref	                    	Extra
+	1	  SIMPLE	          사원		range	      PRIMARY,I_입사일자,I_성별_성	  PRIMARY		  null                   	  Using where; Using temporary; Using filesort
+	1	  SIMPLE	          급여		ref	        PRIMARY	                       PRIMARY		 tuning.사원.사원번호	   
+```
+
+- 이럴 떄는 서브쿼리를 써서라도 join될 컬럼의 갯수를 줄여야 한다.
+- FROM 테이블에 inline view를 만들었다. 이 inline view의 record는 10개밖에 안된다.
+- 10개의 record가 driving table이다. 1개의 record가 사원 테이블에 반복해 접근하며 이 과정이 반복된다.
+- 따라서 10 x 304,000 만큼 반복이 일어난다. 엄청나게 줄어든 것이다.
+```sql
+SELECT 사원.사원번호, 사원.이름, 사원.성, 사원.입사일자
+  FROM (SELECT 사원번호
+          FROM 급여
+          WHERE 사원번호 BETWEEN 10001 AND 50000
+          GROUP BY 사원번호
+          LIMIT 150,10) 급여,
+          사원
+  WHERE 사원.사원번호 = 급여.사원번호;
+```
+
+
+## <span style="color:#802548">_Join이 반드시 필요한지 의심하라_</span>
+- 사원 테이블에서 성별이 M이고, 사원번호가 300,000을 초과하는 사원번호를 출력해보자.
+```sql
+SELECT COUNT(사원번호) AS 카운트
+FROM (
+      SELECT 사원.사원번호, 관리자.부서번호
+      FROM (
+            SELECT *
+            FROM 사원
+            WHERE 사원번호 > 300000
+      ) 사원
+      LEFT JOIN 부서관리자 관리자
+      ON 사원.사원번호 = 관리자.사원번호
+) 서브쿼리;
+```
+- type이 range면 어쨌든 index range scan이다. 근데 ref는 null이라면 사원이 driving table임을 의미한다.
+- ref는 join을 수행할 때 driven table에 어떤 column으로 해당 테이블에 access하는 지를 알려준다.
+- driving table은 당연히 ref가 null일 수 밖에 없다.
+- driven table은 type이 ref가 떠야 최적화의 발을 뗀 것이다. ref관련이 아니면 특별한 경우를 제외하면 join 조건절에 문제가 있는 것이다.
+- type이 range이며 extra에 Using index가 있는 것은 index only scan이라는 뜻이다. 매우 좋은 index scan이다. 
+- 하지만 join자체가 필요없다면 무의미하다.
+```
+	id	select_type	  table	    type	  possible_keys	    key		        ref	                Extra
+	1	  SIMPLE	      사원		  range	  PRIMARY	          PRIMARY				null	               Using where; Using index
+	1	  SIMPLE	      관리자		ref	    PRIMARY	          PRIMARY		    tuning.사원.사원번호  Using index
+```
+- FROM 절에서 JOIN을 하고 있다.
+- 이건 뭔가 필요 없는 정보가 들어갔다는 신호일 수 있다.
+- 아래와 똑같은 내용이니 바꿔주자.
+```sql
+SELECT COUNT(사원.사원번호)
+    FROM (
+          SELECT *
+          FROM 사원
+          WHERE 사원번호 > 300000
+    ) 사원
+    LEFT JOIN 부서관리자 관리자
+    ON 사원.사원번호 = 관리자.사원번호;
+```
+
+- 이제 제대로 tuning을 시작해보자.
+- join을 하게 되는 조건이 사원.사원번호 = 관리자.사원번호다.
+- 저 조건은 무의미하다. 그러니 아래와 같이 일반 쿼리문으로 바꿔주자.
+```sql
+SELECT COUNT(사원번호) AS 카운트
+FROM 사원
+WHERE 성별 = 'M'
+AND 사원번호 > 300000;
+```
+- where 조건이 성별과 PK로 두개다. 이같이 조건이 indexed column이 multiple일 때, optimizer가 skip scan을 실행하는 경우도 있다. 
+- 그건 extra를 보고 알 수 있다. using index for skip scan이라 떠있다.
+- 한 개의 index로는 커버될 수 없을 때, skip scan을 실행한다. 사원번호와 성별 모두 index 처리된 조건이라 그런 것이다.
+```
+index skip scan 조건
+1.인덱스가 SELECT 리스트의 모든 부분을 커버하는 경우. 즉, 커버링 인덱스가 적용되는 경우
+
+2.SELECT DISTINCT, SELECT ... GROUP BY 또는 단일 투플 SELECT 문인 경우
+
+3.MIN/MAX 함수를 제외한 모든 집계 함수가 DISTINCT를 포함하는 경우
+
+4.COUNT(*)가 사용되어선 안 됨
+
+5.부분 키(subkey)의 카디널리티(고유 값의 개수)가 전체 인덱스의 카디널리티보다 100배 작은 경우
+```
+```
++----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
+| id | select_type | table     | partitions | type | possible_keys     | key       | key_len | ref   | rows | filtered | Extra                          |
++----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
+|  1 | SIMPLE      | 사원      | NULL       | range| PRIMARY,I_성별_성 | I_성별_성  | NULL    | NULL  | NULL | NULL     | Using where; Using index for skip scan |
++----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
+```
+- 그와 비슷하게 index_merge라는 type도 있는데, 여기는 각 indexed column의 조건을 통해 얻어온 결과값들이 겹치지 않을 때 자주 선택된다.
+- 흔하게 보기는 어렵다. 보통 결과값들은 겹치기 때문이다.
+```
++----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
+| id | select_type | table     | partitions | type  | possible_keys | key     | key_len | ref   | rows | filtered | Extra                    |
++----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
+|  1 | SIMPLE      | table1    | NULL       | index_merge   | index1,index2 | index1,index2 | NULL    | NULL |    NULL | Using intersect(index1,index2) |
++----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
+```
+
+- 다른 예시를 보자.
+- 부서사원_매핑 테이블에도 해당 부서번호가 있는 경우에만, 부서 관리자가 소속된 부서번호를 조회해보자.
+- 두 테이블이 join을 했다. 따라서 둘 모두 type이 ref일 수는 없다. 
+- ref는 다른 테이블의 index에 대한 reference가 이미 있다는 전제하에 가능하기 때문에, 한 테이블은 반드시 index scan이 필요하다.
+- 따라서 한 테이블은 무조건 type이 index거나 range여야 한다.
+- 참고로 range도 index scan일 수밖에 없다. full scan은 index를 타지 않기 때문이다.
+```sql
+SELECT DISTINCT 매핑.부서번호
+FROM 부서관리자 관리자, 
+      부서사원_매핑 매핑
+WHERE 관리자.부서번호 = 매핑.부서번호
+ORDER BY 매핑.부서번호;
+```
+- type이 index인데 ref가 null인 것은 index full scan이라는 의미다.
+- type이 index인데 ref가 null이면서 extra가 Using index니까 여기서는 index only scan이다. index scan 중에는 가장 효율적이다.
+- index full scan은 어쨌든 table data에 접근이 필요하기 때문이다.
+```
+	id	select_type	    table		type	  possible_keys	     key		      ref 	                  Extra
+	1	  SIMPLE	        관리자	index	  I_부서번호	        I_부서번호		null	                  Using index; Using temporary; Using filesort
+	1	  SIMPLE	        매핑		ref	    PRIMARY,I_부서번호	I_부서번호		tuning.관리자.부서번호	 Using index
+```
+```
+When MySQL accesses table2 using an index from table1 to perform the join, it often categorizes this access method as "ref" in the execution plan. 
+```
+
+- 데이터를 가져오는 것은 세 가지 방식이 있다.
+```
+table scan. 무조건 full scan이다.
+index scan. index range scan이거나, index full scan이거나. index only scan이거나.
+index lookup. driven table의 join에서만 쓰는 driving table의 index를 reference 삼아 가져오기 
+```
+
+- index scan은 세부적으로 몇 개로 나뉜다.
+```
+index range scan
+index full scan
+index only scan(=covering index)
+Index Skip Scan(loose index scan)
+Index Merge Scan
+Index Condition Pushdown
+```
+```
+Table Scan with Indexed Lookup: One table is scanned (using a full table scan or index scan), while the other table uses an index to perform lookups based on values from the scanned table. In this case, the scanned table would have a type of "ALL" or "index" in the execution plan, while the other table could have a type of "ref."
+
+Indexed Lookup with Indexed Lookup: Both tables use indexes to perform lookups based on the join condition. This can happen when both tables have suitable indexes, and MySQL can perform indexed lookups efficiently on both sides of the join. In this case, both tables could have a type of "ref" in the execution plan.
+
+Table Scan with Table Scan: In some cases, MySQL might resort to full table scans for both tables if no suitable indexes exist or if the optimizer determines that scanning the entire table is more efficient than using available indexes. In this scenario, both tables could have a type of "ALL" in the execution plan.
+```
+
+- FROM 절에서 부서사원_매핑 table의 데이터를 가져올 때 부서번호 데이터를 미리 중복 제거한다. 이제 가벼워졌습니다.
+- 그리고 조건문도 더 가볍게 데이터의 존재여부만 판단합니다. WHERE EXISTS를 씁니다.
+```sql
+SELECT 매핑.부서번호
+FROM ( SELECT DISTINCT 부서번호
+        FROM 부서사원_매핑 매핑
+        ) 매핑
+WHERE EXISTS ( SELECT 1
+                FROM 부서관리자 관리자
+                WHERE 부서번호 = 매핑.부서번호)
+ORDER BY 매핑.부서번호;
+```
+```
+| id | select_type | table      | partitions | type  | possible_keys         | key          | key_len | ref                    | rows | filtered | Extra                                                  |
+|----|-------------|------------|------------|-------|-----------------------|--------------|---------|------------------------|------|----------|--------------------------------------------------------|
+| 1  | PRIMARY     | 관리자     |            | index | I_부서번호             | I_부서번호     | 12     |                        | 24   | 37.50    | Using index; Using temporary; Using filesort; LooseScan |
+| 1  | PRIMARY     | <derived2> |            | ref   | <auto_key0>           | <auto_key0>  | 12      | tuning.관리자.부서번호  | 2    | 100.00   | Using index                                            |
+| 2  | DERIVED     | 매핑       |            | range | PRIMARY,I_부서번호     | I_부서번호     | 12     |                        | 9    | 100.00   | Using index for group-by                               |
+```
+
+
+
+## <span style="color:#802548">_좋은 index를 써야 한다_</span>
+- index 없이는 작은 table도 조회해서는 안 된다.
+```sql
+SELECT *
+FROM 사원
+WHERE 이름 = 'Gerogi'
+AND 성 = 'Wielonsky';
+```
+- table full scan을 때리고 있다. 1건의 데이터를 가져오려고 table을 full scan하는 건 비효율적이다.
+- 이걸 index scan으로 바꿔주자. 성과 이름 모두에 index를 만들어야 하는데, 순서도 중요하다.
+- count가 더 많은 column을 선두에 놓는 게 성능에 유리하기 떄문이다. 더 많이 필터링할 수 있어서다.
+```
+| id | select_type | table | partitions | type | possible_keys | key | key_len | ref | rows  | filtered | Extra         |
+|----|-------------|-------|------------|------|---------------|-----|---------|-----|-------|----------|---------------|
+| 1  | SIMPLE      | 사원  |            | ALL  |               |     |         |     | 299379| 1.00     | Using where   |
+
+```
+
+- 따라서 아래와 같이 갯수를 구한다.
+```sql
+SELECT COUNT(DISTINCT(이름)) 이름_개수,
+        COUNT(DISTINCT(성)) 성_개수,
+        COUNT(1) 전체
+  FROM 사원;
+```
+- 성_개수가 더 많으므로 데이터 범위를 더 축소할 수 있는 건 성이다. 따라서 성을 앞에 두고 index를 만든다.
+- DISTINCT()로 보는 이유는 index는 null 및 겹치는 row를 제외하기 위해서다. 제외하는 이유는 High Cardinality Columns을 알기 위해서다.
+- 그냥 COUNT(column)으로 하면 null을 제외한 전체 row가 항상 계산돼서 나온다.
+```
+	이름_개수	성_개수	전체
+	1275	1637	300024
+
+  ALTER TABLE 사원 ADD INDEX I_사원_성_이름 (성, 이름);
+```
+
+- 조건문이 있다면, 선택률을 보는 게 좋다. 선택률이 낮다면 index를 걸어주자.
+- multiple 조건문이 있다면 where 조건문에서 일부 column만 index를 주면 안 된다.
+```sql
+SELECT * 
+FROM 사원
+WHERE 이름 = 'Matt'
+OR 입사일자 = '1987-03-31'
+```
+- 입사일자에만 index가 걸려있어서 index scan이 아닌 ALL scan을 타고 있다.
+```
+| id | select_type | table | partitions | type | possible_keys | key | key_len | ref | rows   | filtered | Extra         |
+|----|-------------|-------|------------|------|---------------|-----|---------|-----|--------|----------|---------------|
+| 1  | SIMPLE      | 사원  |            | ALL  | I_입사일자    |     |         |     | 299379 | 10.02    | Using where   |
+
+```
+- 그럼 이름에 index를 주어도 되는지부터 파악해보자.
+- 전체 row는 300024다.
+```sql
+  SELECT COUNT(1) FROM 사원;
+```
+
+- 이름에 따른 row는 233이므로 233/300024하면 선택률이 1%도 안된다. index를 주기 적합하다.
+```sql
+SELECT COUNT(1) FROM 사원 where 이름 = 'Matt';
+```
+```
+	COUNT(1)
+	233
+```
+
+- 물론 이름이 Matt만 있는 것은 아니기에, GROUP BY로 count를 해서 다양한 경우의 선택률을 보는 게 좋다.
+- 물론 자주 쓰는 것만 거의 쓴다면, 해당 경우만 보면 된다.
+- 아래와 같이 count를 재니 전부 300이하다. 선택률이 1%가 채 안되니 index를 주기 적합한 field다.
+```
+SELECT 이름, COUNT(이름)
+FROM 사원
+GROUP BY 이름;
+```
+
+- 따라서 아래와 같이 index를 준다.
+```sql
+ALTER TABLE 사원 ADD INDEX I_이름(이름)
+```
+- 그럼 ALL SCAN이 아니라 INDEX_MERGE가 된다. 조건에 따른 row가 서로 겹치지 않는 것으로 보인다.
+```
+| id | select_type | table | partitions | type        | possible_keys                   | key                          | key_len | ref | rows | filtered | Extra                                   |
+|----|-------------|-------|------------|-------------|---------------------------------|------------------------------|---------|-----|------|----------|-----------------------------------------|
+| 1  | SIMPLE      | 사원  |            | index_merge | I_입사일자,idx_사원_이름          | idx_사원_이름,I_입사일자      | 44,3    |     | 344  | 100.00   | Using union(idx_사원_이름,I_입사일자); Using where |
+
+```
+
