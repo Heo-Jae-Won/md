@@ -1321,6 +1321,182 @@ ALTER TABLE 사원 ADD INDEX I_이름(이름)
 | id | select_type | table | partitions | type        | possible_keys                   | key                          | key_len | ref | rows | filtered | Extra                                   |
 |----|-------------|-------|------------|-------------|---------------------------------|------------------------------|---------|-----|------|----------|-----------------------------------------|
 | 1  | SIMPLE      | 사원  |            | index_merge | I_입사일자,idx_사원_이름          | idx_사원_이름,I_입사일자      | 44,3    |     | 344  | 100.00   | Using union(idx_사원_이름,I_입사일자); Using where |
+```
 
+- index 구성이 중요한 다른 예시를 살펴보자.
+```sql
+SELECT 사원번호, 이름, 성
+FROM 사원
+WHERE 성별 = 'M'
+AND 성= 'Baba'
+```
+```
+| id | select_type | table | partitions | type | possible_keys        | key                | key_len | ref         | rows | filtered | Extra   |
+|----|-------------|-------|------------|------|----------------------|--------------------|---------|-------------|------|----------|---------|
+|  1 | SIMPLE      | 사원  |            | ref  | idx_사원_성별_성    | idx_사원_성별_성 | 51      | const,const |  135 |   100.00 |         |
+```
+
+- 그런데 성 열의 데이터는 총 1637건인데, 성별 열은 단 2건이다.
+- 데이터가 다양하지 않은 field를 선두 index로 두는 것은 바람직하지 않다.
+```sql
+SELECT COUNT(distinct 성) 성_개수,
+      COUNT(distinct 성별) 성별_개수
+  FROM 사원;
+```
+
+- 성이 먼저가 아니라 성별이 먼저오게 index를 조정해주자.
+- 지금은 데이터가 많지 않아 차이가 크게 없지만, 대용량 데이터가 되면 이런 순서도 성능에 차이를 낸다.
+```sql
+ALTER TABLE DROP INDEX I_성별_성,
+            ADD INDEX I_성별_성(성,성별);
+```
+
+
+
+
+
+## <span style="color:#802548">_update에도 index가 필요하기도 하고, 아니기도 하다._</span>
+```sql
+ UPDATE 사원출입기록
+ SET 출입문 = 'X'
+ WHERE 출입문 = 'B'
+ ```
+- update문은 수정할 데이터에 접근이 먼저 필요하다. 그럼 그 떄 index가 사용된다.
+- 동시에 변경하는 범위에도 index가 포함되므로 index가 많으면 update에 느려진다.
+```
+| id | select_type | table     | partitions | type  | possible_keys | key     | key_len | ref | rows   | filtered | Extra         |
+|----|-------------|-----------|------------|-------|---------------|---------|---------|-----|--------|----------|---------------|
+| 1  | UPDATE      | 사원출입기록 |          | index | I_출입문       | PRIMARY | 8       |     | 658935 | 100.00   | Using where   |
+```
+
+- 과연 필요한 index만 들어있는지 검사해보자.
+```sql
+show index from 사원출입기록
+```
+- I_출입문 index가 실제로 사용되지 않는다면 삭제를 고려해봄직하다.
+- 아니면 야간 배치 update 시, 해당 index만 잠깐 삭제하고 update를 때릴 수도 있다. update가 끝나면 복원해준다.
+```
+| Table      | Non_unique | Key_name | Seq_in_index | Column_name | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment | Visible | Expression |
+|------------|------------|----------|--------------|-------------|-----------|-------------|----------|--------|------|------------|---------|---------------|---------|------------|
+| 사원출입기록 | 0          | PRIMARY  | 1            | 순번        | A         | 658935      |          |        | YES  | BTREE      |         |               | YES     |            |
+| 사원출입기록 | 0          | PRIMARY  | 2            | 사원번호    | A         | 658935      |          |        | YES  | BTREE      |         |               | YES     |            |
+| 사원출입기록 | 1          | I_지역    | 1            | 지역        | A         | 4           |          |        | YES  | BTREE      |         |               | YES     |            |
+| 사원출입기록 | 1          | I_시간    | 1            | 입출입시간  | A         | 651510      |          |        | YES  | BTREE      |         |               | YES     |            |
+| 사원출입기록 | 1          | I_출입문  | 1            | 출입문      | A         | 3           |          |        | YES  | BTREE      |         |               | YES     |            |
+```
+- 실행계획은 똑같다. 그러나 index가 줄어들어서 쿼리실행 시간은 13초에서 0.6초로 줄어든다.
+```
+| id | select_type | table     | partitions | type  | possible_keys | key     | key_len | ref | rows   | filtered | Extra         |
+|----|-------------|-----------|------------|-------|---------------|---------|---------|-----|--------|----------|---------------|
+| 1  | UPDATE      | 사원출입기록 |          | index | I_출입문       | PRIMARY | 8       |     | 658935 | 100.00   | Using where   |
+```
+
+## <span style="color:#802548">_대소문자 문제는 collation이 중요하다_</span>
+- 부서테이블의 비고 열 값이 소문자 active일 때 데이터를 조회한다고 해보자.
+- 총 4건이 출력된다.
+```sql
+SELECT 부서명, 비고
+FROM 부서
+WHERE 비고 = 'active'
+  AND ASCII(SUBSTR(비고,1,1)) = 97
+  AND ASCII(SUBSTR(비고,2,1)) = 99
+```
+
+- 만약 ascii코드 조건을 빼고 조회한다면, 7건이 출력된다.
+```sql
+SELECT 부서명, 비고
+FROM 부서
+WHERE 비고 = 'active'
+```
+
+- 이러한 차이가 어디서 오는 걸까? 바로 collation에서 온다. 
+```sql
+SELECT COLUMN_NAME, collation_name
+FROM information_schema.COLUMNS
+WHERE table_schema = 'tuning'
+AND TABLE_NAME = '부서';
+```
+```
+COLUMN_NAME	COLLATION_NAME
+부서번호	utf8mb3_general_ci
+부서명	utf8mb3_general_ci
+비고	utf8mb3_general_ci
+```
+
+- utf8mb3_general_ci는 case insensitive하기 때문에 대소문자를 구분하지 않는다.
+- 그럼 대소문자를 구분하는 collation으로 바꿔주면 된다.
+- UTF8MB4_bin는 대소문자를 구분하며 이모지까지 지원된다. 따라서 엔간하면 저게 좋다.
+```sql
+ALTER TABLE 부서
+CHANGE COLUMN 비고 비고 VARCHAR(40) NULL default null
+COLLATE 'UTF8MB4_bin'
+``` 
+
+- collation을 바꾸면 아스키 조건문은 삭제해도 된다.
+```sql
+SELECT 부서명, 비고
+FROM 부서
+WHERE 비고 = 'active'
+```
+
+
+- 또 다른 예시를 살펴보자.
+- 이번에는 화면에서 입력값을 받는다고 해보자.
+- 좌변에도 LOWER를 붙인 이유는 이름 열이 utf8-bin이기 때문이다.
+- utf8-bin은 대소문자를 구별하며, 이모지는 지원되지 않는다.
+```sql
+SELECT 이름,성, 성별, 생년월일
+FROM 사원
+WHERE LOWER(이름) = LOWER(#{name})
+AND 입사일자 >= STR_TO_DATE(#{date}, '%Y-%m-%d')
+```
+- 실제 select 시 아래와 같은 결과를 보여준다.
+- 첫글자가 대문자로 되어있다.
+```
+	이름
+	Georgi
+	Bezalel
+	Parto
+	Chirstian
+	Kyoichi
+	Anneke
+	Tzvetan
+	Saniya
+	Sumant
+	Duangkaew
+```
+
+
+- 화면에서 입력값은 대소문자가 어떻게 날라올지 모른다.
+- 따라서 모두 소문자로 만들어버린다.
+- 그를 위해선 기존 column도 소문자로 만드는 함수를 집어넣었다. 
+- 좌변에 함수를 넣었으니 index를 타지 못한다.
+- 이를 고치려면, 소문자_이름 column을 하나 만들어주는 게 좋다.
+- table의 collation은 utf8-bin이 아닌 utf8-general-ci이기 때문에 해당 collation이 계승된다.
+```sql
+ALTER TABLE 사원 ADD COLUMN 소문자_이름 VARCHAR(14) NOT NULL AFTER 이름;
+UPDATE 사원 SET 소문자_이름 = LOWER(이름);
+ALTER TABLE 사원 ADD INDEX I_소문자이름(소문자_이름);
+```
+
+- 아래와 같이 바꿔줄 수 있을 거 같다.
+- 그럼 좌변에서 함수가 빠지니 index 적용이 가능하다.
+```sql
+SELECT 이름,성, 성별, 생년월일
+FROM 사원
+WHERE 소문자_이름 = LOWER(#{name})
+AND 입사일자 >= STR_TO_DATE(#{date}, '%Y-%m-%d')
+```
+
+- 그런데 만약 collation이 utf8-general-ci면 LOWER함수도 필요가 없다.
+- 어차피 대소문자를 구별하지 않기 때문이다.
+- index처리도 되었기 때문에 성능도 향상된다.
+- Jaewon이든, JAewon이든, jaeWon이든 jaewoN이든 어떤 입력값이라도 상관없다. 대소문자를 구별하지 않기 때문이다.
+- 소문자_이름의 collation이 utf8-general-ci라 가능하다. 이름은 utf8-bin이라 안 된다.
+```sql
+SELECT 이름,성, 성별, 생년월일
+FROM 사원
+WHERE 소문자_이름 = #{name}
+AND 입사일자 >= STR_TO_DATE(#{date}, '%Y-%m-%d')
 ```
 
