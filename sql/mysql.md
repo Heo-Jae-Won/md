@@ -1500,3 +1500,59 @@ WHERE 소문자_이름 = #{name}
 AND 입사일자 >= STR_TO_DATE(#{date}, '%Y-%m-%d')
 ```
 
+## <span style="color:#802548">_partition을 활용하라_</span>
+- 년도별로 가져오는 데이터가 있다고 해보자.
+```sql
+SELECT COUNT(1)
+FROM 급여
+WHERE 시작일자 BETWEEN STR_TO_DATE('2000-01-01', '%Y-%m-%d')
+              AND STR_TO_DATE('2000-12-31', '%Y-%m-%d')
+```
+
+- 실행계획을 보면 covering index로 수행한다. 그런데 partition이 없다.
+- 얼마나 고르게 분포되어있는지 살펴보자.
+```sql
+SELECT YEAR(시악일자), COUNT(1)
+FROM 급여
+GROUP BY YERR(시작일자)
+```
+
+- 어느정도 고르게 분포되어 있는 모습이다.
+- 이럴 때 partition을 만들어준다.
+```sql
+ALTER TABLE 급여
+partition by range column(시작일자)
+(
+  partition p85 values less than ('1985-12-31'),
+  partition p85 values less than ('1986-12-31'),
+  partition p85 values less than ('1987-12-31'),
+  partition p85 values less than ('1988-12-31'),
+  partition p85 values less than ('1989-12-31'),
+  partition p85 values less than ('1990-12-31'),
+  partition p85 values less than ('1991-12-31'),
+  partition p85 values less than ('1992-12-31'),
+  partition p85 values less than ('1993-12-31'),
+  partition p85 values less than ('1994-12-31'),
+  partition p85 values less than ('1995-12-31'),
+  partition p85 values less than ('1996-12-31'),
+  partition p85 values less than ('1997-12-31'),
+  partition p85 values less than ('1998-12-31'),
+  partition p85 values less than ('1999-12-31'),
+  partition p85 values less than ('2000-12-31'),
+  partition p85 values less than ('2001-12-31'),
+  partition p85 values less than ('2002-12-31'),
+  partition p85 values less than (MAXVALUE)
+);
+```
+
+- 그리고 나서 select를 하면 속도가 빨라집니다.
+- partition에 맞게 조회하기 때문에 전체 table 혹은 index를 scan하지 않기 때문입니다.
+- 다만 년단위로 끊어서 조회해야만 성능을 발휘합니다.
+```sql
+SELECT COUNT(1)
+FROM 급여
+WHERE 시작일자 BETWEEN STR_TO_DATE('2000-01-01', '%Y-%m-%d')
+              AND STR_TO_DATE('2000-12-31', '%Y-%m-%d')
+```
+
+
