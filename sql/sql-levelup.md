@@ -1,5 +1,4 @@
 ## <span style="color:#802548">_실행계획_</span>
-    this.roleType = RoleType.MEMBER;
 - 어떤 순서로 기억장치의 데이터에 접근할 지에 관한 계획
 - 실행계획을 읽는 순서를 sql을 통해 알아보자.
 
@@ -25,7 +24,6 @@ Id  Operation                               Name            Rows    Bytes   Cost
   - SHOPS TABLE은 driving table로 index scan이 된다.
 
 ## <span style="color:#802548">_버퍼_</span>
-    this.roleType = RoleType.MEMBER;
 - DB는 데이터 접근 속도가 좋은 메모리에 정보를 저장하고 싶어함.
 - 그러나 데이터를 메모리에 저장하면 비용이 듦.
   - 메모리 자체가 용량이 크지 않은데, 그걸 써야 하기 때문.
@@ -148,6 +146,34 @@ address | count
 서귀포시 |  1
 ```
 
+- 아래에서 *를 이해하는 게 어려울 수도 있다.
+- 아래 *는 grouping에 쓰인 column의 조합이다.
+- 따라서 사원번호, 연봉 조합의 row가 2개인 경우에만 출력하겠다는 의미다.
+```sql
+SELECT 사원번호, 연봉, COUNT(*) 
+FROM 급여
+GROUP BY 사원번호, 연봉
+HAVING COUNT(*) = 2;
+```
+
+- 참고로 2개인 경우에 사원번호만 알고 싶다면 아래와 같이 연봉은 생략가능하다.
+```sql
+SELECT 사원번호, COUNT(*) 
+FROM 급여
+GROUP BY 사원번호, 연봉
+HAVING COUNT(*) = 2;
+```
+
+- 만약 group by에 쓰인 게 3개라면?
+- *는 사원번호,연봉,입사일자의 조합일 것이다.
+```sql
+SELECT 사원번호, COUNT(*) 
+FROM 급여
+GROUP BY 사원번호, 연봉,입사일자
+HAVING COUNT(*) = 2;
+```
+
+
 ## <span style="color:#802548">_order by_</span>
 - select문은 어떤 순서로 출력하는가? 정확한 규칙이 없다. 
 - 따라서 지멋대로 나온다.
@@ -184,12 +210,14 @@ WHERE EXISTS (
 - 간단한 예시를 살펴보자.
 
 ```sql
-SELECT name, address,
-    CASE WHEN address = '서울시' THEN '경기'
-    CASE WHEN address = '인천시' THEN '경기'
-    CASE WHEN address = '부산시' THEN '영남'
-    CASE WHEN address = '속초시' THEN '관동'
-    CASE WHEN adresss = '서귀포시'THEN '호남'
+SELECT 
+        name, address,
+    CASE 
+         WHEN address = '서울시' THEN '경기'
+         WHEN address = '인천시' THEN '경기'
+         WHEN address = '부산시' THEN '영남'
+         WHEN address = '속초시' THEN '관동'
+         WHEN adresss = '서귀포시'THEN '호남'
     ELSE NULL END AS district
 FROM Address
 ```
@@ -208,7 +236,9 @@ name        |   address     |   district
 SELECT item_name, year, price_tax as price
 FROM Items
 WHERE year <= 2001
+
 UNION ALL
+
 SELECT item_name, year, price_tax_in as price
 FROM Items
 WHERE year <= 2002
@@ -230,7 +260,7 @@ id      Operation                   Name                Rows
 ```sql
 SELECT item_name, year,
         CASE WHEN year <= 2001  THEN price_tax_ex
-            WHEN year <= 2002   THEN    price_tax_in END AS PRICE
+            WHEN year <= 2002   THEN price_tax_in END AS PRICE
 FROM Items;
 ```
 
@@ -253,7 +283,8 @@ FROM    (
 
         SELECT prefecture, NULL AS pop_men, pop AS pop_wom
             FROM Population
-            WHERE sex = '2') TMP
+            WHERE sex = '2'
+        ) TMP
 GROUP BY prefecture;
 ```
 
@@ -270,7 +301,10 @@ HashAggregate (rows=10)             //select
 
 - 위의 subquery union을 CASE WHEN으로 바꿔주자.
 ```sql
-select prefacture, SUM(CASE WHEN sex ='1' THEN pop ELSE 0 END) AS pop_men, SUM(CASE WHEN sex ='2' THEN pop ELSE 0 END) AS pop_wom
+select 
+        prefacture, 
+        SUM(CASE WHEN sex ='1' THEN pop ELSE 0 END) AS pop_men, 
+        SUM(CASE WHEN sex ='2' THEN pop ELSE 0 END) AS pop_wom
 FROM Population
 GROUP BY prefecture;
 ```
@@ -296,13 +330,17 @@ SELECT emp_name,
 FROM Employees
 GROUP BY emp_name
 HAVING COUNT(*) = 1
+
 UNION
+
 SELECT emp_name,
         '2개를 겸무' AS TEAM
 FROM Employees
 GROUP BY emp_name
 HAVING COUNT(*) = 2
+
 UNION
+
 SELECT emp_name,
         '3개 이상을 겸무' AS TEAM
 FROM Employees
@@ -330,13 +368,14 @@ Id              Operation                   Name
 - 매우 심각하게 부담이 가는 실행 계획이다. 
 - table full scan을 3번이나 한다. 줄여놓자.
 ```sql
-SELECT emp_name,   
-        CASE WHEN COUNT(*) = 1 THEN MAX(team) /* select로 선택한 field가 한개이기 때문에 COUNT(*)는 emp_name이 몇개인지 세는 형태로 진행된다. 다만 COUNT (emp_name)과 다르게 null도 포함해 센다. COUNT(*)와 COUNT(1)은 동일 */
+SELECT 직원이름,   
+        CASE 
+             WHEN COUNT(*) = 1 THEN MAX(team) /* select로 선택한 field가 한개이기 때문에 COUNT(*)는 emp_name이 몇개인지 세는 형태로 진행된다. 다만 COUNT (emp_name)과 다르게 null도 포함해 센다. COUNT(*)와 COUNT(1)은 동일 */
              WHEN COUNT(*) = 2 THEN '2개를 겸무'
              WHEN COUNT(*) = 3 THEN '3개를 겸무'
-            END AS team
+        END AS team
 FROM Employees
-GROUP BY emp_name;
+GROUP BY 직원이름;
 ```
 
 
@@ -365,7 +404,7 @@ where id = '1'
 ```
 
 - 또 하나의 경우는, union을 사용할 때 index를 타게 되는 경우다.
-- index를 타지 않는 경우를 먼저 살펴보자. where절에서 or를 사용했을 경우, index를 타지 않는다.
+- index를 타지 않는 경우를 먼저 살펴보자. where절에서 or를 사용했을 경우, 법칙은 아니지만 대부분의 경우 index를 타지 않는다.
 ```sql
 SELECT key, name, date_1, flg_1, date_2, flg_2, date_3, flg_3
 FROM ThreeElements
@@ -380,15 +419,17 @@ FROM ThreeElements
 WHERE ('2013-11-01','T') IN ( (date_1,flg_1), (date_2,flg_2), (date_3,flg_3));
 ```
 
-- 아래도 동일한 결과다.
+- 아래도 OR나 IN을 사용할 때와 동일한 문제를 안고 있다. multiple column을 OR로 연결한 것과 같다.
 - 하지만 where문에는 CASE WHEN을 쓰지 말자. 비즈니스 로직이 바뀌면 아예 다른 결과를 초래한다.
 ```sql
 SELECT key, name, date_1, flg_1, date_2, flg_2, date_3, flg_3
 FROM ThreeElements
 WHERE 
-    CASE WHEN date_1 = '2013-11-01' THEN flg_1
-    CASE WHEN date_2 = '2013-11-01' THEN flg_2
-    CASE WHEN date_3 = '2013-11-01' THEN flg_3;
+    CASE 
+         WHEN date_1 = '2013-11-01' THEN flg_1
+         WHEN date_2 = '2013-11-01' THEN flg_2
+         WHEN date_3 = '2013-11-01' THEN flg_3
+    ELSE NULL END = 'T';
 ```
 
 
@@ -444,7 +485,8 @@ ID              Operation                           Name
 0               SELECT STATEMENT            
 1               SORT UNIQUE                 
 2               UNION-ALL
-3               TABLE ACCESS BY INDEX ROWID         THREEELEMENTS
+3               TABLE ACCESS BY INDEX ROWID         THREEELEMENTS   4   
+
 4               INDEX RANGE SCAN                    IDX_1
 5               TABLE ACCESS BY INDEX ROWID         THREEELEMENTS
 6               INDEX RANGE SCAN                    IDX_2
@@ -487,11 +529,11 @@ AND data_type ='C'
 ```sql
 SELECT id,
         CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_1,
-        CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_2,
-        CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_3,
-        CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_4,
-        CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_5,
-        CASE WHEN data_type ='C' THEN data_1 ELSE NULL END AS data_6,
+        CASE WHEN data_type ='A' THEN data_2 ELSE NULL END AS data_2,
+        CASE WHEN data_type ='B' THEN data_3 ELSE NULL END AS data_3,
+        CASE WHEN data_type ='B' THEN data_4 ELSE NULL END AS data_4,
+        CASE WHEN data_type ='B' THEN data_5 ELSE NULL END AS data_5,
+        CASE WHEN data_type ='C' THEN data_6 ELSE NULL END AS data_6,
 FROM NonAggTbl
 GROUP BY id;
 ```
@@ -501,11 +543,11 @@ GROUP BY id;
 ```sql
 SELECT id,
         MAX(CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_1),
-        MAX(CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_2),
-        MAX(CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_3),
-        MAX(CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_4),
-        MAX(CASE WHEN data_type ='B' THEN data_1 ELSE NULL END AS data_5),
-        MAX(CASE WHEN data_type ='C' THEN data_1 ELSE NULL END AS data_6),
+        MAX(CASE WHEN data_type ='A' THEN data_2 ELSE NULL END AS data_2),
+        MAX(CASE WHEN data_type ='B' THEN data_3 ELSE NULL END AS data_3),
+        MAX(CASE WHEN data_type ='B' THEN data_4 ELSE NULL END AS data_4),
+        MAX(CASE WHEN data_type ='B' THEN data_5 ELSE NULL END AS data_5),
+        MAX(CASE WHEN data_type ='C' THEN data_61 ELSE NULL END AS data_6),
 FROM NonAggTbl
 GROUP BY id;
 ```
@@ -599,6 +641,7 @@ age_class           |       COUNT(*)
 노인                |           2
 ```
 - GROUP BY에 CASE WHEN을 써도 실행계획은 바뀌지 않는다.
+- GROUP BY와 집약함수들을 쓸 때 조심해야 하는 건 메모리 용량 초에 따른 저장소 I/O발생이다.
 - GROUP BY에 함수를 써도 실행계획은 동일하다. 다만 함수처리에 따른 CPU 연산이 늘어날 뿐이다.
 - 아래는 postgreSQL 실행계획이다.
 ```
@@ -727,51 +770,25 @@ Chris       |       90      |노인           |   2
 
 - 물론 장점도 있다.
 - 아래 쿼리가 바로 반복계의 대표 예시다.
+- PL/SQL이라 써놓진 않겠지만 이해하기는 쉽지 않다.
+- 그러나 본질적으로는 아래와 같은 쿼리문을 반복 수행하는 것이다.
 ```sql
 SELECT col_a FROM foo WHERE p_key = 1;
 ```
 
 - 실행계획도 아주 단순하다. 이해하기 쉽다.
+- transaction 관리도 매우 쉽다.
+- 처리 시간도 매우 정밀하며, 실행 계획도 데이터양에 따라 바뀔 일도 거의 없다.
 ```
 Index Scan using foo_pkey on foo
     Index Cond: (p_key = 1)
 ```
 
-- 처리 시간도 매우 정밀하며, 실행 계획도 데이터양에 따라 바뀔 일도 거의 없다.
-- transaction 관리도 매우 쉽다.
 
+- 이제 반복을 표현하는 다른 방법을 살펴보자.
 - 그럼 위의 sql보다 좀 더 복잡한 포장계는 어떻게 구성될까?
-- 바로 CASE WHEN과 window function을 사용한다.
-- 아래 sql 예시를 살펴보자.
-- 0 혹은 -1, 1 일 때 =, -, +를 붙여준다.
-```sql
-INSERT INTO Sales2
-SELECT company,
-        year,
-        sale,
-        CASE SIGN(sale - MAX(sale)
-                            OVER (PARTITION BY company
-                                    ORDER BY year
-                                    ROWS BETWEEN 1 PRECEDING
-                                            AND 1 PRECEDING))
-            WHEN 0 THEN '='
-            WHEN 1 THEN '+'
-            WHEN -1 THEN '-'
-            ELSE NULL END AS var
-FROM Sales;
-```
-
-- where 조건문이 없으니 full scan을 떄린다.
-- ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING으로 인해 직전 record를 기준으로 =, +, -가 붙게 된다.
-- ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING로 하면 2개 전 record를 기준으로 =, +, -가 붙게 된다.
-```
-Id          |           Operation           |       Name
-0           |           SELECT STATEMENT    |       
-1           |           WINDOW SORT         |       
-2           |           TABLE ACCESS FULL   |       SALES
-```
-
-- subquery로 바꾸면 아래와 같이 된다.
+- 흔한 방법 중에 서브쿼리 혹은 case-when + window function이 있다.
+- 직전회사명과 직전매상을 검색한다고 해보자. 서브쿼리로는 아래와 같다.
 
 ```sql
 SELECT compnay,
@@ -792,7 +809,7 @@ SELECT compnay,
 FROM Sales;
 ```
 
-- 진짜 복잡하고, 실행계획에서도 손해다.
+- 식이 복잡하고, 실행계획에서도 손해다.
 - 무조건 window function으로 바꿀 수 있다면 그렇게 하자.
 ```
 Id          |           Operation                       |       Name
@@ -804,40 +821,36 @@ Id          |           Operation                       |       Name
 5           |                FIRST ROW                  |
 6           |                 INDEX RANGE SCAN(MIN, MAX)|       PK_SALES
 7           |           TABLE ACCESS FULL               |       SALES
-```               
+```      
 
-- 이와 비슷한 예제로 아래의 sql을 살펴보자.
+- 아래는 window function을 쓴 예시다.
 ```sql
 SELECT company,
         year,
         sale,
-        MAX(company)
-            OVER (PARTITION BY company
-                ORDER BY year
-                ROWS BETWEEN 1 PRECEDING
-                        AND  1 PRECEDING) AS pre_company,
-        MAX(sale)
-            OVER (PARTITION BY company
-                    ORDER BY year
-                    ROWS BETWEEN 1 PRECEDING
-                            AND 1 PRECEDING) AS pre_sale
+        CASE SIGN(sale - MAX(sale)
+                            OVER (PARTITION BY company
+                                    ORDER BY year
+                                    ROWS BETWEEN 1 PRECEDING
+                                            AND 1 PRECEDING))
+            WHEN 0 THEN '='
+            WHEN 1 THEN '+'
+            WHEN -1 THEN '-'
+            ELSE NULL END AS var
 FROM Sales;
 ```
 
+- ROWS BETWEEN 1 PRECEDING AND 1 PRECEDING으로 인해 직전 record를 기준으로 =, +, -가 붙게 된다.
+- ROWS BETWEEN 2 PRECEDING AND 2 PRECEDING로 하면 2개 전 record를 기준으로 =, +, -가 붙게 된다.
+- 실행계획이 매우 단순해졌다. 하지만 그 외에도 필요없는 INDEX UNIQUE SCAN, INDEX RANGE SCAN이 줄었다.
 ```
-company     |year       |sale               |pre_company        |pre_sale
-A           |2002       |50                  |
-A           |2003       |52                 |A                  |50
-A           |2004       |55                 |A                  |55
-B           |2001       |27                 |                   |
-B           |2005       |28                 |B                  |27
-B           |2009       |30                 |B                  |28
-C           |2001       |40                 |                   |
-C           |2005       |39                 |C                  |40
-C           |2006       |38                 |C                  |39
-C           |2010       |35                 |C                  |38
+Id          |           Operation           |       Name
+0           |           SELECT STATEMENT    |       
+1           |           WINDOW SORT         |       
+2           |           TABLE ACCESS FULL   |       SALES
 ```
 
+         
 
 - 상관 서브쿼리는 window 함수의 PARTITION BY와 ORDER BY와 같은 기능을 한다.
 - 그러나 성능이 문제다. 실행계획이 변동한다는 것도 리스크다.
@@ -861,6 +874,53 @@ SELECT company,
                             AND S1.year > S3.year)) AS pre_sale
 FROM Sales S1;
 ```
+
+- window function을 사용하면 아래와 같이 단순하게 바꿀 수 있다.
+- 왜 MAX를 사용해야 할까? MAX같은 집약함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
+```sql
+SELECT company,
+        year,
+        sale,
+        MAX(company)
+            OVER (PARTITION BY company
+                ORDER BY year
+                ROWS BETWEEN 1 PRECEDING
+                        AND  1 PRECEDING) AS pre_company,
+        MAX(sale)
+            OVER (PARTITION BY company
+                    ORDER BY year
+                    ROWS BETWEEN 1 PRECEDING
+                            AND 1 PRECEDING) AS pre_sale
+FROM Sales;
+```
+```
+company     |year       |sale               |pre_company        |pre_sale
+A           |2002       |50                  |
+A           |2003       |52                 |A                  |50
+A           |2004       |55                 |A                  |55
+B           |2001       |27                 |                   |
+B           |2005       |28                 |B                  |27
+B           |2009       |30                 |B                  |28
+C           |2001       |40                 |                   |
+C           |2005       |39                 |C                  |40
+C           |2006       |38                 |C                  |39
+C           |2010       |35                 |C                  |38
+```
+
+- 다른 예시를 들어보자.
+- 아래와 같이 사원번호와 년도별 연봉, 직전연봉을 볼 수 있을 것이다.
+```sql
+SELECT 사원번호,
+        시작일자,
+        연봉,
+        MAX(연봉)
+            OVER (PARTITION BY 사원번호
+                ORDER BY 시작일자
+                ROWS BETWEEN 1 PRECEDING
+                        AND  1 PRECEDING) AS 직전연봉
+FROM 급여;
+```
+
 
 - 포장계 sql의 다른 예시를 살펴보자.
 - 우편번호가 가장 유사한 것을 얻어오는 SQL을 반복문으로 짜본다고 해보자.
@@ -1264,18 +1324,16 @@ AND NOT EXISTS(
 
 
 ## <span style="color:#802548">_결합_</span>
-- 결합은 SQL어로 JOIN이다.
-- NATRUAL JOIN은 INNER JOIN으로 쓰는 게 좋다.
-- CROSS JOIN은 거의 쓸일이 없다.
-- 가끔 쓰인다면, 그건 실수일 것이다.
-- 아래는 실수로 CROSS JOIN을 건 것이다. ANSI join을 썼다면 이럴 일이 없었을 것이다.
+- CROSS JOIN은 거의 쓸일이 없다. 쓰였다면, 그건 실수일 것이다.
+- 아래는 실수로 CROSS JOIN을 건 것이다. 결합조건을 쓰지 않았다.
+- ANSI join을 썼다면 이럴 일이 없었을 것이다.
 ```sql
 SELECT *
 FROM Employees, Departments
 ```
 
 - 떄로 3가지 이상 table을 조합할 때도 cross join이 예기치 않게 끼어들 때가 있다.
-- 아래와 같이 A-B, A-C 간의 결합조건은 정했지만, B-C는 정하지 않았다.
+- 아래와 같이 A-B, A-C 간의 결합조건은 정했지만, B-C는 정하지 않았기 때문이다.
 ```sql
 SELECT A.col_a, B.col_b, C.col_c
     FROM Table_A A
@@ -1297,34 +1355,13 @@ Id     |Operation                    |Name
 5       |    TABLE ACCESS FULL       |TABLE_C
 6       |   TABLE ACCESS FULL        |TABLE_A   
 ```
-- mysql은 아래와 같다. type이 ALL인데, possible_keys가 NULL인 경우 table full scan과 동일하다.
-- 그러면서 using join Buffer라면 보통 mysql에서 cross join을 의미한다.
+- mysql은 아래와 같다. join의 실행계획을 보아 세 테이블이 모두 type이 ALL인데,  이러면 cross join을 의미한다.
 ```
 Id | select_type | table | type        | possible_keys | key  | key_len | ref  | rows  | Extra
 -----------------------------------------------------------------------------------------
 1  | SIMPLE      | A     | ALL         | NULL          | NULL | NULL    | NULL | 1000  | 
 1  | SIMPLE      | B     | ALL         | NULL          | NULL | NULL    | NULL | 10000 | 
 1  | SIMPLE      | C     | ALL         | NULL          | NULL | NULL    | NULL | 100000| Using join buffer
-```
-- 물론 수행이 안 될 수도 있다.
-```
-Id      |Operation                    |Name
-0       |SELECT STATEMENT            |
-1       | NESTED LOOPS               |
-2       | NESTED LOOPS               |
-3       |  TABLE ACCESS FULL         |TABLE_A
-4       |  TABLE ACCESS FULL         |TABLE_B
-6       | TABLE ACCESS FULL          |TABLE_C  
-```
-- mysql은 아래와 같다. type이 ALL인데, possible_keys가 NULL인 경우 table full scan과 동일하다.
-- 여기선 using where라서 cross join이 된 것은 아닌 것으로 봐야 한다.
-- oracle처럼 명확하게 알려주지 않는다.
-```
-Id | select_type | table | type        | possible_keys | key  | key_len | ref  | rows  | Extra
------------------------------------------------------------------------------------------
-1  | SIMPLE      | A     | ALL         | NULL          | NULL | NULL    | NULL | 1000  | 
-1  | SIMPLE      | B     | ALL         | NULL          | NULL | NULL    | NULL | 10000 | 
-1  | SIMPLE      | C     | ALL         | NULL          | NULL | NULL    | NULL | 100000| Using where
 ```
 - table 끼리 결합이 양이 많지않으면 상관없지만, 큰 테이블끼리 cross join을 하면 굉장히 오래 걸린다.
 - 그럴 때는 B와 C 간의 무의미한 조건절을 넣어서 실행계획을 변경할 수 있다.
@@ -1352,7 +1389,9 @@ Id      |Operation                    |Name
 
 
 - INNER JOIN은 자주 쓰인다.
-- INNER JOIN은 결합 대상을 최대한 축소하여 작동한다.
+- INNER라고 불리는 이유는 resultSet이 CROSS JOIN의 일부이기 때문이다.
+- 물론 INNER JOIN은 CROSS JOIN을 해놓고 결과를 축소하는 바보짓을 하지 않는다.
+- 모든 RDBMS는 INNER JOIN 시 CROSS JOIN이 아니라 결합 대상을 최대한 축소하여 작동한다.
 - 우선 데이터가 아래와 같이 구성되었다고 해보자.
 ```
 Employees
@@ -1392,9 +1431,10 @@ emp_id          |emp_name           |dept_id            |dept_name
 006             |주아               |12                 |개발
 ```
 
-- 서브쿼리를 쓰면, 아래와 같이 쓸 수 있따.
-- 문제점이 많다. 실행 계획이 안정적이지 못하다.
-- table도 여러 번 scan해서 성능이 떨어질 가능성도 높다.
+- 서브쿼리를 쓰면, 아래와 같은 상관서브쿼리로 join을 대체할 수 있다.
+- 다만 select에서 서브쿼리를 쓰는 것은 join보다 비용이 꽤나 높은 일이다.
+- record 수만큼 상관 서브쿼리를 실행해야 하기 때문이다.
+- 즉 table을 여러 번 scan해서 성능이 떨어진다.
 ```sql
 SELECT E.emp_id, E.emp_name, E.dept_id,
     (SELECT D.dept_name
@@ -1427,14 +1467,19 @@ NULL            |NULL               |13                 |영업
 
 - 우선 NL부터 다뤄보자.
 - SQL에서는 결합은 기본적으로 두 테이블의 결합이다.
-- driving table에서 driven table 하나하나 record를 scan해서 결합 조건에 맞으면 return한다.
-- 이 작업을 driving table의 모든 record에 대해서 반복한다.
+- driving table(outer table)에서 driven table(inner table) 하나하나 record를 scan해서 결합 조건에 맞으면 return한다.
+- 결합 조건에 맞을 때까지 driven table scan이 필요하다는 의미다. 맞는 record를 찾으면 해당 driving table의 record에 대해서는 반복이 끝난다.
+- 그럼 driving table의 다음 record에 대해서 또 같은 방식으로 진행된다.
+- 이같이 driving table의 모든 record에 대해서 대응되는 driven table의 record를 찾을 때까지 반복한다.
 - 따라서 NL은 record 수가 많을 수록 느려진다.
 ```
 접근 레코드수: A table Record X B table Record
 ```
-- driving table(outer table)의 결합 키 필드에 인덱스가 있으면, driving table을 작게 하는 게 좋다.
-- 해당 index를 통해 driven table을 full scan하지 않고 효율적으로 index scan을 할 수 있기 때문이다.
+- driving table을 뭘로 정하든 어차피 R(A) x R(B)면 실행시간이 같을 거라 생각할 수 있으나 그렇지 않다.
+- 그러나 driving table(outer table)의 결합 키 필드에 인덱스가 있으면, driving table을 작게 하는 게 좋다.
+- 그 이유는 index를 통해 table access를 건너뛰면 driven table의 record에 대한 scan행위를 줄일 수 있기 때문이다.
+- 최적의 경우는 driving table의 index와 driven table의 index가 1:1 대응하는 경우다. unique index가 그런 경우다.
+- 이 경우 drivent table이 크면 클수록 index 사용에 따른 반복 생략 효과가 커진다.
 ```
 최적의경우 -> 접근 레코드수: A table Record X 2
 해당 레코드를 drivent table의 index만으로 찾을 수 있는 경우
@@ -1443,7 +1488,7 @@ NULL            |NULL               |13                 |영업
 - 아까 다뤘던 inner join 쿼리를 다시 살펴보자.
 - INDEX UNIQUE SCAN은 해당 WHERE 혹은 ON절에서 비교하는 결과가 유일할 때 뜬다.
 - 즉, PK 혹은 UK로만 비교했을 때 INDEX UNIQUE SCAN이 뜨게 된다.
-- 그 외에는 INDEX RANGE SCAN이 뜬다.
+- 그 외에 driving table의 결합키에 대응되는 driven table의 record가 여러개인 경우, INDEX가 1:1 대응이 아니라 내부 반복이 필요하다. 따라서 INDEX RANGE SCAN이 된다.
 ```sql
 SELECT E.emp_id, E.emp_name, E.dept_id, D.dept_name
 FROM Employees E INNER JOIN Departments D
@@ -1462,9 +1507,10 @@ ID      |Operation                      |Name
 - INDEX RANGE SCAN이 INDEX UNIQUE SCAN보다 안 좋은 이유는, 더 반복을 많이 하기 때문이다.
 - INDEX UNIQUE SCAN은 하나의 RECORD만 걸리기 때문에 늘 최적의 경우의 수가 된다.
   - 즉, driving table Record X 2가 반복의 횟수다.
-- 반면에 INDEX RANGE SCAN은 하나가 아니라 MULTIPLE row가 걸리게 된다.
-  - 즉, driving table Record X2 < 반복의 횟수 <  A table Record X B table Record가 된다.
-
+- 반면에 INDEX RANGE SCAN은 하나가 아니라 multiple row가 걸리게 된다.
+  - 즉, driving table Record X2 < 반복의 횟수 <  R(A) X R(B) Record가 된다.
+- 따라서 결합key로 쓸 column의 cardinality가 굉장히 중요하다.
+- 데이터가 고르게 분포되어 있을수록 성능에 좋은 영향을 미친다.
 ## <span style="color:#802548">_driving table의 역설_</span>
 - driving table을 작게 만드는 게 통상적으로 좋다.
 - 하지만, on절로 driven table을 조회하려 할때, 많은 record가 걸리게 된다면?
@@ -1503,9 +1549,14 @@ dept_id
 - 하지만 drivent table에 index가 없을 때, 선택율이 너무 높을 때, driving table 또한 작지 않을 때 사용하면 좋다.
 - 웹의 경우, 실시간처리인 OLTP방식이라 Hash를 사용하기에는 메모리가 부족할 가능성이 높습니다. 그 경우 디스크 I/O가 되어버려 느려진다.
 - 따라서 대용량을 다룰 야간 배치에 hash join을 자주 사용하게 된다.
-- 동치결합에서만 사용이 가능하다는 단점이 존재한다.
+```
+SELECT /*+ HASH_JOIN(t1 t2) */ *
+FROM table1 t1
+JOIN table2 t2 ON t1.column = t2.column;
+```
+- 위와 같이 hint를 통해 hash join을 강제할 수도 있다. 
+- 다만 hash join은 동치결합에서만 사용이 가능하다는 단점이 존재한다.
 - 또한 hash 결합은 보통 full scan이기 때문에 오래걸린다.
-
 ``` 
 Id|                 |Operation                   |Name
 0 |                 |SELECT STATEMENT            |
@@ -1570,6 +1621,9 @@ Id|                 |Operation                   |Name
 
 - EXISTS와 IN은 결과가 동일한 경우 실행계획이 동일하다.
 - 그러나 NOT EXISTS와 NOT IN은 NOT EXISTS가 성능이 더 좋다.
+- EXISTS와 INNER JOIN은 INDEX UNIQUE SCAN이라면 실행시간은 동일하다.
+- 그런데 INNER JOIN이면 읽기가 쉬우니 이 경우엔 EXISTS가 아닌 JOIN을 쓰는게 좋다.
+- 반면에 index 처리가 잘 되어있지 않다면 EXISTS를 쓰는 게 성능이 더 좋다.
 
 
 ## <span style="color:#802548">_subquery_</span>
@@ -1600,34 +1654,9 @@ C                   |70             |50
 D                   |3              |2000
 ```
 
-- 나는 처음에 아래와 같은 query문을 생각했다.
-- 그런데 안타깝게도 group by절에 over()를 쓸 수가 없었다.
-```sql
-SELECT cust_id,
-min(seq) over(order by seq desc)
-from table
-group by cust_id
-```
-
-- 그래서 아래와 같이 바꿔봤다.
-- 그러나 내가 원하는 결과는 나오지 않았다.
-```sql
-SELECT cust_id, 
-min(seq)
-from 구매
-group by cust_id;
-```
-
-- 자꾸 아래와 같은 결과가 나왔는데, 보니까 group by로 썼을 떄, 처음 걸리는 cust_id와 seq 조합이 그냥 출력되었다.
-- 위로는 불가능했다.
-```
-A	1
-B	12
-C	10
-D	3
-```
-
-- 책에서는 아래와 같은 결합을 제시했다.
+- 그냥 서브쿼리를 쓴다면 아래와 같이 inline view로 결합을 하게 된다.
+- 해당 서브쿼리가 좋지 않은 이유는, SELECT를 구매 table에서 진행했지만, 서브쿼리를 만나서 한번 더 구매 table을 SCAN해야하기 때문이다.
+- 똑같은 TABLE을 두 번 scan하게 되는 것이다.
 ```sql
 SELECT R1.cust_id, R1.seq, R1.price
     FROM Receipts R1
@@ -1638,8 +1667,15 @@ SELECT R1.cust_id, R1.seq, R1.price
         ON R1.cust_id = R2.cust_id
     AND R1.seq = R2.min_seq;
 ```
-
-- 더 단순화하면 아래와 같다.
+```
+1	PRIMARY	<derived2>		ALL					5	100.00	Using where
+1	PRIMARY	R1		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R2.min_seq	1	100.00	Using index
+2	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+```
+- 상관서브쿼리를 쓴다면 아래와 같이 쓸 수 있다.
+- 해당 서브쿼리가 좋지 않은 이유는, SELECT를 구매 table에서 진행했지만, 서브쿼리를 만나서 한번 더 구매 table을 SCAN해야하기 때문이다.
+- 똑같은 TABLE을 두 번 scan하게 되는 것이다.
+- 또한 상관서브쿼리는 결합과 마찬가지로 데이터양에 따라 실행계획에 변동성이 높다.
 ```sql
 select cust_id, seq, price
 	FROM 구매 R1
@@ -1647,66 +1683,12 @@ select cust_id, seq, price
 					FROM 구매 R2
                     WHERE R1.cust_id = R2.cust_id);
 ```     
-
-- window function을 쓴다면 아래와 같다.
-```sql
-SELECT cust_id, seq, price
-FROM (SELECT cust_id, seq,price,
-		ROW_NUMBER() 
-			OVER(PARTITION BY cust_id
-					ORDER BY seq) AS row_seq
-		FROM 구매 ) WORK
-WHERE WORK.row_seq = 1;
-```
-
-
-- 그런데도 똑같은 오류가 났다.
-- 원인을 찾아보니 seq를 내가 varchar로 정했기 때문이었다.
-- 문자열은 첫문자열부터 비교한다고 한다. 12와 5를 비교하면 1과 5를 비교하는 셈이 되는 것이었다.
-- int로 바꾸고 다시 쿼리를 실행해보니 잘 된다.
-```sql
-SELECT cust_id, 
-min(seq)
-from 구매
-group by cust_id;
-```
-
-```
-1	SIMPLE	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
-```
-
-
-```sql
-SELECT R1.cust_id, R1.seq
-    FROM Receipts R1
-        INNER JOIN
-            (SELECT cust_id, MIN(seq) AS min_seq
-                FROM Receipts
-                GROUP BY cust_id) R2
-        ON R1.cust_id = R2.cust_id
-    AND R1.seq = R2.min_seq;
-```
-
-```
-1	PRIMARY	<derived2>		ALL					5	100.00	Using where
-1	PRIMARY	R1		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R2.min_seq	1	100.00	Using index
-2	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
-```
-
-```sql
-select cust_id, seq, price
-	FROM 구매 R1
-    WHERE seq = (SELECT MIN(seq)
-					FROM 구매 R2
-                    WHERE R1.cust_id = R2.cust_id);
-```  
-
 ```
 1	PRIMARY	R1		ALL					16	100.00	Using where
 2	DEPENDENT SUBQUERY	R2		ref	PRIMARY	PRIMARY	602	practice.R1.cust_id	4	100.00	Using index
 ```
-
-
+- 따라서 상관서브쿼리가 아닌, window function을 쓰는 서브쿼리로 바꿔준다.
+- 실행계획도 안정적으로 바꾸고, table scan을 1회로 줄일 수 있다.
 ```sql
 SELECT cust_id, seq, price
 FROM (SELECT cust_id, seq,price,
@@ -1720,11 +1702,58 @@ WHERE WORK.row_seq = 1;
 1	PRIMARY	<derived2>		ref	<auto_key0>	<auto_key0>	8	const	1	100.00	 //이건 table scan이 아니다. DERIVED를 이용했기 때문이다.
 2	DERIVED	구매		ALL					16	100.00	Using filesort
 ```
+
+- 나도 나름 답을 찾아보려고 했다. 나는 group by와 집약함수를 이용하려 했다.
+- 그런데 안타깝게도 group by절에서는 집약함수 + window function over() 조합을 쓸 수가 없었다.
+- min을 그냥 min()으로 쓰면 집약함수라서 group별로 센다.
+- 하지만 min over()를 쓰면 window 함수라서 group별이 아니라 전체 record를 대상으로 order by한다.
+- 따라서 group by와 window function은 서로 상충되는 관계에 있다. group by는 window function과 같이 쓰면 안되는 것이었다.
+```sql
+SELECT cust_id,
+min(seq) over(order by seq desc)
+from 구매
+group by cust_id
+```
+
+- 그래서 아래와 같이 바꿔봤다.
+- 그러나 내가 원하는 결과는 나오지 않았다.
+- B가 5가 떠야했는데 자꾸 12가 떴다.
+```sql
+SELECT cust_id, 
+min(seq)
+from 구매
+group by cust_id;
+```
+```
+A	1
+B	12
+C	10
+D	3
+```
+
+- 원인을 찾아보니 seq를 내가 varchar로 정했기 때문이었다.
+- 문자열은 첫문자열부터 비교한다고 한다. 12와 5를 비교하면 1과 5를 비교하는 셈이 되는 것이었다. 따라서 12가 5보다 더 작은 것이었다.
+- int로 바꾸고 다시 쿼리를 실행해보니 잘 된다.
+```sql
+SELECT cust_id, 
+min(seq)
+from 구매
+group by cust_id;
+```
+```
+A	1
+B	5
+C	10
+D	3
+```
+- 실행계획은 아래와 같이 단순하다.
+```
+1	SIMPLE	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
+```
 - min을 사용하고 group by를 쓴 게 실행계획은 가장 간단하다. group by로 index scan을 한번 한다.
 - 하지만 window functiond을 사용한 예제는 group by없이 table full scan을 한번 한다. 
 - 보통 크기가 클 수록 index scan이 중요하다. group by를 하더라도 말이다.
-- 따라서 첫 번째가 좋다고 한다.
-- 다만 내 생각에 디스크 I/O가 벌어지면 무조건 window function으로 바꿔야 할 것으로 보인다.
+- 따라서 첫 번째가 좋다고 한다. 다만 디스크 I/O가 벌어지면 무조건 window function으로 바꿔야 할 것으로 보인다.
 ```sql
 SELECT cust_id, 
 min(seq)
@@ -1801,6 +1830,7 @@ GROUP BY cust_id;
 
 ## <span style="color:#802548">_subquery를 써야할 떄_</span>
 - subquery를 써야할 때는 결합 대상 record를 줄여야할 때다.
+- driving과 driven table 모두 결합 record를 줄이는 게 좋다는 의미다.
 - 아래와 같은 테이블이 있다.
 ```
 회사
@@ -1848,6 +1878,7 @@ cd_cd              |shop_id          |emp_nbr            |main_flg
 - 결합을 하고, 집약을 한다.
 - 결합 비용이 비싼 대신, 집약 비용이 싸다.
 - 메모리가 충분할 때는 성능이 떨어진다.
+- 결합해야 할 record가 많기 때문이다. 회사 테이블 레코드 4개, 사업소 테이블 레코드 10개다.
 ```sql
 SELECT A.cd_cd, district, sum(emp_nbr)
 FROM 회사 A
@@ -1857,13 +1888,14 @@ WHERE main_flg = 'Y'
 GROUP BY A.cd_cd
 ```
 
-- 위의 쿼리는 회사 테이블과 사업소 테이블의 결합을 먼저 수행하고, 결과에 GROUP BY를 적용해서 집약했다.
-- 결답 대상 레코드는 사업소 테이블의 레코드, 즉 10개다.
+
 
 - 그럼 이번에는 집약을 먼저 해보자.
 - 집약을 먼저하고, 결합을 한다.
 - 결합 비용이 싼 대신, 집약 비용이 비싸다.
 - 메모리가 부족해 Disk I/O로 넘어가면 성능이 떨어진다.
+- 메모리가 충분하다면 성능이 좋다.
+- 결합해야 할 record가 적기 때문이다. 회사 테이블 레코드 4개, 사업소 테이블 레코드 4개다.
 ```sql
 SELECT A.cd_cd, A.district, sum_emp
 FROM 회사 A
@@ -1878,12 +1910,12 @@ ON A.cd_cd = CSUM.cd_cd;
 
 - 결과는 똑같다.
 - 그런데 실행계획은 다르다.
-- 서브쿼리에서 먼저 결합한 쪽이 우수할 수도 있다.
+- 서브쿼리에서 먼저 결합한 쪽이 우수할 가능성이 높다.
 - 그 이유는 결합할 record가 4개로 줄었기 때문이다.
 - 물론 집약 비용이 두번째가 더 높다. subquery 안에서의 group by는 서브쿼리가 아닐때의 group by에 비해 추가 단계를 거친다.
 - 서브쿼리의 데이터를 메모리나 디스크 등에 저장한다던가 하는 형태로 말이다.
- 
-- 때로 view merging이 일어나면 subquery를 써도 결합처럼 실행계획이 작동한다.
+- 때로는 partition이나, index를 타기위해, 결합이 record 수를 더 줄일 때 view merging이 일어난다.
+- 때로 view merging(subquery는 inline view다)이 일어나면 subquery를 써도 결합처럼 실행계획이 작동한다.
 - 아래와 같이 sql을 짰어도,
 ```sql
 SELECT A.cd_cd, A.district, sum_emp
@@ -1897,7 +1929,9 @@ INNER JOIN
 ON A.cd_cd = CSUM.cd_cd;
 ```
 
-- 실제 실행계획은 아래처럼 되는 셈이다.
+- 실제 실행계획은 아래처럼 서브쿼리가 풀린 채로 작동하게 된다.
+- record가 늘어나는 대신 index의 효과를 받을 수 있을 것이다.
+- 무엇이 나은지는 실제 실행을 해봐야 안다.
 ```sql
 SELECT A.cd_cd, district, sum(emp_nbr)
 FROM 회사 A
@@ -1907,8 +1941,6 @@ WHERE main_flg = 'Y'
 GROUP BY A.cd_cd
 ```
 
-- 그 이유는 partition이나, index 설정, 결합이 record 수를 더 줄일 때 view merging이 일어난다.
-- subquery는 inline view다.
 
 ## <span style="color:#802548">_record에 순번 붙이기_</span>
 - 기본키가 한개의 필드일 경우, record에 순서를 붙이는 것은 간단하다.
