@@ -199,11 +199,7 @@ const schedulePaginationRequest = ref<SchedulePaginationRequest>({
     );
 ```
 ## <span style="color:#802548">_6. emit_</span>
-
-​
-
 - paging 기능을 담당하는 component와 paging 표시를 담당하는 component가 분리된 경우, emit을 활용할 수 있다.  
-
 ​
 
 - 우선 아래와 같이 page값 증감에 따른 fetch를 실행하는 함수를 만든다.

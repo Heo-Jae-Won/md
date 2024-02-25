@@ -206,7 +206,7 @@ if (StringUtils.hasText(fileExtension)) {
 - 그럼 아래와 같이 jpg나 png가 아니면 에러가 뜬다.
 
 
-- 반면에 잘 등록되면  아래와 같이 폴더에 이미지가 삽입된다.
+- 반면에 잘 등록되면 폴더에 이미지가 삽입된다.
 ```java
 public void insertBoardInfo(BoardDto insertDto) throws ServiceException {
 
