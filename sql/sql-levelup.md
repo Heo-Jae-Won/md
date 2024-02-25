@@ -2551,10 +2551,25 @@ SELECT order_id
 ```
 
 - index field로 연산하는 경우도 index가 풀린다.
+- 아래와 같이는 사용해도 된다.
 ```sql
 SELECT *
     FROM SomeTable
     WHERE index_column > 100;
+```
+
+- 그러나 아래와 같이는 사용하면 안 된다.
+```sql
+SELECT *
+    FROM SomeTable
+    WHERE index_column * 1.1 > 100;
+```
+
+- 연산이 필요하다면 우변에다가 해줘야 한다.
+```sql
+SELECT *
+    FROM SomeTable
+    WHERE index_column  > 100 * 1.1;
 ```
 
 - IS NULL을 사용해도 index가 풀린다.
