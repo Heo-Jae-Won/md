@@ -183,7 +183,7 @@ HAVING COUNT(*) = 2;
 ## <span style="color:#802548">_매칭_</span>
 - table과 table 간의 관계를 filtering 조건으로 걸고 싶다면?
 - 그럴 때 상수로 wherer column = "해당상수";로 하면 해당상수가 바뀌면 망한다.
-- 따라서 매칭을 실행한다. 구체적 예시를 살펴보자.
+- 그러한 이유로 상관서브쿼리를 활용한 매칭을 실행한다. 구체적 예시를 살펴보자.
 
 - Address2 table에 있는 이름에 한해서 Address에서 이름을 찾게 한다. 이걸 상수로 했다면? 매번 바꿔야하니 끔찍했을 것이다.
 ```sql
@@ -192,8 +192,8 @@ SELECT name
     WHERE name in (SELECT name FROM Address2)
 ```
 
-- 아래와 같이 상관 서브쿼리와 같이 쓰이는 경우가 흔하다.
-- in보다는 exists가 성능이 더 좋으니까 exists로 바꿀 수 있다면 바꿔주자.
+- 매칭은 위와 같이 상관 서브쿼리와 같이 쓰이는 경우가 흔하다.
+- in보다는 exists가 성능이 더 좋은 경우가 많으니 가능하다면 exists를 활용해보자.
 ```sql
 SELECT name
 FROM customers c
@@ -547,7 +547,7 @@ SELECT id,
         MAX(CASE WHEN data_type ='B' THEN data_3 ELSE NULL END AS data_3),
         MAX(CASE WHEN data_type ='B' THEN data_4 ELSE NULL END AS data_4),
         MAX(CASE WHEN data_type ='B' THEN data_5 ELSE NULL END AS data_5),
-        MAX(CASE WHEN data_type ='C' THEN data_61 ELSE NULL END AS data_6),
+        MAX(CASE WHEN data_type ='C' THEN data_6 ELSE NULL END AS data_6),
 FROM NonAggTbl
 GROUP BY id;
 ```
@@ -620,7 +620,6 @@ HAVING SUM(end_date - start_date) >= 10;
 
 - GROUP BY는 CASE와 같이 쓰일 수도 있다.
 - 어린이, 성인, 노인의 수를 그룹별로 나눠 센다고 해보자.
-
 ```sql
 SELECT CASE WHEN age < 20 THEN '어린이'
             WHEN age BETWEEN 20 ADN 69 THEN '성인'
@@ -641,7 +640,7 @@ age_class           |       COUNT(*)
 노인                |           2
 ```
 - GROUP BY에 CASE WHEN을 써도 실행계획은 바뀌지 않는다.
-- GROUP BY와 집약함수들을 쓸 때 조심해야 하는 건 메모리 용량 초에 따른 저장소 I/O발생이다.
+- GROUP BY와 집약함수들을 쓸 때 조심해야 하는 건 메모리 용량 초과에 따른 disk I/O발생이다.
 - GROUP BY에 함수를 써도 실행계획은 동일하다. 다만 함수처리에 따른 CPU 연산이 늘어날 뿐이다.
 - 아래는 postgreSQL 실행계획이다.
 ```
