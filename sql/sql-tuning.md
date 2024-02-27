@@ -917,10 +917,64 @@ https://engineering-skcc.github.io/oracle%20tuning/Clustering-Reorg/
 
 `
 
-## <span style="color:#802548">_쉽지 않은 인덱스컬럼 추가_</span>
+## <span style="color:#802548">_새롭게 index 만들기보단 인덱스컬럼 추가_</span>
 - 기존 index column을 제끼고 아예 새로운 index를 만드는 건 흔하지 않다.
 - 관리의 문제 및 DML 성능 저하의 문제가 있다.
 - 그래서 기존 index column의 끝에 새로운 index field를 더하는 형태로 진행된다.
-- 아래와 같은 형태의 data가 있다고 해보자.
+- 아래와 같은 sql이 있다고 해보자.
+```sql
+select /*+ index(emp emp_x01) */
+from emp
+where deptno = 30
+and sal >= 2000
+```
 
+- 현재 deptno + job으로 index가 구성되었다고 해보자.
+- 해당 sql을 만족하는 data를 찾기위해서 index는 6개를 모두 scan한다.
+- 그리고 table에도 6번 모두 access할 수밖에없다. scan은 6번은 아니지만, 6번의 access가 필요하다.
+- sal이 2000 이상인 record가 더 있는 지 알수가 없기 때문이다.
 <img src="/image/not-added-column-index.jpg" />
+
+
+- deptno + job 대신 deptno + sal로 index를 바꾸고 싶지만 아래와 같이 index를 사용하는 sql이 있다.
+```sql
+SELECT *
+FROM emp
+where deptno = 30
+and job = 'CLERK'
+```
+
+- 따라서 차선책으로 deptno + job + 'sal'로 sal을 맨 끝에다가 추가해준다.
+- 물론 index range scan량이 줄어들지는 않는다.
+- 하지만 index에 sal이 포함되어 정렬되기 때문에, table access양이 6번에서 1번으로 줄어든다.
+- random access양이 줄어드는 획기적인 개선이다.
+
+
+<img src="/image/column-added-index.jpg" />
+
+
+- 실제 개선사례를 살펴보도록 하자.
+- 아래 sql에서 서비스 번호만을 index로 사용하고 있었다.
+- like지만 전방일치기 때문에 range scan이 가능하다.
+- 시작점을 한정지을 수 있기 때문이다.
+```sql
+select 렌탈관리번호, 고객명, 서비스관리번호, 서비스번호, 예약접수일시
+        ,방문국가코드1, 방문국가코드2, 방문국가코드3, 로밍승인번호, 자동로밍여부
+from 로밍렌탈
+where 서비스번호 like '010%'
+and 사용여부 = 'Y'
+```
+
+- 아래는 query 실행결과를 report로 만든것이다.
+- index를 scan해서 얻은 건수(rows)는 266476인데, 그 건수만큼 table을 random access했다.
+- table access 쪽에 보면 cr=266968인데 index scan시 읽은 block 1011개를 뺴면 265,957개 만큼 읽었다.
+- table access가 266,476인데 블록 I/O가 265,957이면 CF 계수가 매우 낮은 것이다. 데이터가 워낙 많아서 서비스 번호를 만족하는 데이터가 뿔뿔이 흩어진 것이다.
+- 거기다 사용여부 조건 체크 이후 남은 rows는 겨우 1909개다. 테이블 access 이후 사용여부 = 'Y' 조건을 필터링하면서 대부분 걸러졌다. 
+
+<img src ="/image/roaming-not-added-useyn.jpg" />
+- 이렇게 비효율적으로 scan과 I/O를 하지 않게 사용여부를 index에 포함시켜보면 획기적으로 성능이 개선된다.
+
+<img src='/image/roamding-added-useyn.jpg' />
+
+
+
