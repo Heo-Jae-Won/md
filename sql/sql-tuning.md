@@ -872,3 +872,55 @@ AND 업종유형코드 = '01'
           1번브랜치         |      2번 브랜치
     1번 2번 10번 3번 9번    |   8번 7번 4번 5번 6번
 ```
+
+
+## <span style="color:#802548">_table access 최소화_</span>
+- index로 scan한다고 해서 table access가 없는 것은 아니다.
+- index rowid라는 논리적 주소로 table access를 매우 빠르게 할 뿐이다.
+- index rowid는 7번 데이터파일 123번 블록 10번째 레코드와 같이 논리주소를 담는다. pointer와 같은 직접 연결된 물리주소가 아니다.
+- redis같은 in memory db는 진짜 pointer로 작동하기 때문에 매우 빠르다.
+- 그러나 oracle은 불가능한데, 데이터 캐싱 과정에서 있었다 사라졌다하는 과정이 반복되기 때문이다.
+- oracle에서 index rowid를 이용하는 과정을 아래와 같다.
+```
+index의 수직-수평 탐색을 실행한다
+리프블록에서 rowid를 읽는다
+읽은 rowid를 분해해서 dba 정보를 얻는다
+dba를 해시 함수에 입력해서 해시 체인을 찾고(해싱 알고리즘) 버퍼헤더를 찾는다.
+거기서 얻은 논리주소로 버퍼 블록을 찾아간다
+못찾았으면 디스크에서 읽어온다
+```
+
+- 일반 RDBMS의 rowid는 우편주소다. 우체부 아저씨가 직접 일일이 찾아나서야 한다. 전화번호처럼 직통이 아니다.
+- rowid는 pointer에 비해 매우 고비용임을 알 수 있다.
+
+- table access를 최소화하는 데는 clusetering factor도 중요하다.
+- 특정 컬럼 기준으로 데이터가 서로 모여있어야 index의 효율이 좋다는 의미다.
+- 다음 인덱스 레코드도 같은 테이블 블록인 경우, 래치 획득과 해시 체인 스캔 과정을 생략하기 때문이다.
+- 다시 말해 논리 I/O도 줄어들고, disk I/O도 줄어든다는 의미다.
+- 물론 특정 컬럼, 고객번호 기준으로 CF계수가 높다면, 다른 컬럼, 진료일자 기준으로는 CF계수가 낮을 것이다.
+https://engineering-skcc.github.io/oracle%20tuning/Clustering-Reorg/
+
+
+
+## <span style="color:#802548">_웹 vs 배치_</span>
+- 웹은 보통 소량 데이터를 읽는다.
+- 이 경우 index를 이용해 소트 연산을 생략하는 NL방식을 사용한다.
+- 그 편이 대량 데이터에도 매우 빠르게 연산할 수 있기 때문이다.
+- 반면에 데이터를 읽고 '갱신'해야 하는 배치 프로그램은 full scan과 해시조인을 사용한다.
+- 전체를 스캔해서 처리해야하기 때문이다.
+- 그러나 초대용량을 table full scan하는 것은 시간이 굉장히 오래걸린다.
+- 그래서 배치의 경우, 파티션을 활용하고, 병렬처리를 활용해야 한다.
+- 파티션 된 테이블에 index를 사용하는 것은 table full scan을 할 때보다 더 느려질 가능성이 높다.
+- partition의 index는 각 partition에서만 작동하는데, partition이 여러 개에 걸쳐 data를 받아오는 경우 성능이 오히려 더 안좋아지는 것이다.
+- 하지만 년단위로 분해한 partition에서 년단위 조회 혹은 해당 년도 내 월 조회 등을 하는 경우는 partition + index 조합이 극강의 위력을 발휘한다.
+
+
+`
+
+## <span style="color:#802548">_쉽지 않은 인덱스컬럼 추가_</span>
+- 기존 index column을 제끼고 아예 새로운 index를 만드는 건 흔하지 않다.
+- 관리의 문제 및 DML 성능 저하의 문제가 있다.
+- 그래서 기존 index column의 끝에 새로운 index field를 더하는 형태로 진행된다.
+- 아래와 같은 형태의 data가 있다고 해보자.
+
+<img src="/image/not-added-column-index.jpg" />
