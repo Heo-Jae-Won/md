@@ -405,3 +405,470 @@ rowid       lastname
 - index tuning의 두번째는 random access 최소화인데, 즉 table access 횟수를 줄이는 것이다.
 - 사실 인덱스 스캔 효율화 튜닝보다 이게 훨씬 중요하다.
 - 인덱스 스캔이 비효율적이어도 학생명부를 뒤지면 되겠지만, random access는 직접 교실을 찾아가며 방문하는 것과 같기 때문이다.
+
+
+## <span style="color:#802548">_index 탐색_</span>
+- index를 수직 탐색한다는 의미는 조건을 만족하는 레코드를 찾는다는 의미가 아니다.
+- 조건을 만족하는 '첫' 레코드를 찾는다는 의미다. 즉 시작점을 찾는 것이다.
+- 아래와 같은 sql이 있다고 해보자.
+```sql
+create index 고객 on 고객(성별, 고객명);
+
+select from 고객
+where 성별 = '남'
+and 고객명 = '이재희'
+```
+
+- 그럼 아래와 같이 root -> branch -> leaf로 나아가면서 시작점을 찾아간다.
+- 남 & 이재희가 발견된 해당 리프 블록이 곧 시작점이다.
+- 해당 리프 블록에서 scan을 더 수행해서 만족하는 지점이 없으면 scan을 멈춘다. 이렇게 되면 수직 탐색만 존재하는 셈이다.
+- 만약 계속 만족하는 조건이 나오면 다음 리프블록도 읽어간다. 이게 수평 탐색이다.
+```
+                          LMC
+                        남 & 최
+      남 & 송재훈                     남 & 홍병남           
+      남 & 이재룡                     여 & 김소희
+남 & 강경윤   남 & 이재명        여 & 류하영      여 & 최지우
+남 & 강기중   남 & 이재희(발견)  여 & 박미란      여 & 추자현
+```
+- 말로 나타내면 아래와 같다.
+```
+1. 우선 루트 블록에서 53이 속한 키 값을 찾는다. 두 번째 레코드가 선택될 것이므로 거기서 가리키는 3번 블록으로 찾아간다. (수직)
+2. 3번 블록에서 다시 53이 속한 키 값을 찾는다. 여기서는 첫 번째 레코드가 선택될 것이므로 9번 블록으로 찾아간다. (수직)
+3. 찾아간 9번은 리프 블록이므로 거기서 값을 찾거나 못 찾거나 둘 중 하나다. 다행히 세 번째 레코드에서 찾아지므로 함께 저장된 ROWID를 이용해 테이블 블록을 찾아간다. ROWID를 분해해 보면, 오브젝트 번호, 데이터 파일번호, 블록번호, 블록 내 위치 정보를 알 수 있다. (수직)
+4. 테이블 블록에서 레코드를 찾아간다. (수직)
+5. 인덱스가 Unique 인덱스가 아닌 한, 값이 53인 레코드가 더 있을 수 있다. 따라서 9번 블록에서 레코드 하나를 더 읽어 53인 레코드가 더 있는지 확인한다. (수평)
+6. 53인 레코드가 더 이상 나오지 않을 때까지 스캔하면서 테이블 액세스 단계를 반복한다. 만약 9번 블록을 다 읽었는데도 계속 53이 나오면 10번 블록으로 넘어가서 스캔을 계속한다. (수평)
+```
+
+- 도식도로 나타내면 아래와 같다.
+- LMC, 즉 root block은 branch block에 대한 정보를 갖고 있다.
+- branch block은 leaf block에 대한 정보를 갖고 있다.
+- leaf block은 rowid를 갖고 있다.
+- 그럼 해당 rowid를 가지고 table에 access하여 record 정보를 가져오는 것이다.
+```
+                    블록번호1번
+                    1-50: 2번블록
+                    51-100:3번블록
+          블록번호2번         블록번호3번
+          1-10: 4번블록       51-60:9번블록
+          11-20:5번블록       61-70:10번블록
+          21-30:6번블록       71-80:11번블록
+          31-40:7번블록
+          41-50:8번블록
+블록번호4번                 블록번호5번             블록번호6번       ....      블록번호10번
+이전블록번호:NULL           이전블록번호:4번        이전블록번호:5번             이전블록번호:9번
+다음블록번호:5번            다음블록번호:6번        다음블록번호:7번             다음블록번호:NULL
+1: ROWID                   11:ROWID               21:ROWID                   ....
+2: ROWID                   12:ROWID               22:ROWID
+3: ROWID                   ...                    ...
+.
+10:ROWID
+```
+
+- 인덱스 컬럼을 바꾼다고 해도 조건이 모두 =인 경우에는 성능 변화가 없다.
+- 시작점이 바뀌지 않기 때문이다. 따라서 인덱스가 (고객명, 성별)이든 (성별, 고객명)이든 똑같다.
+- index는 엑셀의 filtering같이 작동하는 것이 아니다.
+
+
+- index 수평 탐색은 실제 데이터를 찾아가는 과정이다.
+- index를 수평탐색하는 이유는 조건절을 만족하는 모든 데이터를 찾는 게 첫번째다.
+- rowid를 얻는 것은 두 번째다.
+- index block leaf는 서로 양방향 연결 리스트라 좌 - 우, 우 - 좌로 모두 이동이 가능하다.
+- 따라서 내림차순으로 정렬하면 조건을 만족하는 가장 큰 값을 찾아 우측으로 수직 탐색을 하다 좌측으로 수평탐색을 한다.
+- 따라서 오름차순으로 정렬하면 조건을 만족하는 가장 큰 값을 찾아 좌측으로 수직 탐색을 하다 우측으로 수평탐색을 한다.
+
+
+## <span style="color:#802548">_index 비효율_</span>
+- index는 기본적으로 특별한 경우를 제외하면 range scan을 한다는 사실을 알게 되었다.
+- 그런데 range scan을 효율적으로 진행하려면 시작점을 알고 끝점을 알아야 한다.
+- 그 중에서도 시작점이 중요하다. 아래와 같이 하면 시작점과 끝점이 분명하다.
+```sql
+where 성년월일 between '20070101' and '20070131'
+```
+- 그러나 시작점을 모르는 경우, index를 full scan때릴 수 밖에 없다.
+- 포함하는 조건,인덱스 컬럼을 가공하는 조건 등은 인덱스의 시작점을 알 수 없게 만든다.
+- 년도와 상관없이 5월에 태어난 사람을 찾아보라고 하면, index scan을 어디서 시작해야할 지 당연히 정보가 없다.
+- index full scan을 때릴 수 밖에 없다는 의미다. index column은 반드시 원형 그대로 놔둬야 한다.
+```sql
+where substr(생년월일, 5, 2) = '05'
+```
+- 마찬가지로 index column이 원래 null인데 이런식으로 가공하면 index에 담겨있는 정보가 의미가 없으니 시작점도 찾을 수가 없다.
+```sql
+where nvl(주문수량, 0) < 100
+```
+- 포함하는 조건은 위에서 말했듯, 시작점을 당연히 알수가 없다.
+```sql
+where 업체명 like '%대한%'
+```
+- or조건도 그렇다. 전화번호가 XX거나 고객명이 홍길동인 조건은 시작지점을 지정할 수가 없다.
+```sql
+where (전화번호 = :tel_no OR 고객명 = :cust_nm)
+```
+- or 조건의 다른 표현은 in도 마찬가지다. 
+```sql
+where 전화번호 in (:tel_no1, :tel_no2)
+```
+
+- or 조건은 아래와 같이 optimizer에서 변환해서 index range scan을 하기도 한다.
+  - 이를 or expansion이라고 한다.
+```sql
+where 고객명 = :cus_nm
+union all
+where 전화번호 = :tel_no
+```
+
+- in 조건도 동일하다. 이러한 최적화를 in-list iterator 방식이라고 한다.
+- in-list안의 갯수만큼 index range scan을 반복한다.
+- 그러나 가장 중요한 것은 인덱스의 선두 컬럼이 조건절에 쓰이는 경우, 조건절의 가장 처음에 가공하지 않은 채로 나와야 한다는 것이다. 
+- 인덱스가 (소속팀, 사원명, 연령) 순으로 구성했다고 해보자.
+- 이는 아래와 같은 의미다.
+```
+데이터를 소속팀 순으로 정렬하고, 소속팀이 같으면 사원명 순으로 정렬하고, 사원명까지 같으면 연령 순으로 정렬한다.
+```
+
+- 다시말해 이름이 같더라도 소속팀이 다르면 서로 멀리 떨어지게 된다는 의미다.
+- 소속팀 정렬이 이뤄지지 않았다면 말이다. 아래 sql은 index range scan의 역할을 못하게 된다는 의미다.
+- 그럼 index full scan을 수행하게 된다.
+```sql
+SELECT 사원번호, 소속팀, 연령, 입사일자, 전화번호
+from 사원
+where 사원명 = '홍길동'
+```
+
+- index의 두번째 구성요소는 가공하더라도 index range scan을 탈 수 있다.
+- 인덱스가 (기준연도, 과세구분코드, 보고회차, 실명확인번호)라고 해보자.
+- 그럼 아래는 index range scan을 수행할 수 있다.
+- 기준연도라는 최선두 컬럼이 조건절에 첫번째로 가공되지 않은 채 쓰였기 때문이다.
+```sql
+SELECT * FROM TXA1234
+WHERE 기준연도 = :stdr_year
+and substr(과세구분코드,1,4) = :txtn_dcd
+and 보고회차 = :rpt_tmrd
+and 실명확인번호 = :rnm_cnfm_no
+```
+
+- 그러나 위의 sql은 성능이 좋기는 어려울 것이다.
+- 과세구분코드부터는 조건절로서의 의미를 잃어버렸기 때문이다.
+- 그럼 그 뒤 보고회차, 실명확인번호는 모두 index range scan에 아무런 역할을 하지 못한다.
+- 아래의 sql도 마찬가지다. index가 (주문일자, 상품번호)라고 했을 때 주문일자만이 range를 좁히는 데 역할을 한다.
+- 상품번호는 range를 좁혀 scan량을 줄이는 데 아무런 도움이 되지 못한다.
+```sql
+select *
+from 주문상품
+where 주문일자 = :ord_dt
+and 상품번호 like '%PING%'
+```
+
+- 묵시적 형변환도 조심해야 한다.
+- 생년월일이 char라면, 아래와 같은 쿼리는 인덱스를 가공하게 된다.
+```sql
+SELECT * FROM 고객
+WHERE 생년월일 = 19821225
+```
+
+- 그래서 실제로는 아래와 같은 쿼리를 수행하게 된다.
+- 숫자형과 문자형이 같다고 하면, 숫자형이 더 세서 문자가 숫자로 형변환된다.
+```sql
+SELECT * FROM 고객
+WHERE TO_NUMBER(생년월일) = 19821225
+```
+
+- 날짜형과 문자형이 만나면 날짜형이 이긴다.
+- 따라서 아래와 같은 쿼리는 index 문제는 없다.
+```sql
+SELECT * FROM 고객
+WHERE 가입일자 = '01-JAN-2018'
+```
+
+- 다만 날짜 포맷을 정확히 지정하는 편이 훨씬 좋다.
+- NLS_DATE_FORMAT 파라미터가 다른 환경에서는 결과집합이 다를 수 있기 때문이다.
+- 따라서 아래와 같이 date type으로 바꿔주자.
+```sql
+SELECT * FROM 고객
+WHERE 가입일자 = TO_DATE('01-JAN-2018', 'DD-MON-YYYY')
+```
+
+- 숫자형과 문자형이 만나서 이기는 경우는, LIKE 연산자가 쓰였을 때다.
+- LIKE는 그 자체로 문자열 비교 연산자이기 때문이다.
+```sql
+SELECT * FROM 고객
+WHERE 고객번호 LIKE '9410%'
+```
+
+- 만약 고객번호가 int 형이면 아래와 같이 변환된다.
+```sql
+SELECT * FROM 고객
+WHERE TO_CHAR(고객번호) LIKE '9410%'
+```
+
+- LIKE 패턴과 관련된 중요한 안티 패턴 중 하나가 옵션 조건을 걸 떄 자주 일어난다.
+- 계좌번호가 입력되지 않으면 NULL값이 입력되어 모든 계좌번호가 조회된다.
+- 즉 계좌번호는 optional 조건이다.
+```sql
+SELECT * FROM 거래
+WHERE 계좌번호 LIKE :acnt_no || '%'
+AND 거래일자 BETWEEN :trd_dt1 and :trd_dt2
+```
+
+- 위와 같이 사용하게 되면, 계좌번호 컬럼이 숫자형일 때, 자동 형변환이 발생하기 때문에 계좌번호가 아예 index access 조건으로 사용될 수가 없다.
+- 그렇다고 (계좌번호, 거래일자)가 아니라 (거래일자, 계좌번호)로 바꾸면 full scan은 아니지만, range scan량이 압도적으로 늘어나게 된다.
+  - 거래일자 조회 범위에 속한 거래 데이터를 먼저 모두 읽으면서 계좌번호를 필터링하기 때문이다.
+- 저 경우에는 dynamic sql을 WAS에서 사용해주는 게 좋다.
+
+- like와 비슷하게 decode 또한 문제가 있다.
+- oracle 구현인 decode는 아래와 같이 사용한다.
+- a=b라면 c를 반환하고 아니면 d를 반환한다.
+- 그런데 반환된 데이터의 타입은 c가 결정한다.
+- 그런데 c가 null이면 varchar2로 취급하게 된다. 따라서 어처구니 없는 일이 일어난다.
+- 회장을 제외하고 가장 높은 연봉을 조회한다고 해보자.
+```sql
+SELECT ROUND(AVG(sal)) avg_sal
+      ,MIN(sal) min_sal
+      ,MAX(sal) max_sal
+      ,MAX(decode(job, 'PRESIDENT', NULL, sal)) max_sal2
+FROM emp;
+```
+
+- 그럼 문제가 발생한다.
+- c에 null이 들어갔다. varchar2 type이 된것이다. 그럼 sal도 varchar다.
+- sal이 int형이었다고 해도, 문자로 형변환된다. 그럼 3000과 950 중에 숫자라면 3000이 컸을 것이다.
+- 그런데 문자형이 되었기에 3000보다 950이 더 크다. 9가 3보다 크기 때문이다.
+- 따라서 max연봉이 3000이 아니라 950이 찍혀버리는 불상사가 일어난다.
+- 이런 경우, 형변환을 적절하게 해주어야 한다.
+- 늘 적절하게 TO_CHAR, TO_DATE, TO_NUMBER 등으로 묵시적 형변환을 해제해야 한다.
+- 형변환 함수는 별로 손해보지도 않는다. 중요한건 I/O를 줄이는 것이다.
+```sql
+SELECT ROUND(AVG(sal)) avg_sal
+      ,MIN(sal) min_sal
+      ,MAX(sal) max_sal
+      ,MAX(decode(job, 'PRESIDENT', TO_NUMBER(NULL), sal)) max_sal2 /**TO_NUBMER(NULL) 대신 0도 가능하다. */
+FROM emp;
+```
+
+## <span style="color:#802548">_index는 sort by를 쓴 효과를 낸다_</span>
+- index는 자체로 정렬이 되어있기 때문에, order by를 써도 optimizer가 sort 연산을 하지 않을 수 있다.
+- index가 (장비번호, 변경일자, 변경순번)이라고 해보자.
+- 조건절에는 장비번호, 변경일자만 쓰이고 변경순번은 쓰이지 않았지만 별 상관없다. 
+- order by에 변경순번이라고 한다면 index는 이미 장비번호, 변경일자 대로 정렬되어 있기에 그 다음 변경일자도 정렬되어 있다.
+- 따라서 order by 변경순번을 붙이든 안 붙이든 상관이 없는 것이다. 
+- 대신 order by를 index에 없는 column을 하면 sort by 연산이 추가될 것이다.
+```sql
+select *
+from 상태변경이력
+where 장비번호 = 'C'
+and 변경일자 = '20180316'
+```
+
+- index를 가공해선 안된다는 점은 order by에서도 동일하다.
+- 물론 조건절에서 가공한 것보단 덜 치명적이다. order by에서는 sort by 연산이 추가되는 것이기 때문이다.
+- 별칭과 관련된 어처구니 없는 실수를 살펴보면서 별칭에 주의해주자.
+- 주문번호 column을 TO_CHAR로 가공한 게 보인다. 그런데 ORDER BY를 가공한 주문번호로 정렬했다.
+- 주의 깊지 못한 별칭으로 인해 sort by 연산이 추가된다.
+```sql
+SELECT *
+FROM (
+  SELECT TO_CHAR(A.주문번호, 'FM000000') AS 주문번호, A.업체번호, A.주문금액
+  FROM 주문 A
+  WHERE A.주문일자 = :dt
+  AND A.주문번호 > NVL(:next_ord_no, 0)
+  ORDER BY 주문번호 /**여길 A.주문번호 라고 해야... */
+)
+WHERE ROWNUM <=30
+```
+
+- sort by의 효과는 order by에서만 보이는 게 아니다.
+- select에서도 볼 수 있다.
+- 아래와 같이 (장비번호, 변경일자, 변경순번)으로 구성되었다고 해보자.
+- 장비번호와 변경일자 순으로 scan을 하기 때문에 그다음 변경순번은 반드시 정렬되어 있다.
+- 따라서 sort by 연산이 필요없다.
+```sql
+SELECT MIN(변경순번)
+FROM 상태변경이력
+WHERE 장비번호 = 'C'
+AND 변경일자 = '20180316'
+```
+
+- 아래와 같이 MAX도 마찬가지다.
+- 블록은 양방향연결 리스트기 때문에 MAX든 MIN이든 상관없다.
+- sort by연산이 필요없는 것은 MAX도 마찬가지라는 의미다.
+```sql
+SELECT MAX(변경순번)
+FROM 상태변경이력
+WHERE 장비번호 = 'C'
+AND 변경일자 = '20180316'
+```
+
+
+- 그러나 이는 같은 type일 때를 기준으로 한다.
+- 아래와 같이 type을 바꿔버리면 sort by가 필요하다.
+- 저기서 NVL은 문제가 없다. 문제는 TO_NUMBER다.
+- number로 바꾸는 순간, sort by 연산이 필요해진다.
+- 애초에 숫자type으로 설계했어야 했다. 모든걸 char, varchar로 바꾸는 것은 tuning의 가능성을 제한해버린다.
+```sql
+SELECT NVL(MAX(TO_NUMBER(변경순번)), 0)
+FROM 상태변경이력
+WHERE 장비번호 = 'C'
+AND 변경일자 = '20180316'
+```
+
+- 물론 sort by를 생략한다고 해서 아래와 같이 복잡하게 쓴다면 성능이 좋지 않을 것이다.
+- 해당 장비구분코드에 맞는 장비번호와 최종변경일자, 순번을 알아오기 위한 코드인데, 꽤나 복잡하다.
+```sql
+SELECT 장비번호, 장비명, 상태코드
+      ,(SELECT MAX(변경일자)
+        FROM 상태변경이력
+        WHERE 장비번호 = P.장비번호) 최종변경일자
+      ,(SELECT MAX(변경순번)
+        FROM 상태변경이력
+        WHERE 장비번호 = P.장비번호
+        AND 변경일자 = (SELECT MAX(변경일자)
+                        FROM 상태변경이력
+                        WHERE 장비번호 = P.장비번호)) 최종변경순번
+FROM 장비 P
+WHERE 장비구분코드 = 'A001';
+```
+
+- 위의 쿼리를 아래와 같이 간단하게 쓸 수도 있다.
+- 그러나 MAX에 변경일자와 변경순번을 모두 쑤셔넣으면 기존에 index로 되어있던 sort by 연산이 박살난다.
+- 따라서 sort by연산이 추가된다. index column을 가공한 결과는 나쁘다.
+```sql
+SELECT 장비번호, 장비명, 상태코드
+      ,SUBSTR(최종이력, 1, 8) 최종변경일자
+      ,SUBSTR(최종이력, 9) 최종변경순번
+FROM (
+  SELECT 장비번호, 장비명, 상태코드
+        ,(SELECT MAX(변경일자 || 변경순번)
+          FROM 상태변경이력
+          WHERE 장비번호 = P.장비번호) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+
+- 이럴 땐 hint를 활용해서 풀어야한다.
+- 인덱스를 역순으로 써서 MAX와 동일한 효과를 낸다.
+- 또한 첫번째 레코드에서 멈춰서 더 scan하지 않게 ROWNUM <=1 조건을 달아준다.
+```sql
+SELECT 장비번호, 장비명
+      ,SUBSTR(최종이력, 1, 8) 최종변경일자
+      ,SUBSTR(최종이력,9) 최종변경순번
+FROM (
+  SELECT 장비번호, 장비명, (SELECT /*+ INDEX_DESC(X 상태변경이력_PK) */
+    변경일자 || 변경순번
+    FROM 상태변경이력 X
+    WHERE 장비번호 = P.장비번호
+    AND ROWNUM <= 1) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+## <span style="color:#802548">_index scan의 종류_</span>
+- index range scan
+  - 선두 컬럼을 가공하지 않은 상태로 조건절에 써야한다.
+  - index range scan이라고 무조건 효율적 scan을 의미하지 않는다.
+  - index scan 범위를 줄이고, scan량도 줄여야 한다.
+```sql
+SELECT * FROM emp where deptno = 20;
+```
+
+- index full scan
+  - 수직 탐색 없이 수평탐색만 한다.
+  - ename이 선두에 와야 하는데, sal이 선두에 왔으므로 range scan떄려야만 한다.
+  - 그래도 index 중에 ename은 있으니까 table full scan이 아닌 index full scan이 가능하다.
+  - 물론 cardinality가 높아야, 즉 선택률이 낮아야 이렇게 index full scan으로 활용할 수 있다.
+```sql
+create index emp_ename_sal_idx on emp (ename, sal);
+
+SELECT * FROM emp
+WHERE sal > 2000
+order by ename;
+```
+
+- index full scan이나 index range scan 모두 order by 연산이 생략된다.
+- index column 순으로 정렬되기 때문이다.
+- 떄로 선택률이 높은데도 index를 쓰는 경우가 있다. 처음 일부만 보여주려고 의도할 때가 그러하다.
+- 만약 record를 계속 보려고 스크롤을 내리면 table full scan보다 효율이 훨씬 떨어지게 된다.
+- WAS에서 쓸만한 방식은 아니다. WAS에서는 paging을 명시로 해야하기 때문이다.
+```sql
+SELECT /*+ first_rows */
+from emp
+where sal > 1000
+order by ename;
+```
+
+- index unique scan
+  - unique index를 = 조건으로 탐색하는 경우, 수직탐색만 한다.
+  - 다만 결합 index의 경우, 모든 조건을 전부 =으로 써야 index unique scan이 된다.
+  - (주문일자, 고객ID, 상품ID) PK에서 where 조건문에 주문일자와 고객ID만 있다면 그것은 index range scan이 된다.
+```sql
+create unique index pk_emp on emp(empno);
+
+select empno, ename from emp where empno = 7788;
+```
+
+- index skip scan
+  - 인덱스 선두 컬럼이 조건절에 없어도 index를 활용하는 방식 중 하나다.
+  - index full scan과 달리 조건에 맞지 않는 경우 index scan을 skip하여 효율적으로 scan한다.
+  - cardinality가 극단적으로 높고 낮은 조합의 index에 보통 이용된다.
+  - 성별과 PK의 조합이 대표적이다.
+  - 인덱스 선두가 있고 중간 컬럼이 없는 경우에도 활용할 수 있다.
+```sql
+SELECT * FROM 사원 WHERE 성별 = '남' and 연봉 between 2000 and 4000;
+```
+
+- PK는 업종유형코드 + 업종코드 + 기준일자로 구성되어있다고 해보자.
+- 아래는 업종코드라는 중간 컬럼이 비어있다. 이럴 때 index skip scan을 쓸 수 있다.
+- hint를 주면 더 확실하다.
+```sql
+
+SELECT /*+ INDEX_SS(A 일병업종별거래_PK) */
+      기준일자, 업종코드, 체결건수, 체결수량, 거래대금
+FROM 일병업종별거래 A
+WHERE 업종유형코드 = '01'
+AND 기준일자 BETWEEN '20080501' AND '20080531'
+```
+
+- 선두와 중간 모두 비어있고 마지막 컬럼만 있어도 쓸 수 있다.
+```sql
+SELECT /*+ INDEX_SS(A 일병업종별거래_PK) */
+      기준일자, 업종코드, 체결건수, 체결수량, 거래대금
+FROM 일병업종별거래 A
+AND 기준일자 BETWEEN '20080501' AND '20080531'
+```
+
+- 선두 컬럼이 부등호, BETWEEN, LIKE같은 범위 검색 조건일 때도 index skip scan이 가능하다.
+- 기준일자 + 업종유형코드로 구성된 index가 있다고 해보자.
+- 만약 index range scan을 하게 되면 기준일자 BETWEEN조건을 만족하는 모든 index 구간을 scan해야 한다.
+- 하지만 index skip scan을 하게 되면 기준일자 BETWEEN 구간을 만족하는 구간 중 업종유형코드가 01인 레코드를 포함할 리프 블록만 골라 scan한다.
+```sql
+SELECT /*+ INDEX_SS(A 일병업종별거래_PK) */
+      기준일자, 업종코드, 체결건수, 체결수량, 거래대금
+FROM 일병업종별거래 A
+AND 기준일자 BETWEEN '20080501' AND '20080531'
+AND 업종유형코드 = '01'
+```
+
+- index fast full scan
+  - 논리순서에 따른 scan이 아니라 물리 순서에 따른 scan을 실행한다.
+  - 따라서 한꺼번에 많이 읽는 게 중요하며, multiblock I/O 방식으로 진행된다.
+  - 다만 논리순서가 아니기 때문에 제대로 정렬되지 않을 가능성이 높다.
+- 아래가 논리적 순서로 배치한 블록이다.
+- 루트 ->브랜치 1 ->1->2->3->4->5->6->7->8->9->10번 순으로 블록을 읽는다.
+```
+                      루트
+          1번브랜치           2번브랜치
+    1번 2번 3번 4번 5번   6번 7번 8번 9번 10번리프
+```
+
+- 물리순서에 따르면 아래와 같다.
+- 1->2->10->3->9->8->7->4->5->6 순으로 읽는다.
+- index full scan은 leaf block만 필요하기 때문에 root와 branch는 읽어도 버린다.
+```
+1번 익스텐트                |     2번 익스텐트
+              루트          |       루트
+          1번브랜치         |      2번 브랜치
+    1번 2번 10번 3번 9번    |   8번 7번 4번 5번 6번
+```
