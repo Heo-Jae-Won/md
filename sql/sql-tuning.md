@@ -971,10 +971,81 @@ and 사용여부 = 'Y'
 - table access가 266,476인데 블록 I/O가 265,957이면 CF 계수가 매우 낮은 것이다. 데이터가 워낙 많아서 서비스 번호를 만족하는 데이터가 뿔뿔이 흩어진 것이다.
 - 거기다 사용여부 조건 체크 이후 남은 rows는 겨우 1909개다. 테이블 access 이후 사용여부 = 'Y' 조건을 필터링하면서 대부분 걸러졌다. 
 
+
 <img src ="/image/roaming-not-added-useyn.jpg" />
+
 - 이렇게 비효율적으로 scan과 I/O를 하지 않게 사용여부를 index에 포함시켜보면 획기적으로 성능이 개선된다.
 
 <img src='/image/roamding-added-useyn.jpg' />
 
 
+## <span style="color:#802548">_인덱스 구조 테이블_</span>
+- 인덱스를 이용한 access는 고비용 구조라고 했다.
+- 그럼 랜덤 엑세스가 아예 발생하지 않게끔 하려면 어떤 방법이 있을까?
+- 가장먼저 떠오르는 건 query에 필요한 모든 column에 index를 넣어주는 방식이다.
+- 이를 커버링 인덱스, 커버드 인덱스라고 한다.
+- 하지만 index-organized table로 만드는 방법도 있다. rowid가 있을 자리에 테이블 데이터가 있는 형식이다.
+- 여기선 index leaf block이 곧 data block이다.
 
+```sql
+create table_index_org_t (a number, b varchar(10) constraint index_org_t_pk primary key (a))
+organization index;
+```
+
+- 위와 같은 IOT는 index기 때문에 정렬상태를 유지하며 데이터를 입력한다.
+- 따라서 랜덤 엑세스가 아닌 시퀀셜 액세스로 접근하며, 범위 검색에 유리하다.
+- 특히 데이터 insert는 일자 기준인데, select는 일자 기준이 아닌 경우, 입력 패턴과 조회 패턴이 다른 경우 성능이 좋다.
+- 예를 들어, 일자별로 영업실적을 집계하는 배치 테이블이 있다고 해보자.
+- 그럼 배치 테이블에는 일자별로 insert가 되며, 영업사원 별로 하루마다 한 블록씩 365 block이 만들어진다.
+- 하지만 일자 기준으로 insert가 이뤄져 CF계수가 매우 안 좋으므로 row수에 준하는 block I/O가 발생한다.
+- 이럴 떄 IOT를 구성하여 CF를 올려 random access를 줄인다.
+```sql
+create table 영업실적 (사번 varchar2(5), 일자 varchar2(8), .....) organization index;
+```
+
+
+## <span style="color:#802548">_부분범위 처리 활용_</span>
+- 전체 결과집합을 모두 한꺼번에 전송하지 않고, fetch call이 있을 떄마다 나눠 전송하는 것을 의미한다.
+- array size는 WAS단에서 설정하는 편이며, 자바의 arraylist는 기본 size가 10이다. 
+  - 대량 파일을 받을거면 최대한 size를 늘리는 게 좋다.
+  - 그래야 fetch call을 줄이고, process가 잠에 빠지는 일이 줄어든다.
+  - 반면에 앞부분만 좀 보여주고 만다면 size를 작게 설정하는 게 좋다.
+  - 데이터를 받아오는 데 네트워크 및 메모리를 소모했는데, 쓰지 않는 비효율을 줄일 수 있기 때문이다.
+- 다만 문제는 order by가 있는 경우, sort 연산이 들어가면 전체를 다 scan해야 하기 때문에 부분범위처리가 무용지물이 된다.
+- 만약 선두컬럼에 인덱스가 있으면 sort by연산을 하지 않으므로 부분범위 처리는 가능하다.
+```sql
+SELECT name from big_table order by created /**선두컬럼이라 부분범위처리 가능 */
+SELECT name from big_table order by name /**선두컬럼이 아니라 전체범위처리로만 가능 */
+```
+- fetch call이 100인데, array size가 20이라면 처음에는 연속 5번의 fetch call이 발생한다.
+- 그 이후부터는 20개씩 단위로 fetch call이 발생한다.
+- 정렬된 상태를 유지하는 index를 이용하면, 정렬 작업을 생략하고 앞쪽 일부 데이터를 빠르게 보여줄 수 있다.
+- 인덱스 선두컬럼이 (게시판구분코드, 등록일시)가 아니면 sort by 연산이 생략 불가능하다.
+- 선두컬럼을 (게시판구분코드, 등록일시)로 한다면 sort by 연산이 생략 가능하기 때문에 random access가 없어 빠르다.
+```sql
+SELECT 게시글ID, 제목, 작성자, 등록일시
+FROM 게시판
+WHERE 게시판구분코드 = 'A'
+order by 등록일시 desc
+```
+
+- 그러나 현재 oracle 12c 버전이상부터는 index의 정렬을 믿고 필요한 order by를 안 쓰면 안 된다.
+- batch I/O가 추가된 결과, index를 이용한 데이터 정렬 순서가 매번 달라질 수 있기 때문이다.
+- batch I/O는 single block I/O가 기본이지만, 읽을 블록을 모아놨다가 한꺼번에 읽는다.
+  - 즉 multiblock I/O처럼 작동해 I/O call을 줄이는 방식이다.
+- 아래 sql은 index 정렬을 믿고 order by를 쓰지 않은 모습이다.
+```sql
+SELECT /*+ INDEX(H 상태변경이력_PK) */ 장비번호, 변경일시, 상태코드
+FROM 상태변경이력 H
+WHERE 장비번호 = :eqp_no
+AND ROWNUM <= 10;
+```
+- 부분범위처리 효과를 얻기위해 rownum까지도 생략하는 경우가 있다.
+```sql
+SELECT /*+ INDEX(H 상태변경이력_PK) */ 장비번호, 변경일시, 상태코드
+FROM 상태변경이력 H
+WHERE 장비번호 = :eqp_no
+```
+- 그러나 order by가 없으면 순서가 정렬되어 보이지 않는다.
+- 인덱스 자체는 정렬되어 있으나, batch I/O가 실행되면 resultSet은 정렬되지 않을 수 있다.
+- 따라서 순서대로 data를 담아야한다면, 이젠 order by를 반드시 써야하는 것이다.
