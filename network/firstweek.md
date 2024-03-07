@@ -168,7 +168,6 @@ tree로는 안된다. 여러정보가 link를 통해서 연결되어야 한다. 
 하드웨어적 제어라 빠름
 ```
 - nic는 network interface card의 약자이며, LAN카드, 이더넷카드, 네트워크 어뎁터 등으로 불린다.
-- nic는 컴퓨터 본체에 연결하여 
 
 
 ## <span style="color:#802548">_OSI 7 layer_</span>
@@ -190,3 +189,30 @@ tree로는 안된다. 여러정보가 link를 통해서 연결되어야 한다. 
 - physical layer는 여태까지 쌓인 header, message, trailer를 bit 단위로 변환해 내보낸다.
 - 데이터가 문제가 없으면 data link에서 붙인 header와 trailer를 뗀고 network layer로 올린다.
 - network layer는 목적지 IP를 확인하고 수정할 부분을 수정하고 다시 data link layer로 내린다. 그걸 또 physical layer로 내린다.
+
+
+
+
+## <span style="color:#802548">_TCP/IP_</span>
+- Ip header와 TCP header를 제외한 TCP가 실을 수 있는 데이터를 segment라고 한다.
+- TCP header가 가진 정보는 대략 아래와 같다.
+  - 출발/목적지 port
+  - ack/syn number
+  - seq number
+  - window size
+  - checksum
+- 이들을 기능으로 나누어보면 아래와 같다.
+  - 흐름제어 -> window size, ack number, seq number
+  - 신뢰성 보장 -> checksum
+  - forwarding -> 출발/목적지 port
+  - 혼잡 제어는 -> ack number
+- 흐름제어는 아래와 같은 방법이 있다.
+  - stop and wait
+  - sliding winodw(go back n ARQ)
+  - 재전송
+- 혼잡제어는 ack number가 3번이상 중복 or timeout 시에 일어난다.
+- 알고리즘으로는 아래와 같은 방법이 있다.
+  - AIMD            -> 윈도우 크기 선형적 증가 1-2-3-4
+  - slow start      -> 윈도우 크기 지수적 증가 1-2-4-8
+  - fast retransmit -> 중복 ACK를 3개 받으면 재전송이 이루어진다. 
+  - fast recovery   -> 혼잡한 상태가 되면 윈도우 크기를 1로 줄이지 않고 반으로 줄이고 선형 증가한다
