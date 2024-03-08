@@ -1359,3 +1359,502 @@ if( "0000".equals(responseCode)) {
 return retMap;
 ```
 
+## <span style="color:#802548">_closure를 사용해서 중복클릭 방지하기_</span>
+- 과거에 내가 만든 중복클릭 방지는 전역변수, setTimeout을 이용했었다.
+```js
+var reqFlag = false;
+
+function reqCheck(){
+    if(reqCheck == false){
+            reqFlag = true;
+            return false;
+    }
+
+    setTimeout(function(){
+            reqFlag = false;
+    },3000)
+
+    return true;
+}
+
+function handleButtonClick() {
+    $('#button').on('click',function() {
+        if(reqCheck()) {
+            return;
+        }
+        .
+        .
+        .
+        //ajax 함수
+    })
+}
+```
+
+- 저번에도 closure로 바꿔보고 싶었지만 실패했었다.
+- 그래서 이번에 한번 바꿔봤다.
+- 처음엔 아래와 같이 만들었다.
+- 그런데 문제는 의도한대로 되지 않는다는 점이었다.
+- 내가 의도한 것은 함수가 결과를 받아올 때까지 버튼이 눌리지 않는 것인데, 잘 작동하지 않았다.
+- 계속 clicked가 false로 처리되었다.
+- var의 문제인가 했지만 그런 것은 아니었다. 즉시실행함수로 바꿔도 달라지는 점은 없었다.
+```js
+function sendRequest(fn) {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            fn(data)
+        }
+    }
+}
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        .
+        .
+        .
+        var sendData = {};
+        sendData.payload = id;
+
+        sendRequest(testAjax)(sendData);
+    })
+}
+
+function testAjax() {
+    $.ajax({
+        .
+        .
+        .
+        success: function(res, status, xhr){
+            if(res.statusCode === '200') {
+                location.href = '/teenAgerCardIssue';
+            }
+        },
+        error: function(error) {
+            alert(error);
+        } ,
+        complete: function() {
+            checkMobileDeviceOs();
+        }
+    })
+}
+```
+
+
+
+- 그래서 원인을 알아냈는데, 그건 비동기이면서, event Listener에 달고, closure를 써서 복잡하게 꼬여있던 것이었다.
+- closure의 자유변수를 활용하려면 하나의 함수 안에서 이뤄져야 했다. 
+- success callback, error callback, complete callback에서 모두 clicked를 다시 false로 바꿔줘야 했다.
+- 먼저 함수를 parameter로 넘기지 않고, ajax를 분리하지 않고 closure가 쓰인 함수로 옮겼다.
+```js
+function sendRequest() {
+    var clicked = false;
+    return function() {
+        if(!clicked) {
+            clicked = true;
+            var sendData = {};
+            sendData.payload = id;
+            $.ajax({
+                .
+                .
+                .
+                success: function(res, status, xhr){
+                    if(res.statusCode === '200') {
+                        location.href = '/teenAgerCardIssue';
+                    }
+                    clicked = false;
+                },
+                error: function(error) {
+                    alert(error);
+                     clicked = false;
+                } ,
+                complete: function() {
+                    checkMobileDeviceOs();
+                     clicked = false;
+                }
+            })
+
+        }
+    }
+}
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+       sendRequest()();
+    })
+}
+```
+
+- 그럼에도 여전히 clicked가 false로 초기화됐다.
+- 원인을 알아보니 EventLisnter가 문제는 아니었다.
+- 문제는 click 시마다 sendRequest()()를 호출하게 되면 매번 새로운 실행 컨텍스트가 생기는 게 문제였다.
+- 그래서 실행 컨텍스트를 저장해두는 변수를 만들었다.
+- 그랬더니 이제 원하는 대로 작동하기 시작했다!
+```js
+function sendRequest() {
+    var clicked = false;
+    return function() {
+        if(!clicked) {
+            clicked = true;
+            var sendData = {};
+            sendData.payload = id;
+            $.ajax({
+                .
+                .
+                .
+                success: function(res, status, xhr){
+                    if(res.statusCode === '200') {
+                        location.href = '/teenAgerCardIssue';
+                    }
+                    clicked = false;
+                },
+                error: function(error) {
+                    alert(error);
+                     clicked = false;
+                } ,
+                complete: function() {
+                    checkMobileDeviceOs();
+                     clicked = false;
+                }
+            })
+
+        }
+    }
+}
+
+var fetchData = sendRequest();
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+       fetchData();
+    })
+}
+```
+
+- 이제 기본적인 작동은 되니 함수를 분리해주고 싶었다.
+- 그래서 다시 parameter로 주는 방법을 생각해보았다.
+- 우선 data부터 parameter로 넘겨주기로 했다.
+- 외부함수의 parameter보단 내부함수의 parameter에서 넣는 게 더 좋다 판단하였다.
+- 처음에 실행컨텍스트를 불러올 때 함수를 parameter를 받을 수 있기 때문에, 그건 함수에게 넘겨주려 생각했다.
+```js
+function sendRequest() {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            
+             $.ajax({
+                .
+                .
+                data:data
+                success: function(res, status, xhr){
+                    if(res.statusCode === '200') {
+                        location.href = '/teenAgerCardIssue';
+                    }
+                    clicked = false;
+                },
+                error: function(error) {
+                    alert(error);
+                     clicked = false;
+                } ,
+                complete: function() {
+                    checkMobileDeviceOs();
+                     clicked = false;
+                }
+            })
+
+        }
+    }
+}
+
+var fetchData = sendRequest();
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var sendData = {};
+        sendData.payload = id;
+        fetchData(sendData);
+    })
+}
+```
+
+- 이제는 ajax 함수를 바깥으로 빼보고 싶었다.
+- 그랬더니 clicked가 closure함수가 속한 범위에서 벗어나 버렸다.
+- 그래서 이를 해결하기 위해 parameter로 넘겨봤지만 아무 소용이 없었다.
+- 계속 clicked가 false로 초기화됐다.
+```js
+function sendRequest() {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            
+            textAjax(data, clicked);
+
+        }
+    }
+}
+
+function testAjax(data, clicked) {
+    $.ajax({
+        .
+        .
+        data:data
+        success: function(res, status, xhr){
+            if(res.statusCode === '200') {
+                location.href = '/teenAgerCardIssue';
+            }
+            clicked = false;
+        },
+        error: function(error) {
+            alert(error);
+            clicked = false;
+        } ,
+        complete: function() {
+            checkMobileDeviceOs();
+            clicked = false;
+        }
+    })
+}
+
+var fetchData = sendRequest();
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var sendData = {};
+        sendData.payload = id;
+       fetchData(sendData);
+    })
+}
+```
+
+- 결국 과거의 jquery ajax 활용법으론 불가능하다고 판단했다.
+- Promise와 비슷하게 .then()처럼 이어가는 방식의 ajax를 사용하기로 했다.
+- 이렇게 하면 ajax를 분리하면서 자유변수는 그대로 살릴 수 있었다.
+```js
+function sendRequest() {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            
+            textAjax(data)
+                .done(function(res,status,xhr){
+                    if(res.statusCode === '200') {
+                        location.href = '/teenAgerCardIssue';
+                    }
+                    clicked = false;
+                }).fail(function(error){
+                    alert(error);
+                    clicked = false;
+                }).always(function(){
+                    checkMobileDeviceOs();
+                    clicked = false;
+                })
+
+        }
+    }
+}
+
+function testAjax(data) {
+    return $.ajax({
+                .
+                .
+                data:data
+            })
+}
+
+var fetchData = sendRequest();
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var sendData = {};
+        sendData.payload = id;
+       fetchData(sendData);
+    })
+}
+```
+
+- 이제는 여러가지 ajax 함수를 받을 수 있게 함수를 parameter로 받으려 했다.
+- ajaxFn으로 받는 것은 아래와 같이 간단하게 바꿀 수 있었다.
+- 대신 처음 실행컨텍스트를 정할 때 원하는 ajax 함수를 같이 넘기게 바꿔야 한다.
+```js
+function sendRequest(ajaxFn) {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            
+            ajaxFn(data)
+                .done(function(res,status,xhr){
+                    if(res.statusCode === '200') {
+                        location.href = '/teenAgerCardIssue';
+                    }
+                    clicked = false;
+                }).fail(function(error){
+                    alert(error);
+                    clicked = false;
+                }).always(function(){
+                    checkMobileDeviceOs();
+                    clicked = false;
+                })
+
+        }
+    }
+}
+
+function testAjax(data) {
+    return $.ajax({
+                .
+                .
+                data:data
+            })
+}
+
+var fetchData = sendRequest(testAjax);
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var sendData = {};
+        sendData.payload = id;
+       fetchData(sendData);
+    })
+}
+```
+
+- 그런데 successCallback도 같이 ajax와 넣어두면 이걸 공통함수로 뺄 수 있겠다는 생각이 들었다.
+- 그래서 successCallback도 같이 parameter로 받게 바꿨다.
+- successCallback 함수는 res를 parameter로 받아야한다.
+- 그러나 sendRequest에서 굳이 parameter를 명시하지 않아도 알아서 잘 받아진다. 이유는 모르겠다.
+```js
+function sendRequest(ajaxFn, successCallback) {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            
+            ajaxFn(data)
+                .done(function(res,status,xhr){
+                    successCallback(res)
+                    clicked = false;
+                }).fail(function(error){
+                    alert(error);
+                    clicked = false;
+                }).always(function(){
+                    checkMobileDeviceOs();
+                    clicked = false;
+                })
+
+        }
+    }
+}
+
+function testAjax(data) {
+    return $.ajax({
+                .
+                .
+                data:data
+            })
+}
+
+function successCallback(res) {
+    var popupText = "";
+    var popupHtml = "";
+    if(res.statusCode === '200') {
+        location.href = '/teenAgerCardIssue';
+    } else if (res.statusCode === '199') {
+        popupText = "비밀번호가 1회 오류입니다."
+    } else if (res.statusCode === '198') {
+        popupText = "비밀번호가 2회 오류입니다."
+    } else {
+        location.href = '/teenAgerError'
+        return;
+    }
+
+    poupHtml = $("#errorGuide").text(popupText);
+    popupHtml.html(). ??
+
+    Layer.open("#errorPopup");
+}
+
+var fetchData = sendRequest(testAjax, successCallback);
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var sendData = {};
+        sendData.payload = id;
+       fetchData(sendData);
+    })
+}
+```
+
+
+- 모듈화를 해놨으니 다른 공통 함수로 빼놓을 수 있다.
+- 공통함수 js에 넣을 수 있다는 의미다.
+```js
+//common.js
+
+function sendRequestOnlyOnce(ajaxFn, successCallback) {
+    var clicked = false;
+    return function(data) {
+        if(!clicked) {
+            clicked = true;
+            ajaxFn(data)
+                .done(function(res,status,xhr){
+                    successCallback(res)
+                    clicked = false;
+                }).fail(function(error){
+                    alert(error);
+                    clicked = false;
+                }).always(function(){
+                    checkMobileDeviceOs();
+                    clicked = false;
+                })
+
+        }
+    }
+}
+```
+
+- 이제 ajax들은 모두 common.js에서 가져온 sendRequestOnlyOnce 함수로 wrapping할 수 있다.
+- 그러면 별다른 처리 없이 간단하게 아래와 같은 순서로 하면 중복클릭방지가 저절로 들어가는 것이다.
+- script import --> ajax 함수 정의 --> ajax의 successCallback 정의 --> 실행컨텍스트 저장을 위한 변수 정의 --> data collection --> eventListener에서 함수실행
+```js
+//teenAger.jsp
+<script src ="/my/common.js"/>
+
+//원하는 ajax함수
+function testAjax(data) {
+    return $.ajax({
+                .
+                .
+                data:data
+            })
+}
+
+//원하는 ajax의 successCallback
+function successCallback(res) {
+    .
+    .
+}
+
+// 실행컨텍스트 저장을 위해 wraaping하는 함수
+var fetchData = sendRequestOnlyOnce(testAjax, successCallback);
+
+
+function handleButtonClick() {
+    $("#button").on('click',function() {
+        var isDisabled = $(this).hasClass('disabled');
+        if(isDisabled) {
+            return;
+        }
+
+        //data collecting
+        var sendData = {};
+
+        //실제 함수 실행
+       fetchData(sendData);
+    })
+}
+```
+
