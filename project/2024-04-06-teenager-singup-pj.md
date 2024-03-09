@@ -1825,6 +1825,12 @@ function sendRequestOnlyOnce(ajaxFn, successCallback) {
 
 //원하는 ajax함수
 function testAjax(data) {
+    var leftDay = "${leftDay}";
+    if (parseInt(leftDay) >= 1) {
+        preventRequestAndShowPopup(parseInt(lefyDay));
+        return;
+    }
+
     return $.ajax({
                 .
                 .
