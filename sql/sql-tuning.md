@@ -769,16 +769,14 @@ FROM (
 - index range scan
   - 선두 컬럼을 가공하지 않은 상태로 조건절에 써야한다.
   - index range scan이라고 무조건 효율적 scan을 의미하지 않는다.
-  - index scan 범위를 줄이고, scan량도 줄여야 한다.
+  - index scan 범위를 줄이고, table access도 줄여야 한다.
 ```sql
 SELECT * FROM emp where deptno = 20;
 ```
 
 - index full scan
-  - 수직 탐색 없이 수평탐색만 한다.
-  - ename이 선두에 와야 하는데, sal이 선두에 왔으므로 range scan떄려야만 한다.
-  - 그래도 index 중에 ename은 있으니까 table full scan이 아닌 index full scan이 가능하다.
-  - 물론 cardinality가 높아야, 즉 선택률이 낮아야 이렇게 index full scan으로 활용할 수 있다.
+  - index로 갖고 있는 column이 하나라도 있기 때문에 table full scan이 아닌 index full scan이 가능하다.
+  - 물론 cardinality가 높아야, 즉 선택률이 낮아야 이렇게 index full scan 활용이 의미가 있다.
 ```sql
 create index emp_ename_sal_idx on emp (ename, sal);
 
@@ -787,11 +785,13 @@ WHERE sal > 2000
 order by ename;
 ```
 
-- index full scan이나 index range scan 모두 order by 연산이 생략된다.
-- index column 순으로 정렬되기 때문이다.
-- 떄로 선택률이 높은데도 index를 쓰는 경우가 있다. 처음 일부만 보여주려고 의도할 때가 그러하다.
+- index full scan이나 index range scan 모두 order by 연산이 생략될 수도 있다.
+- index column 순으로 정렬되기 때문이다. 물론 아래와 같은 경우는 order by가 있어야 할 것이다.
+  - (ename, sal)로 만들었기 때문이다. (sal, ename)으로 만들었고 index scan이 이뤄지면 order by를 안써도 될 수도 있다.
+  - 다만 oracle 12c부터는 order by를 반드시 명시해주는 게 좋다. batch I/O가 발동하면 index 정렬 순서대로 늘 record가 뽑히진 않기 때문이다.
+- 떄로 선택률이 높은데도 index를 쓰는 경우가 있다. 처음 일부만 보여주려고 의도할 때가 그러하다. 부분범위처리다.
 - 만약 record를 계속 보려고 스크롤을 내리면 table full scan보다 효율이 훨씬 떨어지게 된다.
-- WAS에서 쓸만한 방식은 아니다. WAS에서는 paging을 명시로 해야하기 때문이다.
+- WAS에서는 자주 쓰이지는 않는다. WAS에서는 paging을 명시로 해야하기 때문이다.
 ```sql
 SELECT /*+ first_rows */
 from emp
@@ -1154,3 +1154,168 @@ Rows      Row Source Operation
 - index filter 이외에 table filter는 access 이후에 결과를 가져온 뒤 filtering하는 조건이다.
 
 <img src="/image/index-access-filter.jpg"/>
+
+- index를 이용한 테이블 액세스 비용은 table filter를 뺀 index access, index filter의 합이다.
+  - index root와 branch block에서 읽는 block을 plus
+  - index leaf block에서 읽는 block을 plus
+  - table access에서 읽는 block수를 plus
+
+- table과 달리 index에는 같은 값을 갖는 key-value pair가 서로 군집해 있다.
+- index를 (C1,C2,C3,C4)로 지정했다고 해보자.
+- 그 상태에서 조건절 1을 보자. 모두 =으로 걸려있다. key-value pair들이 연속해서 모여있게 된다.
+- index leaf block은 data block과 다르게 entire read가 아니다. 따라서 조건절을 만족하지 않는 element를 만나면 read를 멈춘다.
+- index leaf block에서 확보한 rowid를 일일이 건별로 data block에 access하면 불필요한 access가 많아진다.
+  - 어차피 같은 data block에 속하는 rowid인데도 두 번 access를 해야할 수도 있기 때문이다.
+  - 따라서 현대 db는 index leaf block에서 얻은 rowid를 통합해 확보하고 필요한 table access를 줄이는 방식으로 불필요한 access를 줄일 가능성이 높다.
+  - 그 다음 rowid를 통해 실제 table segment의 data block을 entire read하게 된다.
+    - data block과 index leaf block은 서로 다른 개념이라고
+
+- 조건절 2는 맨 마지막 컬럼만 범위검색 조건이다.
+- 그래도 5~10번 key-value pair가 모여있는 모습을 볼 수 있다.
+  - 범위검색 조건인 BETWEEN, LIKE(전방일치)를 쓸 때도 똑같다.
+
+- 마지막이 아닌 중간 컬럼이 범위 검색 조건일 때는 좀 다르다.
+  - C1분터 C3까지 조건을 만족하는 key - value pair는 2~12번으로 서로 모여있다. 
+  - C4까지 만족하는 key-value pair는 서로 흩어진다. 2,3,5,6,7,11번으로 말이다.
+
+- 첫번째 나오는 범위조건까지는 key-value pair(index record)가 모여있지만, 그 뒤부터는 어떤 조건이든 다 흩어지게 된다.
+- 따라서 처음 나오는 범위조건까지가 index access 조건이고, 그 뒤부터는 index filter 조건이다.
+- 만약 조건절이 index가 걸리지 않은 column이면 table filter조건이 된다.
+- 실행계획 상으로는 그렇지 않을수도 있지만, 대개 무시할만한 수준이기 때문에 위처럼 외우면 된다.
+
+
+<img src ="/image/index-leaf-block-clustring.jpg" />
+
+
+- index는 모두 = 조건(등치조건)으로 걸리는 게 가장 좋다.
+  - leaf block을 읽으면서 얻은 key-value pair가 index filter조건에 걸러지지 않는다.
+  - 따라서 모두 table access로 이어지기 때문에 scan이 완전 효율을 달성한다.
+  - 맨 마지막 column이 등치가 아닌 것은 상관없다.
+- 반면에 선행 컬럼이 없거나, 선행에서 범위검색으로 가버리면 비효율이 발생한다.
+  - leaf block을 읽으면서 얻은 key-valu pair인 index record가 index filter조건에 걸러진다.
+
+
+
+## <span style="color:#802548">_인덱스 액세스조건과 필터조건_</span>
+
+- index leaf block은 data block과 완전히 다르다.
+- index leaf block은 end까지 entire read가 필요하지 않다.
+  - condition을 만족하지 않는 index record의 key를 발견하는 순간 scan을 멈춘다. 
+  - index record는 key-value pair다. key - value pair는 index leaf block만 가지고 있다.
+  - index root, branch block은 idnex leaf block에 쉽게 접근할 수 있게끔 트리형태로 정보를 제공한다.
+  - index record는 db에서 사용자에게 별도로 제공해주지 않는다. 해당 command가 없다.
+- index range scan은 실제로 index key scan이다. 
+  - root -> branch -> leaf로 내려가면서 key를 scan하고 컨디션을 만족하는 첫 index record를 발견한다.
+    - 이렇게 starting point를 결정하는 걸 index의 수직적 탐색이라고 한다.
+  - 그럼 index는 모두 정렬되어 있기 때문에 인접한 key-value pair, 즉 index record를 읽어나간다.
+  - 그러다 condition을 만족하지 못하는 index record를 발견하면 scan을 멈춘다. 
+    - 이렇게 end point를 정하는 과정을 수평적탐색이다.
+- 그럼 index range scan을 통해 필요한 key를 모두 찾게 된다. 
+  - 해당 key에서 value를 찾고, value에 있는 rowid를 찾는다.
+  - rowid를 통해 다시 table의 data block을 읽으면 table record를 가져올 수 있다. 
+  - 다만 table data block은 entire read가 수반된다. 이러한 과정을 table access라고 한다.
+- 이러한 총 과정을 index range scan이라고 통칭한다.
+
+- 만약 select와 order by, group by, where  조건절을 모두 포함해 전부 index안에 존재한다면, table access가 필요없다. 
+  - b-tree는 실제 해당 column에 기반하여 key형태로 보관하고 있기에, 실제 value값에 어느정도 formatting만 해주는 것이다. 
+  - 따라서 해당 formatting을 db에서 역으로 실행하면 select에 필요한 값을 알 수 있다. 이를 covered index, index only scan이라 한다.
+  - 이 경우 table access가 없기 때문에 엄청나게 빠르다.
+```sql
+/**아래는 비효율적 index range scan이며 only scan이다. */
+create index idx_covering(name,age);
+select name
+from employee
+where age = 10;
+
+/**아래는 효율적 index range scan이며 only scan이다. */
+create index idx_covering(age,name);
+select name
+from employee
+where age = 10;
+```
+
+- where 조건문에 쓰는 조건은 index access 조건과 index filter 조건, table filter 조건으로 나뉜다.
+  - index access는 수직탐색(시작점)과 수평탐색(끝점)을 결정하는 용도의 조건이다.
+  - index filter는 table에 실제로 access를 할지 결정하는 용도의 조건이다.
+  - table filter는 index가 아예 없는 column의 조건문인 경우다. table record를 얻어온 뒤 filtering하는 조건이다.
+  - index로 사용된 컬럼 중 범위처리된 조건까지만이 index access 조건이며, 그 뒤부터는 index filter조건이다. 
+- index access 조건으로 index key scan을 할 범위를 정한다.
+  - 그 중에서 어떤 index record의 rowid를 가지고 table access할 지는 index filter조건이 정한다. 
+    - 그렇게 가져온 table record를 다시 table filter조건으로 걸러서 resultSet을 만드는 것이다.
+
+
+## <span style="color:#802548">_BETWEEN을 IN-LIST로_</span>
+- 운영 시스템에서 인덱스 구성을 바꾸기는 사실 쉽지 않다.
+- 그렇기 때문에 between이 써있는 데도 그냥 내두는 경우가 흔하다.
+- 하지만 in 조건을 활용하면 index 구성을 바꾸지 않고도 index range scan을 효율적으로 진행할 수 있다.
+  - 만약 아래가 인터넷매물  betwenn 1 and 3이었다면, 1부터 3까지 전부 index record를 scan했을 것이다.
+  - 그럼 그 아래 조건 아파트시세코드, 평형, 평형타입은 모두 index filter조건으로 기능하게 된다. 비효율적 scan이 일어나게 되는 것이다.
+  - 대신 아래와 같이 쓰면 수직적탐색을 3번 거치지만, 수평탐색이 전혀 없게 된다.
+
+<img src="/image/in-list-vertical-scan.jpg" />
+
+
+```sql
+SELECT 해당층, 평당가, 입력일, 해당동, 매물구분, 연사용일수, 중개업소코드
+FROM 매물아파트매매
+WHERE 인터넷매물 in ('1','2','3')
+AND 아파트시세코드 = 'A01011350900056'
+AND 평형 = '59'
+AND 평형타입 = 'A'
+ORDER BY 입력일 DESC
+```
+
+- 위의 sql은 실제로 아래와 같이 변환할 수 있다.
+```sql
+SELECT 해당층, 평당가, 입력일, 해당동, 매물구분, 연사용일수, 중개업소코드
+FROM 매물아파트매매
+WHERE 인터넷매물 = 1
+AND 아파트시세코드 = 'A01011350900056'
+AND 평형 = '59'
+AND 평형타입 = 'A'
+ORDER BY 입력일 DESC
+
+UNION ALL
+
+SELECT 해당층, 평당가, 입력일, 해당동, 매물구분, 연사용일수, 중개업소코드
+FROM 매물아파트매매
+WHERE 인터넷매물 = 2
+AND 아파트시세코드 = 'A01011350900056'
+AND 평형 = '59'
+AND 평형타입 = 'A'
+ORDER BY 입력일 DESC
+
+UNION ALL 
+
+SELECT 해당층, 평당가, 입력일, 해당동, 매물구분, 연사용일수, 중개업소코드
+FROM 매물아파트매매
+WHERE 인터넷매물 = 3
+AND 아파트시세코드 = 'A01011350900056'
+AND 평형 = '59'
+AND 평형타입 = 'A'
+ORDER BY 입력일 DESC
+```
+
+- 다만 문제는 in에 들어갈 수가 많다면 between 보다 더 비효율적일 수 있다.
+  - 수직적 탐색이 많아지는데, 그렇게 되면 branch block을 그만큼 반복 탐색하는 횟수가 늘어난다.
+  - 그게 수평 탐색이 많아지는 것보다 더 비효율을 초래할 수도 있다. 특히 depth가 깊다면 말이다.
+  - 수평 탐색이 실제로 별로 크지 않았다면 in으로 변환해도 큰 효과를 누리지 못할 수 있다.
+  - in으로 바꾼다는 것은 결국 수직탐색을 늘리고, 수평탐색을 줄인다는 의미기 때문이다.
+- 실제로 아래와 같은 경우, 왼쪽은 in-list로 바꾸는 게 좋지만, 오른쪽은 그닥 효과가 없을 것이다.
+
+<img src="/image/inefficient-in-list.jpg" />
+
+- 그럴 떄 만약 코드를 table로 따로 관리한다면, join이 괜찮은 대체재가 될 수 있다.
+```sql
+SELECT b.해당층, b.평당가, b.입력일, b.해당동, b.매물구분, b.연사용일수, b.중개업소코드
+FROM 통합코드 a, 매물아파트매매 b
+WHERE a.코드구분 = 'CD064'
+AND a.코드 BETWEEN '1' and '3'
+AND b.인터넷매물 = a.코드
+AND b.아파트시세코드 = 'A01011350900056'
+AND b.평형 = '59'
+AND b.평형타입 = 'A'
+ORDER BY b.입력일 DESC
+```
+
+
