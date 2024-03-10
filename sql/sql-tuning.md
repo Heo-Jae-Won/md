@@ -1124,3 +1124,33 @@ AND C2 BETWEEN 2 AND 3
 - C1은 스캔 시작점과 끝지점을 지정하여 스캔량을 줄이는 데 역할을 했다.
 - 하지만 C2는 전혀 역할을 하지 못했다. 특히 C1이 B일 떄 더 그렇다.
 - 선두컬럼을 범위로 놓으면 그 뒤 컬럼부터는 스캔량을 줄이는 데 도움이 되지 않음을 알 수 있다.
+
+
+
+
+- 지금까지는 index가 계속 붙어있는 것을 가정했다.
+- 하지만 index 선행 컬럼이 존재하지 않는 경우도 있다. 
+- 이 경우에는 결과값은 같을지라도, 훨씬 더 많은 index leaf block scan이 필요할 가능성이 높다.
+- 성능검으로 시작하는 record를 읽을 때 필요한 건 3 block이지만,
+- 성능으로 시작하다가 중간이 비고 4번째가 선으로 끝나는 걸 읽을 때 필요한 block은 6 block이다.
+
+<img src="/image/index-omitted-inefficietn.jpg" />
+
+- 구체적 수치로 index scan의 효율성을 따지는 방법은 sql trace를 보면 된다.
+- 아래와 같은 trace에서 읽은 블록은 7463개지만, 얻은 record는 10개밖에 안된다.
+- 한 블록당 평균 500개가 담긴가도 하면, 5463 x 500 총 3,731,500개 record를 읽어 10개 record를 얻은 것이다.
+- 엄청나게 비효율적이라고 볼 수 있다.
+```
+Rows      Row Source Operation
+10        TABLES ACCESS BY INDEX ROWID BIG_TABLE(cr=7471 pr=1466 pw=0 time=22137)
+10          INDEX RANGE SCAN BIG_TABLE_IDX (cr=7463 pr=1466 pw=0 time=22328)
+```
+
+## <span style="color:#802548">_인덱스 액세스조건과 필터조건_</span>
+
+
+- index access 조건과 filter 조건은 서로 다른 개념이다.
+- access 조건은 index scan 범위를 결정하고, filter 조건은 table access 여부를 결정한다.
+- index filter 이외에 table filter는 access 이후에 결과를 가져온 뒤 filtering하는 조건이다.
+
+<img src="/image/index-access-filter.jpg"/>
