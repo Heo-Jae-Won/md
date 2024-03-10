@@ -1318,4 +1318,88 @@ AND b.평형타입 = 'A'
 ORDER BY b.입력일 DESC
 ```
 
+- 또는 index skip scan을 사용하는 것도 좋은 선택이다.
+- 선두컬럼이 betwenn으로 범위검색을 하는 경우 특히 in-list로 바꾸는 것보다 유용하다.
+```sql
+SELECT /*+ INDEX_SS(t 월별고객별판매집계_IDX2) */ count(*)
+FROM 월별고객별판매집계 t
+WHERE 판매구분 = 'A'
+AND 판매월 BETWEEN '201801' AND '201812'
+```
 
+- in 조건이 = 조건으로(index access) 작동하려면 in-list 방식으로 풀려야한다.
+  - union all을 썼을 때와 동일하게 변환될 수 있어야한다는 의미다.
+  - 즉 BETWENN으로 풀리면 안된다는 의미다.
+- 만약 그렇지 않다면 in 조건은 index filter 조건으로 작동한다.
+  - 그러나 in 조건이 index access 조건으로 풀려야만 좋은 것은 아니다. 
+  - 때로는 filter 조건으로 가는 게 훨씬 나은 판단일 수도 있다.
+  - 가령 상품ID가 PK고 상품구분코드가 GX, KR인 경우를 찾는 경우라면?
+  - 상품구분코드가 in-list로 풀려서 access 조건이 되면 index scan 범위가 매우 넓어지게 되어버린다.
+  - 그 경우보다는 range scan 범위를 줄이고, filter를 하는 게 더 편리할 것이다.
+  - 오히려 in-list로 변환하는 게 더 나쁘다는 의미다.
+
+- 아래와 같은 간단한 sql 예시를 보면 확실하게 이해가 갈 것이다.
+- 아래는 in 조건절이 있다.
+```sql
+SELECT * FROM 상품
+WHERE 상품ID = :prod_id
+AND 상품구분코드 in ('GX','KR')
+```
+
+- optimizer는 위의 in을 in-list가 아닌 filter조건(BETWEEN)으로 풀어냈다.
+- 그 이유가 뭘까? 상품ID가 PK라서 unique index이기 때문이다.
+  - index scan 시 오히려 상품구분코드를 access 조건으로 취급하지 않는게 scan 양이 줄어든다.
+  - in-list로 푸는 게 도움이 되지 않는다는 의미다. 마찬가지로 index 구조를 바꾸는 것도 도움이 안 된다.
+  - 상품구분코드가 선두컬럼이 되면 index scan양이 unique index인 PK가 선두컬럼일 때보다 훨씬 많아진다.
+```
+상품_PK: 상품ID
+상품_X01: 상품ID + 상품구분코드
+
+EXECUTION PLAN
+---------------------------------------------------------------
+0         SELECT STATEMENT 
+1   0       TABLE ACCESS (BY INDEX ROWID) OF '상품' (TABLE)
+2   1         INDEX (RANGE SCAN) OF '상품_X01' (INDEX)
+--------------------------------------------------------------
+PREDICATE INFORMATION
+--------------------------------------------------------------
+2- access('상품ID'=:prod_id)
+2- filter('상품구분코드'='GX' OR '상품구분코드' = 'KR')
+```
+
+
+- in 조건절을 access 혹은 filter로 바꾸는 걸 자의로 조절하려면 hint를 사용하면 된다.
+- 아래 방식은 인덱스 선두컬럼만 access 조건으로 사용한다는 의미다.
+```sql
+SELECT /*+ num_index_keys(a 고객별가입상품_X1 1) */ *
+FROM 고객별가입상품 a
+WHERE 고객번호 = :cust_no
+AND 상품ID in ('NH00037', 'NH00041','NH00050')
+```
+
+- 아니면 상품ID를 가공해버려서 access조건으로 쓰지 못하게 할 수도 있다.
+- 그러면 index filter조건으로만 활용이 가능하다.
+```sql
+SELECT * 
+FROM 고객별가입상품
+WHERE 고객번호 =:cust_no
+AND RTRIM(상품ID) in ('NH00037', 'NH00041','NH00050')
+
+SELECT *
+FROM 고객별가입상품
+WHERE 고객번호 = :cust_no
+AND 상품ID || '' in ('NH00037', 'NH00041','NH00050')
+```
+
+- 상품ID를 access 조건으로 활용하려면 아래와 같이 2번째까지 index access 조건으로 사용한다고 하면 된다.
+- 그럼 in-list 방식으로 풀려 index access 조건으로 활용할 수 있다.
+```sql
+SELECT /*+ num_index_keys(a 고객별가입상품_X1 2) */ *
+FROM 고객별가입상품 a
+WHERE 고객번호 = :cust_no
+AND 상품ID in ('NH00037', 'NH00041','NH00050')
+```
+
+- 다시말하지만 핵심은 index scan양을 줄이는 것이다.
+  - in-list방식으로 풀어서 index access로 만드는 게 index scan량을 줄이는지?
+  - 아니면 BETWEEN으로 풀어서 index filter로 만드는 게 index scan량을 줄이는 지 판별해야 한다.
