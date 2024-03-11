@@ -1403,3 +1403,32 @@ AND 상품ID in ('NH00037', 'NH00041','NH00050')
 - 다시말하지만 핵심은 index scan양을 줄이는 것이다.
   - in-list방식으로 풀어서 index access로 만드는 게 index scan량을 줄이는지?
   - 아니면 BETWEEN으로 풀어서 index filter로 만드는 게 index scan량을 줄이는 지 판별해야 한다.
+
+
+## <span style="color:#802548">_BETWEEN과 LIKE_</span>
+- LIKE보단 BETWEEN이 더 낫다.
+- 아래와 같이 두 sql이 있다고 해보자.
+  - 인덱스가 (판매월,판매구분)으로 구성되었다.
+  - 판매구분은 A와 B가 있고 A가 90%, B가 10%다.
+    - BETWEEN은 바로 201901이면서 B인 지점으로 starting point를 정할 수 있다.
+    - LIKE는 그게 안된다. 201900이 존재할 수도 있기 때문에 무조건 처음부터 읽는다. 
+    - 따라서 판매구분이 B인 경우의 조건절이 access조건으로서 무력화된다.
+    - scan량을 줄이는 데 도움이 안되는 것이다.
+```sql
+SELECT *
+FROM 월별고객별판매집계
+WHERE 판매월 LIKE '2019%'
+AND 판매구분 = 'B'
+```
+
+```sql
+SELECT *
+FROM 월별고객별판매집계
+WHERE 판매월 BETWEEN '201901' and '201912'
+AND 판매구분 = 'B'
+```
+
+
+<img src="/image/between-like-difference.jpg" />
+
+- LIKE가 편하다고 남용하면 sql 성능에서 댓가를 치른다.
