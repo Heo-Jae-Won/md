@@ -1823,6 +1823,8 @@ function sendRequestOnlyOnce(ajaxFn, successCallback) {
 //teenAger.jsp
 <script src ="/my/common.js"/>
 
+
+
 //원하는 ajax함수
 function testAjax(data) {
     var leftDay = "${leftDay}";
@@ -1864,3 +1866,133 @@ function handleButtonClick() {
 }
 ```
 
+
+- 해당 내용을 axios/ts로 변환해보자.
+- 나는 ajax의 형태를 아래와 같이 사용했다.
+```js
+const apiRootPath = process.env.VUE_APP_API;
+let prevRequest: AxiosRequestConfig | null = null;
+export const instance = axios.create({
+  timeout: 10 * 1000,
+  baseURL: apiRootPath,
+});
+
+instance.interceptors.request.use(
+  (config: AxiosRequestConfig) => {
+    if (config.url !== '/login') {
+      const store = useMemberStore();
+      const { accessToken } = storeToRefs(store);
+
+      config.headers['authorization'] = `Bearer ${accessToken.value}`;
+    }
+
+    prevRequest = config;
+    return config;
+  },
+  error => {
+    return Promise.reject(error);
+  }
+);
+
+instance.interceptors.response.use(
+  response => {
+    return response;
+  },
+  async (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      const store = useMemberStore();
+      const { loginMember } = storeToRefs(store);
+      const { updateAccessToken } = store;
+      const authenticPrevRequest = prevRequest;
+      const accessTokenResponse = await extendSignInStatus(loginMember.value);
+      const accessToken = accessTokenResponse.data;
+      updateAccessToken(accessToken);
+      const updatedRequestConfig = {
+        ...authenticPrevRequest,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+      };
+
+      const result = await axios(updatedRequestConfig as AxiosRequestConfig);
+      return result;
+    }
+
+    if (error.response?.data.message) {
+      alert(error.response?.data.message);
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
+- 실제 ajax 함수는 아래와 같이 만들수 있다.
+```js
+export const login = (loginRequest: Pick<Member,'memberId' | 'memberPassword'>) => {
+  return instance({
+    url: '/signin',
+    method: 'post',
+    data: loginRequest,
+  });
+};
+```
+
+- 그럼 위와 같은 ajax 함수를 받아오기 위한 형태로 아래와 같이 만들어준다.
+- parameter는 뭐로 들어올지 몰라 any로 해놨다. 나중에 규칙이 추가된다면 any가 아닌 다른것으로 바꿔보자.
+```js
+export const sendRequestOnlyOnce = (ajaxFn: (parameter: any) => AxiosPromise<any>, successCallback: (response: AxiosResponse) => void) => {
+    let clicked = false;
+    return (parameter: any) => {
+        console.log(clicked);
+        if(!clicked) {
+            clicked = true;
+            ajaxFn(parameter)
+                .then(res => {
+                    successCallback(res)
+                    clicked = false;
+                }).catch(function(error){
+                    alert(error);
+                    clicked = false;
+                }).finally(function(){
+                    clicked = false;
+                })
+
+        }
+    }
+}
+```
+
+- successCallback은 아래와 같이 적용해준다.
+```js
+const successCallback = (response: AxiosResponse): void => {
+    if (response.status === 200) {
+    const accessToken = response.data.accessToken;
+    const refreshToken = response.data.refreshToken;
+    const memberNo = response.data.memberNo;
+
+    alert('로그인이 완료되었습니다.');
+    changeLoginMember(memberId.value, accessToken, refreshToken, memberNo);
+    router.push('/');
+    } 
+}
+```
+
+- 그럼 실제 closure는 아래와 같이 호출한다.
+- 아직 실전 test는 안해봤는데, 개인 프로젝트 하게 되면 test를 해보려고 한다.
+```js
+const fetchData = sendRequestOnlyOnce(login, successCallback);
+
+async function handleLoginClick() {
+    const isValid = (await useValidateForm(form, isFormValid))?.value;
+    if (isValid) {
+        const data = {
+            memberId: memberId.value,
+            memberPassword: memberPassword.value,
+        };
+
+        fetchData(data);
+    }
+}
+```
