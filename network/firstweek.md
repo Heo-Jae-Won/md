@@ -27,7 +27,7 @@
 - server는 다른 호스트에게 서비스를 제공하는 host다. 요청에 따라 데이터나 리소스를 제공한다.
 
 
-## <span style="color:#802548">_인터넷_</span>
+## <span style="color:#802548">_인터넷의 발전_</span>
 - 인터넷은 inter network라는 말과 같이, 네트워크를 모두 끌어 모은 것이다.
 - 인터넷은 웹, 메일, FTP, 모바일, 스트리밍 등 다양한 프로토콜이 있다.
 - 인터넷은 웹이 아니다. 웹은 인터넷 중의 일부다.
@@ -42,6 +42,8 @@ tree로는 안된다. 여러정보가 link를 통해서 연결되어야 한다. 
 중앙 통제가 없어야 한다.
 기존 정보에도 적용이 가능해야 한다.
 ```
+
+
 
 ## <span style="color:#802548">_망분리_</span>
 - 인트라넷에 대해 먼저 살펴보자. 인트라넷은 대부분 망분리를 통해 인터넷을 사용불가능하게 하고 내부망을 통하게끔하는 작업이다.
@@ -269,6 +271,90 @@ PDU: bit
   - fast recovery   -> 혼잡한 상태가 되면 윈도우 크기를 1로 줄이지 않고 반으로 줄이고 선형 증가한다
 
 
+## <span style="color:#802548">_TCP/IP stack_</span>
+- TCP/IP stack에서는 application layer, transport layer, internet layer, link layer가 있다.
+  - transport부터 link까지는 하드웨어/펌웨어, OS레벨에서 관리된다. 네트워크 기능을 지원하는 게 목적이다. systme이라고도 한다.
+  - application layer는 application을 사용하는 데 목적이 있다. 네트워크 기능을 사용하는 게 목적이다. application이라고도 한다.
+    - host 사이의 통신은 데이터를 보내는 데 목적이 있어 데이터를 안정적으로 주고 받지 않는다. IP가 대표적이다.
+    - 그런 이유로 Internet Protocol(IP)은 unrelible하다. data loss, out-of-order 상태에 놓일 수 있다. 목적지 host까지 가도 100% 안전성을 보장할 수 없다.
+    - 그러나 프로세스 간의 통신에서는 데이터를 안정적으로 주고받아야 하는 protocol이 필요했다. 
+    - 그런 이유로 TCP가 차후에 개발되었다. TCP에서 데이터를 어떻게 안정적으로 주고받는 것일까?
+- 흐름제어의 핵심은 TCP가 connection을 맺는다는 데 있다. connection은 프로세스 간의 안정적이고 논리적인 통신 통로다.
+  - connection을 열면 3 way handshake가 일어나고, 연결되면 데이터를 주고 받는다. 주고 받는 게 끝나면 connection을 닫는다. 그게 4-way handshake다.
+  - connection은 서로 다른 process 간의 data가 통신될 수 있는지 확인하는 channel이고, port는 다른 process에서 온 data를 system에서 올려보내는 통로다. 
+  - process 간에는 connection을 맺고, port를 통해 data를 주고받을 수 있게 되는 것이다.
+- connection을 만들기 위해서는 상대 host를 찾는 것을 넘어 상대 process를 찾아야 한다.
+  - 그래서 궁리한 결과, port number가 정의되었다. port number는 16 bit의 숫자로 0 ~ 65535다.
+  - host 내에서 유일한 프로그램임을 보장하는 port number가 있다.
+  - 네트워크 상에서 유일한 host임을 보장하는 IP가 있다.
+  - IP:port number의 조합으로 인터넷 상의 모든 프로그램을 unique하게 식별할 수 있는 것이다.
+    - 그리고 IP와 port를 합친 걸 바로 socket이라고 한다. 즉 socket은 한 네트워크 내 프로그램의 유일한 데이터 진입로다.
+    - 인터넷 상에서 존재하는 각 프로그램은 모두 socket을 통해 data를 받게 된다. 인터넷의 namespace인 셈이다.
+- IP와 port number의 조합으로 프로그램은 유일성을 보장받게 되었으며, 따라서 유일한 것끼리 connection을 맺으면 그 connection도 유일하다.
+  - 즉 한 쌍의 socket으로 connection을 지으면 반드시 인터넷 상에서 unique한 connection, port가 되는 것이다.
+  - 하나의 socket은 동시에 여러 connection에서 사용될 수도 있다.
+    - socket은 원래는 TCP에서만 쓰이다가 자연스레 UDP에서도 쓰기 시작했다.
+    - 그래서 protocol까지 고려하게 되고, (protocol, IP, port number)의 조합이 socket이 된다.
+
+<img src="/image/tcp-ip-socket.png" />
 
 
-## <span style="color:#802548">_출처_</span>
+## <span style="color:#802548">_실제 socket의 구현_</span>
+- application은 system의 기능을 함부로 쓸 수 없다.
+  - application은 커널 코드에 직접 접근이 안되고 인터페이스를 통한 I/O call로 간접적으로 system의 기능을 호출한다.
+  - 그 중 네트워크 기능 쪽 인터페이스는 socket이다. 우리는 socket을 통해 data를 주고 받는다.
+  - 네트워크 상의 다른 프로세스와 데이터를 주고받게 구현하는 것을 socket programming이라고 한다.
+  - 물론 대부분의 application 개발자는 socket을 만지지 않는다. 대부분 내부 library나 모듈 형태로 해당 기능이 제공되기 때문이다.
+  - 실제 socket은 (protocol, IP address, port number)로 정의된다. 
+    - 프로토콜을 지정하고, 소켓주소(IP address, port number)를 지정해준다.
+    - 서버쪽 프로그램은 port number를 명시해야 client에서 해당 port로 데이터를 보낼 수 있기에 주소 binding은 필수다. client는 필수는 아니고, OS가 알아서 binding해준다.
+
+<img src="/image/implementation-socket.png" />
+
+- 이론적으론 본인 프로그램의 (protocol, ip address, port number)로 unique한 socket으로 식별이 되어야 한다.
+  - 하지만 실제 구현에서는, TCP에선 그렇지 않다. OS에서 다르게 구현되었기 때문이다.
+  - 8080이 server고 49999가 client라고 해보자.
+  - server에선 client가 보내는 request를 항상 기다리는 socket이 필요하다.
+    - connection을 맺는 요청을 기다리는 socket을 listening socket이라고 한다.
+    - 이 socket에서 바로 3 way handshake가 이뤄진다.
+    - connection이 성립되었는데 다른 process에서 request가 오면?
+    - 다른 process와 listening socket에서 3 way handshake를 맺고, 소켓을 하나 더 발급한다.
+    - 즉 program과 socket이 1:1로 대응하지 않고, 1 대 다로 대응하게 된다.
+      - 이때 OS에서 세개의 TCP socket이 IP address와 port number가 똑같다.
+      - 3개가 똑같은 socket같은데 식별을 하는 방법이 뭘까?
+
+<img src="/image/implementation-same-socket.png" />
+
+- 실제 구현에서는 connection 연결 요청이 오는 경우는 listening socket으로 data를 보낸다.
+- connection이 성립된 이후에는 보낸쪽의 IP정보와 port까지 보고서 어떤 socket인지 식별한다.
+  - TCP는 (src IP, src port number, dest IP, dest port number)로 connection의 유일성을 보장한다.
+  - 즉 실제 TCP socket 구현은 dest IP와 dest port number만으로는 connection의 유일성을 보장하지 못한다.
+
+<img src="/image/tcp-socket.png" />
+
+- UDP는 connection을 맺지 않고 listening port도 없다. 한 프로그램에 하나의 socket만 존재하는 셈이다.
+- 아래 사진에서 connection만 뺴면 UDP의 작동방식이다.
+
+<img src="/image/udp-socket.png" />
+
+- UDP socket에서 데이터를 읽으면 어느 UDP socket에서 왔는지 알 수 있다.
+
+- port는 0 ~ 1023 사이는 널리알려진 port다.
+  - HTTP는 80, HTTPS는 443, DNS는 53이다.
+- 1024 ~ 49151은 IANA에 등록한 번호다.
+  - MYSQL DB는 3306이고, Tomcat은 8080이다. React는 3000이다.
+- 49152 ~ 65535는 dynamic port로 OS가 자동할당해주는 비어있는 공간이다.
+
+
+- 요약하자면 다음과 같다.
+- TCP connection을 맺으면 데이터를 통신할 수 있다는 확인이 끝난 것이다. 그럼 서버-클라 간 데이터를 서로 주고 받기 시작한다.
+- 해당 네트워크 내 시스템(OS 수준)에서 특정 application으로 데이터를 끌어올리는 논리적 통로를 port라고 한다.
+  - 따라서 특정 application 내에 붙은 port는 여러개 일수도 있다. 웹서버 프로그램은 실제로 HTTP는 80, HTTPS는 443으로 두 port가 붙어있다.
+  - 보통 port는 port number로 식별한다. 다만 목적지 IP/port number만으로는 상대방 program을 특정할 수 없다.
+  - 따라서 실제로 TCP는 출발지 IP/port number도 같이 확인해 상대방 program을 특정하게 된다.
+
+<img src="/image/socket-summary.png" />
+
+## <span style="color:#802548">_주요 출처_</span>
+- https://www.youtube.com/watch?v=oFKYzp6gGfc&list=PLcXyemr8ZeoSGlzhlw4gmpNGicIL4kMcX
+- 
