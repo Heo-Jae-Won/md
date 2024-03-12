@@ -7,9 +7,12 @@
 - git hub와 연동하려면 repo를 일단 만들어야한다.
 - 주의할 점은 repo의 이름이 반드시 본인이 설정한 이름 + github.io로 해야한다는 것이다.
   - 예로 내가 Heo JaeWon으로 했다면, repo는 Heo-Jae-Won.github.io로 해줘야 한다.
-- _posts 폴더에 post를 올릴 때도 반드시 yyyy-mm-dd + 파일명.md로 post파일을 올려야 한다.
+- _posts 폴더에 post를 올릴 때도 반드시 yyyy-mm-dd-파일명.md로 post파일을 올려야 한다.
+  - 예를 들면 아래와 같이 commit, push해야 한다는 의미다.
+    - 2023-09-16-linux-command.md, 2024-03-07-network-first.md
 - 더불어 md 파일내에 published를 true로 설정해야 한다.
   - md 파일의 맨 위에 아래와 같이 제목을 정하고 published를 true로 줘야한다는 의미다.
+  - 블로그 상에서 글이 써진 날짜는 파일명에 붙은 날짜로 지정된다. 
 ```
 ---
 title: Network first week
