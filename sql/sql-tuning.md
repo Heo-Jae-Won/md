@@ -1432,3 +1432,223 @@ AND 판매구분 = 'B'
 <img src="/image/between-like-difference.jpg" />
 
 - LIKE가 편하다고 남용하면 sql 성능에서 댓가를 치른다.
+- 특히 LIKE를 index column에 쓰면 안된다.
+- 아래와 같은 쿼리가 있는데, 인덱스가 (회사코드,지역코드,상품명)으로 구성됐다고 해보자.
+- 그 경우 아래와 같이 두 개로 나눠서 처리하면 적어도 지역코드가 존재할 떈 range scan량을 줄일 수 있다.
+```sql
+SELECT * 고객ID, 상품명, 지역코드, ....
+FROM 가입상품
+WHERE 회사코드 = :com
+AND 지역코드 = :reg
+AND 상품명 LIKE :prod || '%'
+
+SELECT 고객ID, 상품명, 지역코드, ...
+FROM 가입상품
+WHERE 회사코드 = :com
+AND 상품명 LIKE :prod || '%'
+```
+
+<img src="/image/efficient-like.jpg" />
+
+- 그런데 sql을 하나로 쓰려고 통합했다고 해보자.
+- 그럼 지역코드를 입력해도 입력하지 않은 경우와 range scan양이 크게 다르지 않게 된다.
+- access조건이 filter조건으로 변해버렸기 때문에 그만큼 scan양이 많아진 것이다.
+```sql
+SELECT 고객ID, 상품명, 지역코드, ...
+FROM 가입상품
+WHERE 회사코드 = :com
+AND 지역코드 LIKE :reg || '%'
+AND 상품명 LIKE :prod || '%'
+```
+
+<img src="/image/inefficient-like.jpg" />
+
+- 위와 동일한 이유로 모든 걸 BETWEEN으로 처리하는 것도 scan양이 늘어난다.
+- 종목코드를 입력하면 종목1과 종목2가 모두 같은 종목코드로 처리되어 = 조건과 동일해진다.
+- 종목코드를 입력하지 않으면 왼쪽은 빈칸6개에서 오른쪽은 ZZZZZZ로 처리되어 모든 걸 검색하는 조건과 동일해진다.
+- 즉 LIKE로 사실상 쓴 셈이다. 
+```sql
+SELECT 거래일자, 종목코드, 투자자유형코드
+FROM 일별종목거래
+WHERE 거래일자 BETWEEN :시작일자 AND :종료일자               /**필수조건 */
+AND 종목코드 BETWEEN :종목1 AND :종목2                      /** 옵션 조건 */
+AND 투자자유형코드 BETWEEN :투자자유형 AND :투자자유형2       /** 옵션 조건 */
+AND 주문매체구분코드 BETWEEN :주문매체구분1 AND :주문매체구분2 /** 옵션 조건 */
+```
+
+
+
+## <span style="color:#802548">_option 처리방법_</span>
+- or 조건의 경우, 아래와 같은 조건이 아니면 쓰지 않는 게 효율적이다.
+  - 인덱스 액세스 조건으로 사용 불가
+  - 인덱스 필터 조건으로도 사용 불가
+  - 테이블 필터 조건으로만 사용 가능
+  - 다만 or expansion으로 활용할 수 있다면 상관없다.
+    - 예를 들어, (고객ID, 타입, 거래일자)를 index로 묶어보자.
+    - 고객ID라는 선두컬럼만 범위조건이 아니면 or expansion이 발동할 수 있다.
+    - 아래와 같은 쿼리는 or expansion이 가능하다.
+```sql
+SELECT *
+FROM 거래
+WHERE 고객 ID = :cust_id
+AND (
+  (:dt_type = 'A' AND 거래일자 BETWEEN :dt1 and :dt2)
+  or
+  (:dt_type = 'B' AND 결제일자 BETWEEN :dt1 and :dt2)
+)
+```
+
+- 반면 아래와 같이는 or expansion이 발동하지 않는다.
+- 인덱스 선두컬럼이 or조건으로 갔기 때문이다.
+```sql
+SELECT *
+FROM 거래
+WHERE (고객ID is null or 고객ID = :cust_id)
+AND 거래일자 BETWEEN :dt1 and :dt2
+```
+
+
+- LIKE나 BETWEEN도 효율적인 옵션처리로 활용될 수 있다.
+  - 변별력이 좋은 필수조건이 있고, 해당 컬럼이 index 선두 column이다.
+  - 그 뒤에 옵션조건은 LIKE나 BETWEEN이 index filter 조건으로 활용한다.
+  - 아래와 같은 상황에서, (등록일시, 상품분류코드)로 index가 구성됐다 해보자.
+  - 그 경우, 등록일시의 cardinality가 높다면 상품분류코드가 LIKE나 BETWEEN으로 filter처리돼도 효율이 좋다.
+  - 상품분류코드를 입력을 하지 않아도 등록일시 자체만으로도 scan양이 충분히 낮기에 상관없다.
+```sql
+SELECT *
+FROM 상품
+WHERE 등록일시 >= trunc(sysdate)
+AND 상품분류코드 LIKE :prd_cls_cd || '%'
+```
+
+- 문제는 필수 조건의 변별력이 구린 경우다.
+  - 아래와 같은 상황에서 (상품대분류코드, 상품코드)로 index가 구성됐다고 해보자.
+  - 그럼 상품코드가 입력된다면 range scan을 하겠지만, 상품대분류코드만 값이 있다면?
+  - 그럼 cardinality가 낮으므로 table full scan이 일어나는 게 좋다.
+  - 그런데 상품분류코드가 LIKE로 존재하므로 더 비효율적인 index range scan을 하게 된다.
+```sql
+SELECT *
+FROM 상품
+WHERE 상품대분류코드 = :prd_lcls_cd
+AND 상품코드 LIKE :prd_cd || '%'
+```
+
+- 이외에도 LIKE - BETWEEN을 쓸 떄는 아래 같은 조건에 활용하지 않는게 좋다.
+```
+인덱스 선두 컬럼
+NULL 허용 컬럼
+숫자형 컬럼
+가변 길이 컬럼
+```
+
+- index 선두컬럼에 LIKE/BETWEEN을 쓰면 그 아래 조건들은 전부 index filter로 처리된다는 걸 알것이다.
+- 이번에는 그런문제보다 더 심각하다. 인덱스 선두컬럼이 입력되지 않는 경우는 range를 모르므로 index full scan이 일어난다.
+```sql
+SELECT *
+FROM 거래
+WHERE 고객ID LIKE :cust_id || '%'
+AND 거래일자 BETWEEN :dt1 AND :dt2
+```
+
+
+- NULL 허용컬럼에 LIKE를 허용하는 것은 더 문제다.
+  - 성능이 문제가 아니라 결과 집합에 오류가 생긴다.
+  - LIKE/BETWEEN NULL같은 건 없다. IS NULL로만 NULL 값을 가져올 수 있기 때문이다.
+```sql
+SELECT *
+FROM 거래
+WHERE 고객ID LIKE '%'
+AND 거래일자 BETWEEN :dt1 AND :dt2
+```
+
+- 숫자형 컬럼에도 LIKE는 안된다.
+  - LIKE는 문자열 연산자다. 숫자형 컬럼이 묵시적 형변환이 일어나게 된다.
+  - 그럼 숫자형 컬럼은 index access가 아닌 index filter조건으로 변환된다.
+  - 의도치 않게 index scan양이 늘어날 수 있다는 의미다.
+  - 묵시적 형변환으로 인해 (고객ID, 거래일자) index는 아예 무력화된다는 것도 문제다.
+```sql
+/**고객ID는 int */
+SELECT * FROM 거래
+WHERE 거래일자 = :trd_dt
+AND 고객ID/**실제론 TO_CHAR(고객ID)로 변환됨 */ LIKE :cust_id || '%'
+```
+
+- 옵션 조건은 union all을 통해 효율적인 index scan을 할 수도 있다.
+  - 단, 이경우 (cust_id, 거래일자)와 (거래일자)라는 index가 모두 존재해야 한다.
+  - 그럼 cust_id가 있든 없든 index range scan이 일어난다.
+  - 특히 NULL 허용 컬럼이여도 쓸 수 있다는 점에서 매우 좋은 해결방안이다.
+```sql
+SELECT *
+FROM :cust_id is null
+AND 거래일자 BETWEEN :dt1 and :dt2
+
+UNION ALL
+
+SELECT *
+FROM 거래
+WHERE :cus_id is not null
+AND 고객ID = :cust_id
+AND 거래일자 BETWEEN :dt1 and :dt2
+```
+
+- NVL, DECODE함수도 옵션 조건에서 많이 사용된다.
+- 사용될 수 있는 이유는 or expansion이 일어날 때에 한정된다.
+  - 그마저도 nvl을 여러 컬럼에 쓰면, 하나의 컬럼만 index access 조건이 된다.
+  - 또한 null허용 컬럼의 경우엔 resultSet 자체가 에러가 난다.
+- 
+```sql
+SELECT *
+FROM 거래
+WHERE 고객ID = nvl(:cust_id, 고객ID)
+AND 거래일자 BETWEEN :dt1 and :dt2
+```
+
+
+- WAS의 경우 옵션조건을 대부분 dynamic sql로 처리한다.
+- 좋은 방법이지만, hint를 사용하는 데 있어 신중할 필요가 있다.
+- 또한 하드파싱 문제가 없게 바인드 변수를 잘 사용해야 한다.
+
+
+## <span style="color:#802548">_pl/sql함수와 index_</span>
+- pl/sql로  함수를 만들어서 sql에서 사용하게 되면 문제가 있다.
+  - pl/sql은 인터프리터 언어라 많이 느리는 게 큰 흠이다.
+  - PL/SQL 함수는 실행시 매번 SQL 실행 엔진과 PL/SQL VM 사이에서 context switching이 일어난다.
+  - 따라서 PL/SQL은 OOP와 다르게 모든 기능을 하나의 함수 안에 담으려고 노력해야 한다.
+- PL/SQL의 성능을 떨어뜨리는 다른 요인은 recursive call이다.
+  - PL/SQL 함수는 index든 table이든 scan한 record 수만큼 일어난다.
+  - 따라서 index로 조건절을 짜는 게 좋다.
+    - 근데 index로 조건절을 짜는 경우도, 모두 index access조건으로 작동할 때만 의미있다.
+    - index record든 table record든 어쩄든 scan되는 record 갯수만큼 함수가 작동하기 떄문이다.
+    - 즉 table filter, index filter는 이미 scan한 뒤이므로 함수가 record마다 발동하게 된다.
+
+- 간단한 예시를 들면 아래와 같다.
+- 아래에서 index는 반드시 암호화된_전화번호 column이 index access조건이 되도록 구성해야 한다.
+- (생년), (생년, 생월일, 암호화된_전화번호) index는 table full scan만큼 함수가 호출된다.
+- 오직 (생년, 암호화된_전화번호, **) 같은 형태로 구성해야만 PL/SQL함수가 1번만 호출된다.
+- 적절하게 index를 구성해야만 recursive call이 없는 것이다.
+```sql
+SELECT 회원번호, 회원명, 생년
+FROM 회원 a
+WHERE 생년 = '1987'
+AND 암호화된_전화번호 = encryption( :phone_no);
+```
+
+
+## <span style="color:#802548">_인덱스 설계_</span>
+- 인덱스 설계에는 여러 가지 고려 사항이 있다.
+  - 인덱스 설계의 가장 큰 조건은 조건절에 항상 사용하거나, 자주 사용하는 컬럼을 선정하는 것이다.
+    - 특히 = 조건으로 자주 조회하는 컬럼은 앞으로 가야한다.
+  - 그 외에는 수행빈도도 중요하다.
+    - 자주 쓰이지 않는 SQL은 조금 비효율적이어도 괜찮다.
+    - 하지만 자주 쓰이는 SQL은 효율적으로 수행되게 짜야 한다.
+    - 특히 join 시 driving table은 알고리즘 상 비효율 scan이 한번에 그친다.
+    - 그러나 driven table은 record마다 일어나기에, 매우 효율적인 index로 구성해야 한다.
+    - driven table은 되도록이면 조건절 column을 index에 넣어 최소한 index filter조건으로는 사용되게 하여 table access를 줄여야 한다.
+
+- 이제는 실질적인 index 설계 팁을 살펴보자.
+  - 가장 큰 팁은 10개의 sql이라면, 그 중 액세스 경로 1-2개만 최적 인덱스를 설계하는 것이다.
+  - 나머지는 조금 비효율적이어도 목표한 성능만 나오게 설계하는 것이다.
+
+
+
+
