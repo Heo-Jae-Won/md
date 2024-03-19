@@ -159,16 +159,11 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
   - 클라이언트가 요청을 날리면 서버는 인증서를 제공하여 신원을 보증한다.
   - 그 뒤엔 비대칭키 교환 방식을 통해서 서버와 클라이언트가 대칭키를 교환한다.
   - connection 이후 data 통신에서는 서버측의 연산량을 절감하기 위해서 대칭키를 사용해 암/복호화를 진행한다.
-- 길게 말하자면 아래와 같다.
-```
-클라이언트 요청: 클라이언트가 서버에 접속을 요청하고 SSL/TLS 핸드셰이크를 시작합니다.
-서버 응답: 서버는 클라이언트에게 자신의 인증서를 제공하고, 서버의 공개 키와 함께 대칭 키를 생성합니다.
-클라이언트 키 교환: 서버는 공개 키로 대칭 키를 암호화하여 클라이언트에게 전달합니다. 클라이언트는 이를 안전하게 수신하여 복호화합니다.
-대칭 키 사용: 이제 클라이언트와 서버는 공유된 대칭 키를 사용하여 통신을 암호화하고 복호화합니다.
-```
+- 길게 말하자면 아래 그림과 같다.
 
-- 더 길게는 아래와 같다.
-- ClientKeyExchange에 써있는 비밀키는 개인키(비대칭 키 교환의 비밀키)가 아니라 대칭키(대칭 키 교환의 비밀키)다.
+<img src="/image/ssl-detailed-handshake.jpg" />
+
+- ClientKeyExchange에서의 비밀키는 개인키(비대칭 키 교환의 비밀키)가 아니라 대칭키(대칭 키 교환의 비밀키)다.
 
 <img src="/image/ssl-handshake.png" />
 
@@ -261,3 +256,4 @@ Recursive DNS 서버는 받은 IP 주소를 로컬 DNS 캐시에 저장
 - https://aws.amazon.com/ko/route53/what-is-dns/ - dns routing
 - https://silver-liq9118.tistory.com/m/entry/DNS-DNS-%EA%B5%AC%EC%A1%B0-DNS-%EC%A7%88%EC%9D%98-%EA%B3%BC%EC%A0%95 - 한국의 dns routing
 - https://tech.ktcloud.com/66 - linux dns 파일 셋팅
+- https://aws-hyoh.tistory.com/39 - ssl handshake
