@@ -73,7 +73,7 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
     - if-none-matchs가 그렇다. 캐싱을 사용하라고 하면 304를 client에 return한다.
 - 자세한 헤더는 아래를 참조하자.
 
-<img src="/image/request-header.png" />
+<img src="/image/requestheaders.png" />
 
 - response header는 반응에 담긴 자세한 맥락을 제공한다. 
   - if-none-match에 대응되는 게 Etag다.
@@ -169,7 +169,8 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
 
 - 더 길게는 아래와 같다.
 - ClientKeyExchange에 써있는 비밀키는 개인키(비대칭 키 교환의 비밀키)가 아니라 대칭키(대칭 키 교환의 비밀키)다.
-<img src="/image/ssh-handshake.png" />
+
+<img src="/image/ssl-handshake.png" />
 
 - SSL은 TCP와 application 사이의 독립 계층이며 암호화 역할을 한다.
 - application -> SSL -> TCP/ TCP -> SSL -> application와 같은 형태다.
@@ -177,11 +178,8 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
   - SSL보다 handshake 단계가 짧아 속도가 빠르다.
   - 메시지 인증코드 알고리즘은 더 안전한 HMAC을 쓴다.
   - 암호화 알고리즘이 보안성능에서 더 뛰어나다.
-- SSL의 암호화 알고리즘은 공개키-개인키(비대칭키)기반이다.
-  - 보내는 측은 받는 측의 공개키를 구해 데이터를 그 공개키로 encrypt해 전달한다.
-  - 받는 측은 자신의 개인키로 해당 데이터를 복호화하여 사용한다.
 - SSL은 handshake 중에 인증서를 주고받는데, 인증서를 받는 과정에서 전자서명 과정을 거친다.
-  - 원본 데이터를 공개된 방법으로 해싱하여 특정 길이의 문자열로 만든다. 
+  - 원본 데이터를 송신자의 공개키로 해싱하여 특정 길이의 문자열로 만든다. 
   - 그 해시값을 송신자의 개인키로 암호화한 전자서명을 생성하여 원본 데이터에 첨부하고, 수신자에게 발송한다.
   - 이후에 수신자는 받은 전자서명을 송신자의 공개키로 복호화하고 이를 받은 데이터를 해싱한 해시값과 비교한다. 
   - 이때 두 해시값이 동일한지 비교하여 데이터의 송신자와, 데이터가 변조되지 않았음을 검증할 수 있다.
@@ -191,31 +189,37 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
     - 발급 받는 사람은 기관으로부터 생성된 개인키와 그에 대한 인증서를 받게 된다.
 
 
-- 아래는 전자서명의 예시다.    
-<img src="/image/electronic-signature.png" />
+- 아래는 전자서명의 프로세스다.    
+<img src="/image/digital-signature.png" />
 
 
 ## <span style="color:#802548">_DNS_</span> 
 - DNS는 도메인 주소를 IP 주소로 변환하는 프로토콜이다.
-- dns의 과정은 아래와 같다.
-  - 클라이언트는 domain을 받아 DNS서버에 질의한다(DNS query).
-  - 보통 클라이언트의 DNS 설정에 지정된 DNS 서버로 전송된다.
-    - 가정집은 공유기나 DHCP 서버가 자동으로 DNS 서버 정보를 제공한다.
-    - 도메인 컨트롤러로 설정된 서버를 DNS 서버로 구성할 수 있습니다.
-  - 지정된 DNS서버는 로컬 DNS 캐시를 확인해 있다면 해당 IP를 return한다.
-  - 만약 없다면 DNS서버가 domain에 해당하는 IP 주소를 반환한다.
-  - 해당 DNS서버가 못찾았다면 다른 DNS서버에게 물어서 알려주거나, 다른 DNS IP를 알려준다.
-  - 어쨌든 최종적으로 DNS서버는 도메인에 맞는 IP 주소를 반환하고, local DNS 캐시에 저장한다.
-  - 만약에 root까지 가서도 없다면, 오류 안내 페이지가 뜬다.
-  - IP를 찾으면 클라이언트는 해당 IP에 해당하는 host에 데이터를 전달한다.
+- 실패하면 아래와 같은 게 뜬다. 에러코드에 집중하자.
 
 <img src="/image/dns-probe-fail.png" />
 
   
 
-- dns routing은 아래와 같이 이뤄진다.
-- dns resolver는 dns 서버다.
+- 전체적인 과정은 아래와 같다.
+```
+사용자의 장치(클라이언트)에서 DNS 질의
+사용자의 DNS Resolver(로컬 DNS 서버 또는 운영 체제에서 제공하는 DNS Resolver)는 먼저 로컬 DNS 캐시를 확인
+사용자의 DNS Resolver는 hosts 파일을 확인 (hosts 파일은 운영 체제에서 지정된 위치에 저장된 텍스트 파일로, 도메인과 IP 주소의 매핑 정보를 포함)
+로컬 DNS 캐시와 host 파일에 도메인에 대한 IP 주소가 없는 경우, 사용자의 DNS Resolver는 Recursive DNS 서버로 재귀적인 쿼리 전송
+Recursive DNS 서버는 루트 DNS 서버에 재귀적인 쿼리 전송
+루트 DNS 서버는 Recursive Server에 TLD(Top-Level Domain) 서버의 IP 주소 반환
+Recursive DNS 서버는 TLD 서버에 재귀적인 쿼리 전송
+TLD 서버는 해당 도메인의 네임서버(SDL 서버) 정보를 반환
+Recursive DNS 서버는 도메인의 네임서버에 재귀적인 쿼리 전송
+도메인의 네임서버는 도메인에 대한 IP 주소를 DNS Resolve에 반환
+Recursive DNS 서버는 받은 IP 주소를 로컬 DNS 캐시에 저장
+사용자의 DNS Resolver는 받은 IP 주소를 사용자의 장치에 반환하고, 사용자는 해당 IP 주소를 이용하여 도메인에 접속!
+```
+
 <img src="/image/dns-routing.png" />
+
+
 
 
 - DNS query는 재귀방식, 반복 방식이 있다.
