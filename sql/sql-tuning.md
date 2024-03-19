@@ -1791,3 +1791,122 @@ N2: 결제일자, 관리지점번호
 N3: 거래일자, 종목코드, 계좌번호
 ```
 
+
+## <span style="color:#802548">_NL 조인_</span>
+- NL은 중첩 루프문과 같은 수행 구조를 지닌다.
+- 일반적으로 outer와 inner 모두 index를 사용하는 편이다.
+  - 다만 outer는 size가 크지 않으면 index를 하지 않기도 한다. 어차피 1번 scan이기 때문이다.
+  - 하지만 inner는 여러 번 반복 scan되기 때문에 반드시 index를 사용하는 게 좋다.
+```sql
+SELECT e.사원명, c.고객명, c.전화번호
+FROM 사원 e, 고객 c
+WHERE e.입사일자 >= '19960101'
+AND c.관리사원번호 = e.사원번호
+```
+
+- 위와 같은 경우, outer인 사원의 입사일자는 1번 조회다.
+- 그렇게 scan해온(index이든 table이든) record를 inner인 고객의 관리사원번호 조건에 맞게 다시 record를 scan한다.
+- 따라서 inner는 outer의 갯수만큼 반복 scan을 하기에 반드시 효율적이어야만 한다.
+
+<br />
+
+- 더 자세한 예시를 들어보자.
+- 아래와 같은 예시가 있다.
+```sql
+SELECT /*+ ordered use_nl(c) index(e) index(c) */ 
+  e.사원번호, e.사원명, e.입사일자, c.고객번호, c.고객명, c.전화번호, c.최종주문금액
+FROM 사원 e, 고객 c
+WHERE c.관리사원번호 = e.사원번호
+AND e.입사일자 >= '19960101'
+AND e.부서코드 = 'Z123'
+AND c.최종주문금액 >= 20000
+
+//
+사원_PK: 사원번호
+사원_X1: 입사일자
+고객_PK: 고객번호
+고객_X1: 관리사원번호
+고객_X2: 최종주문금액
+```
+
+```
+|ID       |Operation                      |Name      |Rows     |Bytes     |Cost
+------------------------------------------------------------------
+0         |SELECT STATMEENT               |         |5         |58        |
+1         | NESTED LOOPS                  |         |5         |58
+2         |  TABLE ACCESS BY INDEX ROWID  |사원     |3          |20
+3         |   INDEX RANGE SCAN            |사원_X1  |5
+4         |  TALBE ACCESS BY INDEX ROWID  |고객     |5          |76
+5         |   INDEX RANGE SCAN            |고객_X1  |8
+```
+
+- 그럼 아래와 같은 과정을 거쳐 NL join이 일어난다.
+```
+1. 조건절 2번을 만족하는 index record를 찾기 위해 사원_X1 index scan
+2. 사원_X1 index에서 읽은 ROWID로 사원 table access해 테이블 filter 조건으로 조건절 3번 사용
+3. 조인 조건인 관리사원번호를 만족하는 index record를 찾기 위해 고객_X1 index를 range scan
+4. 고객_X1 index에서 읽은 ROWID로 고객 테이블을 access해 테이블 filter 조건으로 조건절 4번 사용
+```
+
+- 그런데 1번부터 4번은 단계별로 완료한 뒤 진행이 아니라, 1번에서 찾아진 index record마다 반복되는 형태다.
+- 아래 이미지를 보면 이해하기 쉬울 것이다.
+- 사원 테이블에서 얻은 record가 3개인데, 사원의 사원번호가 10, 12, 15라고 해보자.
+  - 그럼 c.관리사원번호가 10인 경우에 최종주문금액이 20,000이 넘는 고객의 record를 가져온다.
+  - c.관리사원번호가 12인 경우에 최종주문금액이 20,000이 넘는 고객의 record를 가져온다.
+  - c.관리사원번호가 15인 경우에 최종주문금액이 20,000이 넘는 고객의 record를 가져온다.
+- 이렇게 outer에서 가져온 각 record에 맞는 고객의 record를 모두 종합하면 그게 NL join의 결과물이다.
+
+<img src="/image/NL.jpg" />
+
+
+- 위의 그림에서 튜닝포인트는 4가지다.
+  - 사원 index를 읽은 후 사원 table에 access하는 횟수
+    - 많은 random access가 발생했다면, 부서코드를 사원_X1 index에 추가하는 게 좋다.
+  - 사원 table에서 조건을 만족하는 filtering된 record와 결합하는 고객_X1 index와 결합하는 join횟수
+    - 부서코드 Z=123을 만족하는 건수가 3개였기에, 해당 갯수만큼 조인시도를 했다.
+    - 조인을 위해 고객_X1 index를 탐색하는 range scan 횟수가 많을 수록 성능이 안 좋아진다.
+  - 고객_X1 index를 읽고 고객 테이블 access하는 횟수
+    - 많은 random access가 발생했다면, 최종주문금액 컬럼을 추가하는 방안을 고려해야 한다.
+  - 맨 처음 access하는 사원_X1 index에서 얻은 range scan의 양
+    - 처음에 range가 넓으면 1-3번이 모두 늘어날수밖에 없다.
+
+<br />
+
+- 이제 그럼 실제 튜닝을 해보자.
+- 만약 위의 sql이 아래와 같은 row를 뱉었다면?
+- 사원에서 index로 가져온 record가 2780개이므로, random access도 똑같다.
+- 그런데 가져온 row의 갯수가 3개밖에 없다. 너무 많이 필터링된 것이다.
+  - 이 경우 table filter 조건을 index에 포함해 random access를 줄이는 걸 고민해야 한다.
+  - 그래서 부서코드를 추가했다.
+```
+|ID       |Operation                      |Name      |Rows     |Bytes     |Cost
+------------------------------------------------------------------
+0         |SELECT STATMEENT               |         |5         |58        |
+1         | NESTED LOOPS                  |         |5         |58
+2         |  TABLE ACCESS BY INDEX ROWID  |사원     |3          |20
+3         |   INDEX RANGE SCAN            |사원_X1  |2780
+4         |  TALBE ACCESS BY INDEX ROWID  |고객     |5          |76
+5         |   INDEX RANGE SCAN            |고객_X1  |8
+```
+
+- 그랬더니 아래와 같이 바뀌었다.
+- trace가 바뀐건 오라클 9iR2버전부터다.
+  - cr은 논리 block 요청(버퍼에서 읽은 block)
+  - pr은 디스크에서 읽은 block
+  - pw는 디스크에다가 쓴 블록 수
+- 사원_X1 index에서 읽은 index record가 table filtering 없이 그대로 읽은 셈이니 비효율은 없었다.
+- 그러나 2780개를 가지고 가서 고객 table과 join한 결과는 겨우 5 row다. 매우 비효율적인 join인 셈이다.
+- 이럴 때는 join 순서를 바꾸는 것을 고려해야 한다.
+```
+|ROW      |Operation                      
+------------------------------------------------------------------
+5         | NESTED LOOPS(cr=112 pr=34 pw=0 time==122 us)                  
+2780      |  TABLE ACCESS BY INDEX ROWID OF 사원(cr=105 pr=32 pw=0 time=118 us)
+2780      |   INDEX RANGE SCAN OF 사원_X1(cr=102 pr=31 pw=0 time=16)            
+5         |  TALBE ACCESS BY INDEX ROWID OF 고객(cr=7 pr=2 pw=0 time=4 us)
+8         |   INDEX RANGE SCAN OF 고객_X1(cr=5 pr=1 pw=0 time=0 us)          
+```
+
+
+
+
