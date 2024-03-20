@@ -130,26 +130,26 @@ setCookie("username", "john_doe", 1);
 ## <span style="color:#802548">_sop와 cors_</span> 
 - 맨처음 SSR의 시대에는 client를 다른 domain으로 쓰지 않았다.
 - 따라서 브라우저 resource 정책으로 sop(same origin policy)를 적용해 다른 domain은 다 막아버리면 됐다.
-- 하지만 front framework가 등장하고 CSR의 시대가 오면서 프론트에서 백엔드로부터 데이터만 받아 직접 render하는 형식이 됐다.
-- CSR에서는 front 서버가 생겨나면서 backend 서버와 완전히 분리되면서 port도 분리되었다. 서로 다른 origin(출처)로 여겨지게 된 것이다.
-- 이제는 sop를 적용할 수가 없었다. 그런 상황에서 cors(cross-origin-resources-sharing)가 등장했다. 
-- client에서 보낸 origin header의 값이 server에서 보낸 acess-control-allow-origin header의 값에 포함되면 브라우저는 server에서 온 response를 차단하지 않았다.
-- 보통 4가지 header를 설정해서 server에서 보내게 된다.
-  - access-control-allow-origin     
-  - access-control-allow-credentials
-  - access-control-allow-header
-  - access-control-allow-method
+  - 하지만 front framework가 등장하고 CSR의 시대가 오면서 프론트에서 백엔드로부터 데이터만 받아 직접 render하는 형식이 됐다.
+  - CSR에서는 front 서버가 생겨나면서 backend 서버와 완전히 분리되면서 port도 분리되었다. 서로 다른 origin(출처)로 여겨지게 된 것이다.
+  - 이제는 sop를 적용할 수가 없었다. 그런 필요에 따라 cors(cross-origin-resources-sharing)가 등장했다. 
+  - client에서 보낸 origin header의 값이 server에서 보낸 acess-control-allow-origin header의 값에 포함되면 브라우저는 server에서 온 response를 차단하지 않는 것이다.
+  - 보통 4가지 header를 설정해서 server에서 보내게 된다.
+    - access-control-allow-origin     
+    - access-control-allow-credentials
+    - access-control-allow-header
+    - access-control-allow-method
 - 서버에서는 filter가 따로 없다면 request를 받으면 response를 하기 때문에 resource가 바뀌게 될 위험이 있다.
-- 따라서 browser는 resource가 바뀌는 걸 방지하기 위해 cors 위반 여부를 먼저 검사하는 request를 날리게 된다.
-- 그 때 method는 options이며, 이를 preflight라고한다. preflight는 status Code가 중요하지 않다. 도메인이 맞냐 안맞냐만 browser가 따진다.
-- Spring에서는 별도의 CorsConfig를 만들지 않으면 전부 허용하게끔 되어있기 때문에 만드는 게 좋다.
+  - 따라서 browser는 resource가 바뀌는 걸 방지하기 위해 cors 위반 여부를 먼저 검사하는 request를 날리게 된다.
+  - 그 때 method는 options이며, 이를 preflight라고한다. preflight는 status Code가 중요하지 않다. 도메인이 맞냐 안맞냐만 browser가 따진다.
+    - Spring에서는 별도의 CorsConfig를 만들지 않으면 전부 허용하게끔 되어있기 때문에 만드는 게 좋다.
 ```java
 @Configuration
 @Slf4j
 public class CorsConfig {
 	
 	@Bean 
-	public CorsFilter corsFilter()	{
+	CorsFilter corsFilter()	{
         .
         .
         .
@@ -349,10 +349,258 @@ element.insertAdjacentHTML
 element.onevent
 ```
 
-- 아래는 CSP 헤더 설정이다.
+- 그 다음은 CSP 헤더 설정이다.
 - script-src는 엄격하지 않은 정책이라 nonce나 hash를 쓰는 걸 구글은 추천하고 있다.
-- 다만 어떤 값의 nonce나 hash를 쓰는지 드러나면 무용지물이기 때문에 source code 난독화 혹은 bundling 없이는 쓰기 힘들어 보인다.
+```html
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; ">
+```
 
+
+## <span style="color:#802548">_sql injection_</span> 
+- SQL Injection은 임의의 SQL문을 삽입하여 실행시켜 비정상 동작을 유도하는 행위다.
+  - id, 비번 검색에 ' OR 1=1을 넣는 방식이다.
+- 이를 막으려면 bind variable을 사용하여야 한다.
+- Spring의 Mybatis와 JPA는 대부분 bind variable(stmt.set~~~)을 사용하기 때문에 입력값이 문자열로 취급된다.
+  - 즉 id가 'OR 1=1'로 취급되는 형태다. 따라서 입력값이 뭐가 들어오든 상관없게 된다.
+- 아니면 DROP 등 몇 가지 DML을 입력값에서 거르기도 한다.
+- 에러메시지에서 db 구조를 유추할 수 없게끔 해야하는 것도 필요하다.
+
+- Spring의 경우, JPA든 Mybatis든 JDBC를 이용해 아래와 같이 bind variable의 조합으로 이뤄지는 편이다.
+- 따라서 SQL INJECTION 대비를 개발자가 많이 신경쓰지 않아도 된다.
+```java
+ String sql = "INSERT INTO mytable (column1, column2) VALUES (?, ?)";
+
+try (
+    // Establishing a connection to the database
+    Connection connection = DriverManager.getConnection(JDBC_URL, USERNAME, PASSWORD);
+    
+    // Creating a PreparedStatement object
+    PreparedStatement preparedStatement = connection.prepareStatement(sql)
+) {
+    // Setting values for parameters
+    preparedStatement.setString(1, "value1");
+    preparedStatement.setString(2, "value2");
+
+    // Executing the SQL statement
+    int rowsAffected = preparedStatement.executeUpdate();
+    
+    // Printing the number of rows affected
+    System.out.println(rowsAffected + " row(s) affected.");
+} catch (SQLException e) {
+    e.printStackTrace();
+}
+```
+
+
+- 아래와 같은 패턴이 쓰면 안 되는 패턴이다.
+```java
+
+```
+
+- Express.js에서도 대부분 아래와 같은 bind variable을 지원한다.
+```js
+app.get('/users/:username/:password', (req, res) => {
+  const { username, password } = req.params;
+  const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
+  
+  pool.query(query, [username, password], (error, results, fields) => {
+    if (error) {
+      console.error(error);
+      res.status(500).send('Error retrieving user data');
+      return;
+    }
+    res.json(results);
+  });
+});
+```
+
+- 아래같은 패턴으로 쓰면 안 된다. bind variable을 사용하지 않았다.
+- 이러면 보안 상으로 문제다. ' or 1=1 같은 무적의 치트키 조건문으로 원하는 정보를 다 뺴올 수 있다.
+- DB마다 다르지만, Oracle 같은 경우는 SGA의 lib cache에 SQL 자체가 저장되는데, bind variable을 쓰면 딱 한번의 하드파싱으로 SQL을 돌려가며 쓴다.
+- 하지만 아래와 같이 bind variable을 쓰지 않으면 SQL문 자체가 lib cache에 저장되므로 이름이 바뀔 떄마다 매번 하드파싱이 필요하여 CPU 부족 문제가 대두될 수 있다.
+```js
+const express = require('express');
+const mysql = require('mysql');
+
+const app = express();
+
+const pool = mysql.createPool({
+  connectionLimit: 10,
+  host: 'localhost',
+  user: 'root',
+  password: 'password',
+  database: 'mydatabase'
+});
+
+app.get('/users/:username/:password', (req, res) => {
+  const { username, password } = req.params;
+  const query = `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`;
+  
+  pool.query(query, (error, results, fields) => {
+    if (error) {
+      console.error(error);
+      res.status(500).send('Error retrieving user data');
+      return;
+    }
+    res.json(results);
+  });
+});
+```
+
+
+## <span style="color:#802548">_웹 캐시_</span> 
+- 웹 캐쉬란 client가 요청하는 html, image, js, css등에 대해 첫 요청 시에 파일을 내려받아 특정 위치에 저장하는 복사본이다
+- 웹 케시에는 세 종류가 있다.
+  - browser cache
+    - 내부 디스크에 캐쉬한다. 개인에 한정된 Cache다.
+    - 브라우저의 Back버튼 또는 이미 방문한 페이지를 재 방문하는 경우 극대화
+  - Proxy Caches
+    - Client나 Server가 아닌 네트워크 상에서 동작한다.
+    - client가 proxy server에 접근해 caches file이 있는지 본다.
+    - caches가 있으면 proxy server에서 데이터를 받아온다. 보통 ISP에서 캐시 서버를 만든다.
+    - caches가 없으면 proxy server는 origin server로부터 데이터를 요청하여 받아온다. 
+    - 받은 데이터는 proxy server에 저장된다. 그리고 client에게 데이터를 전달해준다.
+
+<br/> 
+
+- 캐시의 작동에는 캐시 관련 헤더도 중요하다.
+  - 응답 결과가 캐시에 저장될 때 Last Modified(데이터 최종 수정 시간)도 저장된다.
+  - response header인 Last-Modified의 값을 보고 언제 마지막으로 데이터가 수정되었는지 알 수 있다.
+  - 캐시의 유효기간이 초과 되었어도, If-Modified-Since HTTP 요청 헤더를 사용하여 조건부로 요청을 할 수 있다.
+  - 서버는 데이터를 검증하고, 데이터가 수정되지 않았다면 바디를 제외한 HTTP 헤더만 보내어 데이터 수정이 없었음을 알려준다. (상태 코드 304 Not Modified)
+  - 해당 헤더는 하루 미만에 대해선 작동하지 않았다.
+    - 따라서 ETag(Entity Tag) header가 등장했다.
+    - ETag는 캐시 데이터에 고유한 버전 이름을 명시한다. 데이터가 변경되면 이 이름이 변경된다. 
+    - 즉 ETag가 변경되면 다른 데이터로 인식된다는 의미다.
+    - response의 ETag 값은 클라이언트 캐시에 저장된다.
+    - 캐시 시간이 초과되기 전까지, ETag 값을 검증하는 If-None-Match를 요청 헤더에 넣어 보낸다.
+    - 데이터가 변경되지 않았다면 ETag 값은 동일하고, 이때는 body 없이 HTTP 헤더만 전송된다. 
+    - 상태 코드는 304 Not Modified이며, 브라우저는 캐시의 데이터를 재사용한다.
+- 캐시가 언제 만료되는 지는 cache-control header에서 정의한다.
+  - max-age 
+    - 캐시 유효 시간 (초단위)를 의미한다.
+  - no-cache
+    - 데이터는 캐시를 해도 되지만, 항상 origin 서버에서 검증하고 사용되야 함을 의미한다.
+    - 원서버에서 바뀐게 없다면 304를 return하니 원서버에서부터 client로 이미지를 끌고오지 않아도 된다.
+    - 그럼 원서버에서 proxy server로 더 빠르게 오고, proxy server에서 캐싱된 resource를 return한다.
+  - no-store 
+    - 데이터에 민감한 정보가 있으니, 저장하지 않고 메모리에서만 빨리 사용하고 지우는 것을 의미한다.
+    - 캐싱을 쓰면 안된다는 의미다. 매번 원서버에서 원본 resource를 받아와야 한다.
+  - Expires
+    - 캐시 만료일을 정확한 날짜로 지정할 수도 있다.
+
+
+
+## <span style="color:#802548">_프록시 서버_</span> 
+- 프록시 서버는 클라이언트와 원서버 사이에서 중개를 담당하는 서버를 칭한다.
+  - 프록시 서버라고 말하는 것들은 대개 포워드 프록시 형태인데, 내부망에서 사용된다.
+  - 포워드 프록시에 요청을 하게 되면, 캐싱된 원본이 있다면 멀리 있는 원서버까지 도달하지 않고 응답을 받을 수 있다. 
+  - 포워드 프록시에 요청을 하게 되면, 익명성을 유지할 수 있다. 원서버는 어떤 client가 보냈는지 모르고 그저 proxy server가 보냈다는 것만 알기 때문이다.
+  - 포워드 프록시에 요청을 하게 되면, 응답을 읽어 필터링을 할 수 있다. 사실상 해당 url을 차단하는 효과를 발휘한다.
+  - 포워드 프록시는 클라이언트를 대신하여 요청하는 개념이다.
+- 리버스 프록시는 웹 서버 앞에서 클라이언트의 요청을 웹서버에 전달한다.
+  - 리버스 프록시가 요청을 받게 되면, 캐싱된 원본이 있다면 멀리 있는 원서버까지 도달하지 않고
+  - 리버스 프록시가 요청을 받게 되면, WAS가 은폐되기 때문에 보안이 더 우수하다.
+  - 리버스 프록시가 요청을 받게 되면, SSL을 중앙화해서 관리하기 매우 편하다. 각 WAS가 모두 하나의 reverse proxy에서 관리되기 때문이다.
+  - 리버스 프록시는 서버를 대신하여 클라이언트의 요청을 받는 개념이다.
+  - nginx는 웹서버로서 static content도 처리하지만 reverse proxy로서 WAS로 포워딩도 담당한다.
+
+
+## <span style="color:#802548">_로드밸런서_</span> 
+- L4 로드밸런서는 TCP 및 UDP 프로토콜을 기반으로 클라이언트와 서버 간의 트래픽을 분산시킨다.
+  - L4 로드 밸런서는 클라이언트의 IP 주소와 포트, 서버의 IP 주소와 포트를 기반으로 로드 밸런싱을 수행합니다.
+  - 기능이 적은 만큼 빠르다.
+- L7 로드밸런서는 HTTP 및 HTTPS 프로토콜을 기반으로 클라이언트와 서버 간의 트래픽을 분산시킨다.
+  - request 내용(URL, 헤더, 쿠키 등)을 기반으로 로드 밸런싱을 수행한다.
+  - URL에 따라 부하를 분산시키거나, HTTP 헤더에 따라, 쿠키에 따라 부하를 분산하는 등 클라이언트의 요청을 보다 세분화해 서버에 전달할 수 있다.
+  - 기능이 많은 만큼 좀 느리다.
+- nginx는 L4와 L7 모두 기능할 수 있다. conf를 어떻게 쓰느냐에 따라 달라진다.
+
+- 아래는 L4 loadbalancer로 쓴 것이다.
+```sh
+# Define upstream servers
+upstream backend_servers {
+    server 192.168.1.10:80;
+    server 192.168.1.11:80;
+    server 192.168.1.12:80;
+}
+
+# Configure load balancing
+server {
+    listen 80;
+    
+    location / {
+        proxy_pass http://backend_servers;
+        # Other proxy settings such as timeouts, buffers, etc. can be configured here
+    }
+}
+```
+
+- 아래는 L7 loadbalancer로 쓴 것이다.
+- 헤더값 혹은 uri값을 보고 ngnix가 reverse proxy로서 request를 해당 WAS로 forwarding시킨다.
+```sh
+# Define upstream servers
+upstream backend_servers_a {
+    server 192.168.1.10:8080;
+    server 192.168.1.11:8080;
+}
+
+upstream backend_servers_b {
+    server 192.168.1.20:8080;
+    server 192.168.1.21:8080;
+}
+
+# Map request headers to variables
+map $http_my_custom_header $backend_group {
+    default backend_servers_a;
+    "group_b" backend_servers_b;
+}
+
+# Configure load balancing based on mapped variable
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://$backend_group;
+        # Other proxy settings such as timeouts, buffers, etc. can be configured here
+    }
+}
+```
+
+- 로드 밸런싱 알고리즘은 아래와 같다.
+  - Round Robin
+    -기본 설정이다. 그냥 순서대로 진행되는 식이다.
+  - Least Connections
+    - 연결된 횟수가 가장 적은 서버로 연결되는 알고리즘이다.
+  - IP Hash
+    - 클라이언트 IP를 해싱하여 특정 클라이언트는 특정 서버로 연결되게 할 수 있다. Stick Session 세션 방식 처럼 동작하게 할 수 있다.
+  - Generic Hash
+    - 사용자가 정의한 다양한 변수를 조합해 트래픽을 분산할 수 있다.
+  - Random
+    - 트래픽을 무작위로 분배한다.
+
+```sh
+upstream samplecluster {
+  least_conn;
+  server 111.111.111.111:8080;
+  server 222.222.222.222:8080;
+  server 333.333.333.333:8080;
+}
+```
+
+- upstream directive 없이 바로 server directive로 시작하는 경우 알고리즘을 지정할 수 없다. 
+- 그냥 순서대로 뿌려주는 RR이 선택된다.
+```sh
+server {
+    listen 80;
+
+    location / {
+        # Specify multiple backend servers directly in the proxy_pass directive
+        proxy_pass http://backend1.example.com:8080 http://backend2.example.com:8080 http://backend3.example.com:8080;
+        # Other proxy settings such as timeouts, buffers, etc. can be configured here
+    }
+}
+```
 
 ## <span style="color:#802548">_출처_</span> 
 https://jaeseongdev.github.io/development/2021/06/15/REST%EC%9D%98-%EA%B8%B0%EB%B3%B8-%EC%9B%90%EC%B9%99-6%EA%B0%80%EC%A7%80/ - RESTFUL api
@@ -361,3 +609,7 @@ https://devscb.tistory.com/123 - csrf
 https://junhyunny.github.io/information/security/spring-mvc/reflected-cross-site-scripting/ - xss
 https://portswigger.net/web-security/cross-site-scripting/dom-based - xss
 https://developer.chrome.com/docs/lighthouse/best-practices/csp-xss?hl=ko - csp
+https://www.mois.go.kr/synap/skin/doc.html?fn=BBS_201405271120475982&rs=/synapFile/202403/&synapUrl=%2Fsynap%2Fskin%2Fdoc.html%3Ffn%3DBBS_201405271120475982%26rs%3D%2FsynapFile%2F202403%2F&synapMessage=%EC%A0%95%EC%83%81 - 정부의 secure java coding
+https://velog.io/@citron03/%EC%9B%B9-%EC%BA%90%EC%8B%9C-WEB-Cache-%EC%A0%95%EB%A6%AC - 웹 캐시
+https://www.youtube.com/watch?v=JqCgJI-Nk88 - 프록시, 리버스 프록시, 포워드 프록시
+https://aws-hyoh.tistory.com/m/149 - 로드밸런서 스위치
