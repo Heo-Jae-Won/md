@@ -164,6 +164,11 @@ entity가 아니라 representation으로 명칭하게 RFC 스펙이 바뀌었다
 <img src="/image/ssl-detailed-handshake.jpg" />
 
 - ClientKeyExchange에서의 비밀키는 개인키(비대칭 키 교환의 비밀키)가 아니라 대칭키(대칭 키 교환의 비밀키)다.
+- 참고로 여기서 client라고 말하는 것은 browser나 front framework가 아니다.
+- client, 즉 대부분의 경우 window인데, OS에 내장된 SSL/TLS library들이 session key를 만드는 것이다.
+- 프론트 개발자들이 SSL handshake에 대해 신경 쓸 필요가 없는 것이다. 그건 os embedded library가 처리할 일이다.
+- server는 보통 linux인데, 여기선 SSL/TLS library로 openSSL이 가장 선호된다. 
+- 이건 백엔드 개발자가 conf를 만들어야 하기 때문에.. 신경써야 한다. 네트워크 엔지니어가 있다면 신경쓸 필요는 없겠지만 말이다.
 
 <img src="/image/ssl-handshake.png" />
 
