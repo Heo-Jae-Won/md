@@ -73,6 +73,13 @@ setCookie("username", "john_doe", 1);
     }
 ```
 
+- session id는 browser instance별로 모두 다르게 부여된다.
+- 같은 chrome이어도 아래와 같이 다양한 instance가 있다.
+  - web-app chrome
+  - native-app chrome
+  - webview chrome
+- 이것들마다 서로 모두 다른 session id가 부여된다고 보면 된다.
+
 
 ## <span style="color:#802548">_URI, URL, URN_</span> 
 - uri는 인터넷의 자원을 식별할 수 있는 문자열을 의미한다.
@@ -506,6 +513,28 @@ app.get('/users/:username/:password', (req, res) => {
   - nginx는 웹서버로서 static content도 처리하지만 reverse proxy로서 WAS로 포워딩도 담당한다.
 
 
+## <span style="color:#802548">_타임아웃_</span> 
+- connection timeout과 read timeout이 있다.
+- connection timeout
+  - 종단 간 연결하는데 소요되는 최대 시간을 넘어섰을 때 발생. 
+  - 이 때의 연결이란 TCP 3 way handshake를 통한 TCP 연결이다.
+  - 보통 5초에서 30초 정도로 잡힌다고 한다.
+  - 원인은 보통 아래와 같다. 방화벽이 대부분의 원인이다.
+    - 방화벽에서 커넥션 요청을 먹어 버렸다
+    - 서버가 너무 바쁘다
+    - 커넥션풀이 모두 사용중이다.
+- read timeout
+  - 연결된 종단 간에 데이터를 주고 받을 때 소요되는 최대 시간을 넘어섰을 때 발생.
+  - 보통 10초에서 60초 정도로 잡힌다고 한다.
+  - 원인은 보통 아래와 같다. 처리시간이 대부분의 원인이다.
+    - 서버에서 request를 처리하는 데 오래 걸린다
+    - 네트워크 대역폭
+
+
+
+<img src="/image/connection-timeout.png" />
+
+
 ## <span style="color:#802548">_로드밸런서_</span> 
 - L4 로드밸런서는 TCP 및 UDP 프로토콜을 기반으로 클라이언트와 서버 간의 트래픽을 분산시킨다.
   - L4 로드 밸런서는 클라이언트의 IP 주소와 포트, 서버의 IP 주소와 포트를 기반으로 로드 밸런싱을 수행합니다.
@@ -602,6 +631,108 @@ server {
 }
 ```
 
+## <span style="color:#802548">_JWT_</span> 
+- JWT는 유저를 인증하고 식별하기 위한 토큰(Token) 기반 인증이다.
+- Oauth server에서 인증 전략으로 자주 채택된다.
+  - 하나의 WAS에 묶인 session과 다르게 이기송 서버간에도 인증이 가능해 SSO나 MSA에서 많이 쓰인다.
+  - 세션과 쿠키가 존재하지 않는 Native app 환경에서도 많이 쓰인다.
+- JWT의 구성은 아래와 같다.
+  - header
+    - algorithm, token type
+  - payload
+    - subject, exp, iss 등 claim(민감하지 않은 사용자정보)
+  - signature
+    - header와 payload를 해시 암호화
+- JWT의 원칙은 아래와 같다.
+  - hedaer와 payload는 base64 url safe한 문자열로 구성되어야 한다. (url에서 쓸 수있게 변경. "+" 대신 "-"를 사용, "/" 대신 "_"를 사용, 패딩 문자 "="는 제거)
+  - 전자서명을 복호화한 값이 실제 온 header/payload와 일치해야 한다.
+- 전자서명 방식은 대칭키 교환(HMAC)도 있고, 비대칭키 교환(RSA)도 있다.
+  - 속도가 중요하면 대칭키 교환을, 보안이 중요하면 비대칭키 교환을 사용한다.
+- 대칭키 전자서명의 작동 방식은 아래와 같다.
+  - request가 오면 클라이언트에게 첫 token을 발급한다.
+  - 이 때 전자서명은 서버의 대칭키로 암호화된다.
+  - 받은 response에서 토큰을 쿠키나 localStorage에 저장한다.
+  - 다음 request를 보낼 때 토큰 값을 넣어 보낸다.
+  - 서버는 요청이 오기 전 filter에서 대칭키로 복호화하여 전자서명 위조 여부를 확인한다.
+  - 전자서명이 위조되지 않았다면 실제 요청을 처리하여 결과값을 client에 전달한다.
+- 비대칭키 교환 전자서명은 보통 요청 처리 서버(api 서버)와 인증 서버(발급 및 인증)가 다르다.
+- 물론 클라이언트가 verify를 해도 되지만.. 보통은 그렇게 하지 않는다고 한다. 서버보다 클라가 느려서 그럴 것이다.
+  - client가 인증 서버에 로그인 request를 보내 access token을 받는다.
+    - 이 때 인증 서버에서는 토큰의 signature는 인증 서버의 개인키로 암호화된다.
+  - client는 token을 받고 api 서버에서 요청을 보낸다.
+  - api 서버는 인증 서버의 공개키로 토큰 내 전자서명의 유효성을 검증한다.
+    - 유효하다면, api 서버는 request를 처리하여 response를 보낸다.
+    - 토큰이 만료됐다면, api 서버에서 401 에러를 return한다.
+  - client는 401 오류의 경우에 인증 서버로 다시 request를 보내 token을 받는다.
+  - 새로운 token 값으로 바꿔서 api 서버에 또 request를 보낸다.
+  - api 서버는 토큰이 유효함을 보고 response를 내준다.
+
+
+- 프론트에서 axios를 활용한다면 아래와 같이 interceptor를 활용해 비교적 쉽게 짤 수 있다.
+```js
+export const instance = axios.create({
+  timeout: 10 * 1000,
+  baseURL: apiRootPath,
+});
+
+instance.interceptors.request.use(
+  (config: AxiosRequestConfig) => {
+    if (config.url !== '/login') {
+      config.headers['authorization'] = `Bearer ${accessToken.value}`;
+    }
+
+    return config;
+  },
+  error => {
+    return Promise.reject(error);
+  }
+);
+```
+
+- 비대칭 키교환은 날리는 api의 base url을 쓰면안된다.
+- baseURL은 api 서버기 때문이다. 따라서 직접 axios post를 만들어준다.
+```js
+export const instance = axios.create({
+  timeout: 10 * 1000,
+  baseURL: apiRootPath,
+});
+
+instance.interceptors.response.use(
+  response => {
+    return response;
+  },
+  async (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      const store = useMemberStore();
+      const { loginMember } = storeToRefs(store);
+      const { updateAccessToken } = store;
+
+      const accessTokenResponse = await axios.post('인증서버url', loginMember.value); //instance를 쓰지 않는 이유는 token은 인증서버에서 관리하기 때문.
+                                                                                     //instnace는 baseUrl이 api(resource) 서버다.
+      const accessToken = accessTokenResponse.data;
+      updateAccessToken(accessToken);
+      
+      const updatedRequestConfig = {
+        ...error.config,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+      };
+
+      const result = await axios(updatedRequestConfig as AxiosRequestConfig);
+      return result;
+    }
+
+    if (error.response?.data.message) {
+      alert(error.response?.data.message);
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
 ## <span style="color:#802548">_출처_</span> 
 https://jaeseongdev.github.io/development/2021/06/15/REST%EC%9D%98-%EA%B8%B0%EB%B3%B8-%EC%9B%90%EC%B9%99-6%EA%B0%80%EC%A7%80/ - RESTFUL api
 https://www.bugbountyclub.com/pentestgym/view/47 - csrf 
@@ -613,3 +744,4 @@ https://www.mois.go.kr/synap/skin/doc.html?fn=BBS_201405271120475982&rs=/synapFi
 https://velog.io/@citron03/%EC%9B%B9-%EC%BA%90%EC%8B%9C-WEB-Cache-%EC%A0%95%EB%A6%AC - 웹 캐시
 https://www.youtube.com/watch?v=JqCgJI-Nk88 - 프록시, 리버스 프록시, 포워드 프록시
 https://aws-hyoh.tistory.com/m/149 - 로드밸런서 스위치
+https://alden-kang.tistory.com/m/20#:~:text=%EB%A8%BC%EC%A0%80%20Connection%20Timeout%EC%9D%80%20%EC%A2%85%EB%8B%A8,%EC%82%AC%EC%9A%A9%EB%90%98%EB%8A%94%20%ED%83%80%EC%9E%84%EC%95%84%EC%9B%83%20%EC%9E%85%EB%8B%88%EB%8B%A4 - connection/read timeout
