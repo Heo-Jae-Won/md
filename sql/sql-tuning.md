@@ -24,7 +24,9 @@ Statement st = con.createStatement();
 .
 ```
 
+
 - 아래와 같이 서로 다른 SQL들이 모두 library cache에 저장되어 CPU 부족사태가 일어난다.
+- mysql은 그렇지 않다.
 ```
 SELECT * FROM CUSTOMER WHERE LOGIN_ID = 'jaewon';
 SELECT * FROM CUSTOMER WHERE LOGIN_ID = 'jinsoo';
@@ -35,7 +37,7 @@ SELECT * FROM CUSTOMER WHERE LOGIN_ID = 'fira';
 
 - 실제 내부 프로시저를 보면 서로 모두 이름이 다르게 저장되어 있다.
 ```sql
-create procedure LOGIN_JAEWON();
+create procedure LOGIN_JAEWON();+
 create procedure LOGIN_JinSoo();
 create procedure LOGIN_JIKSN();
 create procedure LOGIN_CHEOLSU();
@@ -1907,6 +1909,187 @@ AND c.최종주문금액 >= 20000
 8         |   INDEX RANGE SCAN OF 고객_X1(cr=5 pr=1 pw=0 time=0 us)          
 ```
 
+- 오라클 11g부터는 prefetch와 배치 I/O도 도입됐다.
+- prefetch나 배치 I/O나 버퍼블록에서 읽으면 차이가 없다. 디스크 I/O일 때 차이가 난다.
+- 테이블 배치 I/O를 하게되면 order by를 명시하지 않으면 index를 통한 암묵적 결과 정렬이 통하지 않는다.
+- 아래처럼 맨 끝에 ORDER BY를 넣어줘야 순서가 정렬된다.
+```sql
+SELECT A.등록일시, A.번호, A.제목, B.회원명, A.게시판유형, A.질문유형
+FROM (
+  SELECT A.*, ROUWNUM NO
+  FROM (
+        SELECT 등록일시, 번호, 제목, 작성자번호, 게시판유형, 질문유형
+        FROM 게시판
+        WHERE 게시판유형 = :TYPE
+        ORDER BY 등록일시 DESC /**TOP N 알고리즘을 위한 order by */
+      ) A
+  WHERE ROWNUM <= (:page * 10) /**TOP N 알고리즘을 위한 rownum*/
+    ) A, 회원 B
+WHERE A.NO >= (:page - 1) * 10 + 1
+AND B.회원번호 = A.작성자번호
+ORDER BY A.등록일시 DESC  /**11g부터 여기에 order by를 명시해야 정렬 순서 보장 */
+```
+
+- prefetch의 실행계획은 아래와 같이 나온다.
+
+<img src="/image/prefetch.jpg" />
+
+- batch IO의 실행계획은 아래와 같이 나온다.
+
+<img src="/image/batch-IO.jpg" />
+
+- 아래 sql을 보자.
+- 해당 sql을 보고 index를 PRA_HST_STC_N1 table에 (SALE_ORG_ID, STRD_GRP_ID, STRD_ID, STC_DT)로 만들려 했다면 잘못 이해한 것이다.
+- 일단 전부 a를 왼쪽에 배치한거부터 매우 잘못되었다.
+```sql
+SELECT * 
+FROM PRA_HST_STC a, ODM_TRMS b
+WHERE a.SALE_ORG_ID =:sale_org_id
+AND a.STRD_GRP_ID = b.STRD_GRP_ID
+AND a.STRD_ID = b.STRD_ID
+ORDER BY a.STC_DT desc
+```
+
+- index가 걸리는 join 조건절임을 나타내기 위해 b를 왼쪽으로 옮겨줘야 한다.
+- 그럼 index를 어떻게 만들어야할 지 확실하게 보인다. 
+  - PRA_HST_STC table에 (SALE_ORG_ID, STC_DT)로 index를 만들어줘야 한다.
+  - ODM_TRMS table에 (STRD_GRD_ID,STRD_ID)로 index를 만들어줘야 한다. 
+```sql
+SELECT *
+FROM PRA_HST_STC a, ODM_TRMS b
+WHERE a.SALE_ORG_ID = :sale_org_id
+AND b.STRD_GRP_ID = a.STRD_GRP_ID
+AND b.STRD_GRP_ID = a.STRD_ID
+ORDER BY a.STC_DT desc
+``` 
+
+## <span style="color:#802548">_sort merge 조인_</span>
+- 해쉬 조인, NL 조인을 못 쓸 떄 쓰는 찌꺼기 조인이다.
+- 각 오라클 서버 프로세스에 할당된 메모리 영역을 PGA라고 한다.
+- 만약 PGA 공간이 작다면 Temp 테이블스페이스(디스크)를 이용한다.
+- PGA는 SGA와 다르게 공유되지 않는 독립적인 메모리 공간이라 래치가 불필요하다.
+- 따라서 같은 양의 데이터를 읽어도 SGA 버퍼캐시에서 읽는 것보다 훨씬 빠르다.
+
+
+<img src="/image/sga-pga.jpg" />
+
+- 머지 조인은 아래와 같은 순서로 이뤄진다.
+  - 소트
+    - 양쪽 집합을 조인 컬럼 기준으로 정렬한다.
+  - 머지
+    - 정렬한 양쪽 집합을 서로 머지한다.
+- 예시를 살펴보자.
+```sql
+SELECT /*+ ordered use_merge(c) */
+      e.사원번호, e.사원명, e.입사일자
+      , c.고객번호, c.고객명, c.전화번호, c.최종주문금액
+FROM 사원 e, 고객 c
+WHERE c.관리사원번호 = e.사원번호
+AND e.입사일자 >= '19960101'
+AND e.부서코드 = 'Z123'
+AND c.최종주문금액 >= 20000
+```
+
+- 위의 sql은 풀면 아래와 같다.
+- 쿼리로 가져온 PGA 영역에 할당된 Sort Area에 저장한다.
+- 상대 table과 join되는 column인 사원번호로 정렬된다.
+```sql
+SELECT 사원번호, 사원명, 입사일자
+FROM 사원
+WHERE 입사일자 >= '19960101'
+AND 부서코드 = 'Z123'
+ORDER BY 사원번호
+```
+
+
+- 상대방 table에서도 결과집합을 가져온다.
+- 마찬가지로 Sort Area에 저장한다.
+- 상대 table과 join되는 column인 관리사원번호로 정렬된다.
+```sql
+SELECT 고객번호, 고객명, 전화번호, 최종주문금액, 관리사원번호
+FROM 고객 c
+WHERE 최종주문금액 >= 20000
+ORDER BY 관리사원번호
+```
+
+- PGA에 저장한 사원 데이터를 스캔하면서 PGA에 저장한 고객 데이터와 join한다.
+```sql
+begin
+  for outer in (select * from PGA_SORTED_사원)
+  loop
+    for inner in (SELECT * FROM PGA_SORTED_고객
+                  WHERE 관리사원번호 = outer.사원번호)
+    loop
+      dbms_output.put_line(....);
+    end loop;
+  end loop;
+end;
+```
+
+- 위와 같이 sort merge join은 사원 데이터를 기준으로 매번 고객 데이터를 full scan하진 않는다.
+  - 고객 데이터가 정렬돼있으므로 join record가 시작되는 지점을 쉽게 찾을 수 있다.
+  - 조인에 실패하는 record를 만나면 정렬돼있으므로 바로 멈추면 된다.
+  - sort area에 저장한 데이터 자체가 index이므로 join컬럼에 index가 없어도 사용 가능하다.
+- sort merge가 index scan을 하지 않아도 빠른 이유는 PGA에 저장되어 래치 획득 과정이 없기 때문이다.
+- 거기다가 건건이 전부 순회하지도 않는다. 데이터를 가져올 때 index scan을 하게 되면 random access에 따른 부하는 피할 수 없다.
+- 현재는 자주 쓰이지 않는데, hash join이 성능이 더 좋기 때문이다. 아래 같은 상황에서만 한정적으로 쓰인다.
+  - 조인 조건식이 =가 아닌 대량 데이터 조인
+  - 조인 조건식이 없는 크로스 조인
+- sort 부하만 견딜수 있으면 좋다.
 
 
 
+## <span style="color:#802548">_해시 조인_</span>
+- 해시 조인은 sort meger join과 달리 sort by에 따른 부하가 없다.
+- 해시 조인도 두 단계로 진행된다.
+  - build: 작은 쪽 table을 읽어(build input) 해시 테이블(해시맵)을 생성한다.
+    - 해시 테이블에는 join key와 sql에 사용된 컬럼이 모두 저장된다.
+    - 사원번호만 저장하면 table access를 다시 해야하기 때문에 래치 획득 과정이 필요해진다.
+    - 해쉬 조인의 장점을 날려먹는 것이기 때문에 join key만 저장되지 않는 것이다.
+    - 보통 테이블 조건절 컬럼에 대한 카디널리티가 작은 테이블을 선택한다.
+  - probe: 큰 쪽 테이블(probe input)을 읽어 해시 테이블을 탐색하면서 조인한다.
+- 아래 sql 예시를 살펴보자.
+```sql
+SELECT /*+ ordered use_hash(c) */
+        e.사원번호, e.사원명, e.입사일자
+        c.고객번호, c.고객명, c.전화번호, c.최종주문금액
+FROM 사원 e, 고객 c
+WHERE c.관리사원번호 = e.사원번호
+AND e.입사일자 >= '19960101'
+AND e.부서코드 = 'Z123'
+AND c.최종주문금액 >=20000
+```
+
+- 첫 단계인 build에;서 join컬럼인 사원번호를 해시 테이블 키값으로 사용한다.
+```sql
+SELECT 사원번호, 사원명, 입사일자
+FROM 사원
+WHERE 입사일자 >= '19960101'
+AND 부서코드 ='Z123'
+```
+
+
+<img src="/image/hash-join-build-input.jpg" />
+
+
+- 아래 조건에 해당하는 고객에티러를 읽어 앞서 생성한 해시 테이블을 탐색한다.
+```sql
+SELECT 고객번호, 고객명, 전화번호, 최종주문금액, 관리사원번호
+FROM 고객
+WHERE 최종주문금액 >= 20000
+```
+
+
+<img src="/image/hash-join-probe-input.jpg" />
+
+
+- hash join이 빠른 이유는 sort merge join과 동일하다.
+- 해시 테이블을 PGA 영역에 생성하기 떄문이다.
+- 래치 획득 과정이 없다는 의미다.
+- hash join이 sort merge보다 빠른 이유는 사전 준비 작업 때문이다.
+  - sort merge는 양쪽을 모두 읽어야 하는데, PGA는 작아서 보통 정렬에서 disk I/O가 수행된다.
+  - 반면 hash는 작은 쪽만 읽기 때문에, PGA가 작아도 disk I/O가 수행되지 않는다.
+  - 그리고 설령 temp 테이블스페이스를 쓴다고 해도 hash join이 sort merge보다 빠르다.
+- 만약 build input도 대용량이라면, join column을 해싱하여 동적 파티셔닝을 진행한다.
+- 그리고 해당 파티션들에 대해 build input과 probe input을 진행한다.
+  - 당연히 메모리가 아닌 temp 테이블스페이스를 사용하므로 인메모리 hash join보다는 느리다.
