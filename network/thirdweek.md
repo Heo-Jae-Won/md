@@ -80,6 +80,625 @@ setCookie("username", "john_doe", 1);
   - webview chrome
 - 이것들마다 서로 모두 다른 session id가 부여된다고 보면 된다.
 
+- 만약 로드밸런싱되어 여러 서버에 세션을 동기화할 필요가 있다면 어떻게 처리해야할까?
+  - 가장 쉬운 건 해당 사용자가 처음 들어갔던 서버로 가게끔 강제하는 것이다.
+    - 이른바 sticky session이다. 이러면 로드밸런싱의 의미가 많이 퇴색된다.
+  - 두번째는 session clustring이다. 
+    - Tomcat은 Session Clustering을 위해 all-to-all 세션 복제 방식을 사용한다.
+    - 사용자의 세션이 새로 생성되거나 업데이트 될 때마다 Tomcat의 DeltaManager가 다른 모든 서버에 해당 세션의 정보를 복제 한다.
+    - 세션이 복제되기 때문에 서버의 수가 늘어날 수록 많은 메모리를 필요로 하고, 톰캣에선 4개 이상의 대규모 클러스터는 권장하지 않는다.
+  - 세번째는 redis같은 별도의 session 저장소를 만드는 것이다.
+    - 각각의 서버에 세션 정보를 저장하는 것이 아니라 외부에 저장소를 만들고 이 서버에 모든 데이터를 저장하는 방식이다.
+    - 특정 서버로 트래픽이 몰리는 문제가 발생하지 않고, 하나의 독립된 저장소에서 세션을 공유하므로 대규모 클러스터 환경에서 성능을 향상시킬 수 있다.
+    - 다만 하나의 서버에 몰아넣으면 해당 redis 서버가 먹통이 된다면 재앙이다. 이중화가 반드시 필요하다.
+  - 보통 MSA를 하게되면, 꼭 자바 서버로만 구성되는 게 아니다. 
+    - TOMCAT만 쓴다면 델타 매니저 등을 쓰면 되지만.. TOMCAT WAS와 express WAS는 서로 세션관리 방식이 달라 연동되기 어렵다.
+    - 따라서 별도의 session 저장소를 만드는 것이 가장 선호되는 방식이다.
+
+
+- express로는 아래와 같다.
+- cookie를 secure로 두는 이유는 HTTPS로 cookie를 보내게 client에 강제하기 위함이다.
+```js
+npm install express express-session connect-redis redis
+
+const express = require('express');
+const session = require('express-session');
+const RedisStore = require('connect-redis')(session);
+const redis = require('redis');
+
+const app = express();
+
+// Redis 클라이언트 생성
+const redisClient = redis.createClient({
+  host: 'your-redis-host', // Redis 서버 호스트
+  port: 6379, // Redis 서버 포트
+  // Redis에 대한 다른 옵션들 (옵션을 지정하지 않으면 기본값 사용)
+});
+
+// Redis 세션 스토어 설정
+const sessionStore = new RedisStore({ client: redisClient });
+
+// 세션 설정
+app.use(session({
+  store: sessionStore, // Redis 세션 스토어 사용
+  secret: 'your-secret-key', // 세션 암호화에 사용될 비밀 키
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // HTTPS를 통해서만 쿠키 전송 (배포 환경에서는 true로 설정)
+    maxAge: 1000 * 60 * 60 * 24 // 세션 만료 시간 (예: 1일)
+  }
+}));
+
+// 라우트 및 기타 설정
+// ...
+
+// 서버 시작
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+```
+
+- java로는 아래와 같다.
+```java
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+
+# Redis 서버 호스트 및 포트
+spring.redis.host=your-redis-host
+spring.redis.port=6379
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.session.data.redis.config.annotation.web.http.EnableRedisHttpSession;
+
+@SpringBootApplication
+@EnableRedisHttpSession
+public class YourApplication {
+    
+    public static void main(String[] args) {
+        SpringApplication.run(YourApplication.class, args);
+    }
+}
+
+import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.session.Session;
+import org.springframework.session.data.redis.RedisIndexedSessionRepository;
+```
+
+- @EnableRedisHttpSession를 썼으니 이제 HttpSession은 Spring의 session 저장소가 아닌 redis를 바라보게 된다.
+- 기존 소스코드 그대로 그냥 쓰면 되니 매우 편하다.
+```java
+@RestController
+public class MyController {
+
+    @Autowired
+    private RedisIndexedSessionRepository sessionRepository;
+
+    @PostMapping("/login")
+    public String login(@RequestParam("username") String username, HttpSession session) {
+        // 사용자 인증 및 기타 로그인 로직 수행
+        
+        // 세션에 사용자 정보 저장. 
+        session.setAttribute("username", username);
+        
+        return "redirect:/dashboard";
+    }
+
+    @GetMapping("/dashboard")
+    public String dashboard(HttpSession session) {
+        // 세션에서 사용자 정보 가져오기
+        String username = (String) session.getAttribute("username");
+        
+        // 사용자 정보를 사용하여 대시보드 페이지 반환
+        return "Welcome, " + username;
+    }
+}
+```
+
+- 대신 이와 같은 방식은 spring api 서버를 키기 전에 redis가 켜져있는지 확인하는 것이 필요하다.
+- 따라서 redis config를 만들 때 아래와 같이 redis 서버가 켜졌는지 확인하는 소스코드를 만들어줘야 한다.
+- 실수로 redis를 키는 걸 까먹고 api 서버를 start시켰다면 바로 error를 throw하게 된다.
+```java
+spring.redis.host=localhost
+spring.redis.port=6379
+spring.redis.password=heojaewon
+
+//위는 properties고 아래는 RedisConfig
+
+@Configuration
+public class RedisConfig {
+
+    @Value("${spring.redis.host}")
+    private String redisHost;
+
+    @Value("${spring.redis.port}")
+    private int redisPort;
+
+    @Value("${spring.redis.password}")
+    private String password;
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory() {
+        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(redisHost);
+        redisStandaloneConfiguration.setPort(redisPort);
+        redisStandaloneConfiguration.setPassword(password);
+        LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration);
+        return lettuceConnectionFactory;
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+        template.setConnectionFactory(redisConnectionFactory);
+
+        // application running 시에 redis가 켜져있지 않다면 application을 종료시킨다.
+        try {
+            RedisConnection connection = redisConnectionFactory.getConnection();
+            if (connection != null && connection.ping().equals("PONG")) {
+                connection.close();
+            }
+        } catch (Exception e) {
+            throw new RedisConnectionFailureException(ErrorEnum.NOT_CONNECTED_REDIS.getMessage());
+        }
+
+        return template;
+    }
+}
+```
+
+- 그런데 만약 redis가 모종의 이유로 shutdown된다면?
+- 특히 메모리부족, I/O 문제, 세션 폭주 시에 뻗어버릴 수도 있다.
+- 그럴 때를 대비해서 이중화가 필요하다. 그래서 master/slave 구조로 나누게 된다.
+- 아래와 같이 master를 만들어준다.
+  - master는 데이터를 읽고 쓸 수 있다.
+```sh
+# redis-master.conf
+
+# 마스터 설정
+port 6379
+bind 127.0.0.1
+daemonize yes
+
+# 복제 설정
+replicaof no one
+```
+
+- slave는 아래와 같이 만들어준다.
+  - slave는 master와 달리 읽는 것만 가능하다.
+```sh
+# redis-slave.conf
+
+# 마스터 설정
+port 6380
+bind 127.0.0.1
+daemonize yes
+
+# 복제 설정
+replicaof 127.0.0.1 6379
+```
+
+- 당연히 master와 slave 둘 다 따로 redis server instance가 있어야 한다.
+```sh
+redis-server /path/to/redis-master.conf
+redis-server /path/to/redis-slave.conf
+```
+
+- 그럼 api server에서도 이제 확인을 두개모두에 대해서 켜졌는지 확인하는 코드로 바꿔줘야 한다.
+```java
+spring.redis.host1=localhost
+spring.redis.port1=6379
+spring.redis.password1=heojaewon
+spring.redis.host2=localhost
+spring.redis.port2=6380
+spring.redis.password2=heojaewon
+
+
+//
+
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.RedisConnection;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+@Configuration
+public class RedisConfig {
+
+    @Value("${spring.redis.host1}")
+    private String redisHost1;
+
+    @Value("${spring.redis.port1}")
+    private int redisPort1;
+
+    @Value("${spring.redis.password1}")
+    private String password1;
+
+    @Value("${spring.redis.host2}")
+    private String redisHost2;
+
+    @Value("${spring.redis.port2}")
+    private int redisPort2;
+
+    @Value("${spring.redis.password2}")
+    private String password2;
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory1() {
+        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(redisHost1);
+        redisStandaloneConfiguration.setPort(redisPort1);
+        redisStandaloneConfiguration.setPassword(password1);
+        LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration);
+        return lettuceConnectionFactory;
+    }
+
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory2() {
+        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(redisHost2);
+        redisStandaloneConfiguration.setPort(redisPort2);
+        redisStandaloneConfiguration.setPassword(password2);
+        LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration);
+        return lettuceConnectionFactory;
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory1,
+                                                       RedisConnectionFactory redisConnectionFactory2) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+
+        // 첫 번째 Redis 연결 확인
+        checkRedisConnection(redisConnectionFactory1);
+
+        // 두 번째 Redis 연결 확인
+        checkRedisConnection(redisConnectionFactory2);
+
+        return template;
+    }
+
+    private void checkRedisConnection(RedisConnectionFactory redisConnectionFactory) {
+        try {
+            RedisConnection connection = redisConnectionFactory.getConnection();
+            if (connection != null && connection.ping().equals("PONG")) {
+                connection.close();
+            }
+        } catch (Exception e) {
+            throw new RedisConnectionFailureException(ErrorEnum.NOT_CONNECTED_REDIS.getMessage());
+        }
+    }
+}
+```
+
+- 그런데 redis가 3-4개로 이중화해놓으면 bean을 너무 많이 써줘야 하니 귀찮다.
+- 그럴 때는 아래와 같이 압축할 수 있다.  SpEL을 이용해서 프로퍼티 파일에서 가져온 문자열을 쉼표로 분리하여 리스트로 변환한다.
+```java
+spring.redis.host=localhost,localhost
+spring.redis.port1=6379,6380
+spring.redis.password1=heojaewon,heojaewon
+
+//
+
+@Configuration
+public class RedisConfig {
+
+    @Value("#{'${spring.redis.hosts}'.split(',')}")
+    private List<String> redisHosts;
+
+    @Value("#{'${spring.redis.ports}'.split(',')}")
+    private List<Integer> redisPorts;
+
+    @Value("#{'${spring.redis.passwords}'.split(',')}")
+    private List<String> passwords;
+
+    @Bean
+    public List<RedisConnectionFactory> redisConnectionFactories() {
+        List<RedisConnectionFactory> connectionFactories = new ArrayList<>();
+        for (int i = 0; i < redisHosts.size(); i++) {
+            connectionFactories.add(createRedisConnectionFactory(redisHosts.get(i), redisPorts.get(i), passwords.get(i)));
+        }
+        return connectionFactories;
+    }
+
+    private RedisConnectionFactory createRedisConnectionFactory(String host, int port, String password) {
+        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(host);
+        redisStandaloneConfiguration.setPort(port);
+        redisStandaloneConfiguration.setPassword(password);
+        return new LettuceConnectionFactory(redisStandaloneConfiguration);
+    }
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(List<RedisConnectionFactory> redisConnectionFactories) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new StringRedisSerializer());
+
+        // Redis 연결 확인
+        for (RedisConnectionFactory redisConnectionFactory : redisConnectionFactories) {
+            checkRedisConnection(redisConnectionFactory);
+        }
+
+        return template;
+    }
+
+    private void checkRedisConnection(RedisConnectionFactory redisConnectionFactory) {
+        try {
+            RedisConnection connection = redisConnectionFactory.getConnection();
+            if (connection != null && connection.ping().equals("PONG")) {
+                connection.close();
+            }
+        } catch (Exception e) {
+            throw new RedisConnectionFailureException(ErrorEnum.NOT_CONNECTED_REDIS.getMessage());
+        }
+    }
+}
+```
+
+- 마지막으로 nginx에 redis를 이용한 session clustering 설정을 해주면 된다.
+```sh
+http {
+    upstream redis_servers {
+        server redis1.example.com:6379;
+        server redis2.example.com:6379;
+        server redis3.example.com:6379;
+        # 필요한 만큼 Redis 서버를 추가합니다.
+    }
+
+    server {
+        listen 80;
+        server_name yourdomain.com;
+
+        location /api {
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            redis_pass redis_servers;
+
+            # Redis에서 세션을 가져오지 못한 경우, 백엔드 서버로 요청을 전달합니다.
+            # 이 경우, 백엔드 서버는 세션을 새로 생성합니다.
+            error_page 404 = @fallback;
+        }
+
+        location @fallback {
+            proxy_pass http://backend_servers;
+            # 백엔드 서버는 실제 애플리케이션 서버를 가리킵니다.
+        }
+
+        # 필요한 만큼 백엔드 서버를 추가합니다.
+        upstream backend_servers {
+            server backend1.example.com;
+            server backend2.example.com;
+            # 필요한 만큼 백엔드 서버를 추가합니다.
+        }
+    }
+}
+```
+
+- 물론 실제론 HTTPS까지 고려해야 한다.
+- HTTPS가 아니면 서비스 운영이 애초에 거의 불가능하다.
+- 개인정보는 모두 HTTPS 통신을 써야하게끔 개인정보보호법에 명시되어 있다.
+- HTTP는 아래와 같이 무조건 HTTPS로 redirect하게 바꾼다.
+```sh
+# /etc/nginx/nginx_no_ssl.conf
+server {
+  listen 80을 포워딩한 port default_server;
+  listen [::]:80을 포워딩한 port default_server;
+  server_name reverseproxy-domain;
+  return 301 https://$host$request_uri;
+}
+```
+
+- 80을 포트 포워딩한 port number를 넣으면 아래와 같이 될 것이다.
+```sh
+server {
+  listen 3111 default_server;
+  listen [::]:3111 default_server;
+  server_name reverseproxy-domain;
+  return 301 https://$host$request_uri;
+}
+```
+
+- 위의 파일을 아래 HTTPS conf에 include한다.
+- nginx.conf에 SSL 관련해서 넣어주면 된다.
+```sh
+# /etc/nginx/nginx.conf
+http {
+    include                     /etc/nginx/mime.types;
+    inclue                      /etc/nginx/nginx_no_ssl.conf;
+    default_type                application/octet-stream;
+    sendfile                    off;
+    keepalive_timeout           3000;
+
+    # 필요한 만큼 Redis 서버를 추가합니다.
+    upstream redis_servers {
+        server redis.example.com:6379; # master
+        server redis.example.com:6380; # slave
+    }
+
+    # 필요한 만큼 백엔드 서버를 추가합니다.
+    upstream backend_servers {
+        server backend1.example.com; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+        server backend2.example.com;
+    }
+
+    server {
+        listen 3112 ssl default_server;
+        listen [::]:3112 ssl default_server;
+        ssl_certificate /etc/sharessl/live/dev/fullchain.pem;
+        ssl_certificate_key /etc/sharessl/live/dev/privkey.pem;
+        server_name             reverseproxy-domain;
+        client_max_body_size    16m;
+        access_log /var/log/nginx/dev.log;
+        charset utf-8;
+        location /api {
+            # 일단 /api로 들어오는 건 WAS로 가게 된다.
+            proxy_pass http://backend_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+
+            error_page 401 = @fallback;
+        }
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html index.htm;
+            include /etc/nginx/mime.types;
+            try_files $uri $uri/ /index.html;
+        }
+
+        location @fallback {
+            proxy_pass /401.HTML;
+        }
+    }
+}
+```
+
+- MSA로 하면 기능마다 WAS를 다르게 쓰니 nginx conf도 달라질 것이다.
+- 하나는 JAVA고, 하나는 express고, 하나는 쟝고라고 해보자.
+- java는 /api/shop, express는 /api/cart, 쟝고는 /api/streaming이라고 해보자.
+- 그럼 path routing으로 만들었다는 가정하에 아래와 같이 만들 수 있다.
+- 메시징 시스템을 통한 통신은 서버 to 서버라서 nginx가 관여하지 않기때문에 신경쓰지 않아도 된다.
+- HTTP일때 redirect conf, error page conf, HTTPS conf를 모두 분리해서 만들어준다.
+```sh
+# /etc/nginx/nginx_no_ssl.conf
+server {
+  listen 4102 default_server;
+  listen [::]:4102 default_server;
+  server_name dev.jaewon.net;
+  return 301 https://$host$request_uri;
+}
+```
+
+```sh
+# /etc/nginx/error_pages.conf
+error_page 404 /404.html;
+error_page 500 502 503 504 /50x.html;
+```
+
+```sh
+# /etc/nginx/backend_servers.conf
+upstream shop_servers {
+    server dev.jaewon.net:4104; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server dev.jaewon.net:4105; # localhost가 dev.jaewon.net이라면 localhost:4105로 써도 된다.
+}
+
+upstream cart_servers {
+    server dev.jaewon.net:4106; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server dev.jaewon.net:4107;
+}
+
+upstream streaming_servers {
+    server dev.jaewon.net:4108; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server dev.jaewon.net:4109;
+}
+```
+
+```sh
+# /etc/nginx/nginx.conf
+http {
+    include                     /etc/nginx/mime.types;
+    inclue                      /etc/nginx/nginx_no_ssl.conf;
+    include                     /etc/nginx/error_pages.conf;
+    include                     /etc/nginx/backend_servers.conf;
+    default_type                application/octet-stream;
+    sendfile                    off;
+    keepalive_timeout           3000;
+
+    # 필요한 만큼 Redis 서버를 추가합니다.
+    upstream redis_servers {
+        server localhost:6379; # master
+        server localhost:6380; # slave
+    }
+
+    server {
+        listen 4103 ssl default_server;
+        listen [::]:4103 ssl default_server;
+        ssl_certificate /etc/sharessl/live/dev/fullchain.pem;
+        ssl_certificate_key /etc/sharessl/live/dev/privkey.pem;
+        server_name             dev.jaewon.net;
+        client_max_body_size    16m;
+        access_log /var/log/nginx/dev.log;
+        charset utf-8;
+        location /api/shop {
+            # 일단 /api/shop로 들어오는 건 Spring WAS로 가게 된다.
+            proxy_pass http://shop_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location /api/cart {
+            # 일단 /api/cart로 들어오는 건 express WAS로 가게 된다.
+            proxy_pass http://cart_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location /api/streaming {
+            # 일단 /api/streaming로 들어오는 건 쟝고 WAS로 가게 된다.
+            proxy_pass http://streaming_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html index.htm;
+            include /etc/nginx/mime.types;
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
+```
 
 ## <span style="color:#802548">_URI, URL, URN_</span> 
 - uri는 인터넷의 자원을 식별할 수 있는 문자열을 의미한다.
@@ -175,6 +794,10 @@ public class CorsConfig {
 	
 }
 ```
+
+- Spring에서는 corsFilter를 만들면 cors에 허용된 origin만 request를 받아 처리하게끔 구성되어있다.
+- 따라서 허용되지 않은 origin은 걸러져서 에러가 떨어지게 된다.
+- 보통 cors의 에러는 import org.springframework.security.web.access.AccessDeniedHandler가 처리하는 경우가 많다고 하는데 정확하겐 모르겠다.
 
 
 ## <span style="color:#802548">_csrf_</span> 
@@ -714,6 +1337,7 @@ instance.interceptors.response.use(
       
       const updatedRequestConfig = {
         ...error.config,
+        
         headers: {
           authorization: `Bearer ${accessToken}`,
           'content-type': 'application/json',
@@ -745,3 +1369,4 @@ https://velog.io/@citron03/%EC%9B%B9-%EC%BA%90%EC%8B%9C-WEB-Cache-%EC%A0%95%EB%A
 https://www.youtube.com/watch?v=JqCgJI-Nk88 - 프록시, 리버스 프록시, 포워드 프록시
 https://aws-hyoh.tistory.com/m/149 - 로드밸런서 스위치
 https://alden-kang.tistory.com/m/20#:~:text=%EB%A8%BC%EC%A0%80%20Connection%20Timeout%EC%9D%80%20%EC%A2%85%EB%8B%A8,%EC%82%AC%EC%9A%A9%EB%90%98%EB%8A%94%20%ED%83%80%EC%9E%84%EC%95%84%EC%9B%83%20%EC%9E%85%EB%8B%88%EB%8B%A4 - connection/read timeout
+https://creeraria.tistory.com/38 - 로드밸런싱 아래 session 관리
