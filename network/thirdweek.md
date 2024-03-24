@@ -700,6 +700,124 @@ http {
 }
 ```
 
+
+- 어차피 dev.jaewon.net이라면 localhost로 다 통일해서 써도 된다.
+- 다만 domain을 모르는 사람도 있을 수 있으니 nginx.conf에 server_name은 도메인을 남기는 것도 좋다.
+```sh
+# /etc/nginx/nginx_no_ssl.conf
+server {
+  listen 4102 default_server;
+  listen [::]:4102 default_server;
+  server_name dev.jaewon.net;
+  return 301 https://$host$request_uri;
+}
+```
+
+```sh
+# /etc/nginx/error_pages.conf
+error_page 404 /404.html;
+error_page 500 502 503 504 /50x.html;
+```
+
+```sh
+# /etc/nginx/backend_servers.conf
+upstream shop_servers {
+    server localhost:4104; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server localhost:4105; # localhost가 dev.jaewon.net이라면 localhost:4105로 써도 된다.
+}
+
+upstream cart_servers {
+    server localhost:4106; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server localhost:4107;
+}
+
+upstream streaming_servers {
+    server localhost:4108; # 완전히 같은 기능을 하는 두개의 서버. 이중화 서버다.
+    server localhost:4109;
+}
+```
+
+```sh
+# /etc/nginx/nginx.conf
+http {
+    include                     /etc/nginx/mime.types;
+    inclue                      /etc/nginx/nginx_no_ssl.conf;
+    include                     /etc/nginx/error_pages.conf;
+    include                     /etc/nginx/backend_servers.conf;
+    default_type                application/octet-stream;
+    sendfile                    off;
+    keepalive_timeout           3000;
+
+    # 필요한 만큼 Redis 서버를 추가합니다.
+    upstream redis_servers {
+        server localhost:6379; # master
+        server localhost:6380; # slave
+    }
+
+    server {
+        listen 4103 ssl default_server;
+        listen [::]:4103 ssl default_server;
+        ssl_certificate /etc/sharessl/live/dev/fullchain.pem;
+        ssl_certificate_key /etc/sharessl/live/dev/privkey.pem;
+        server_name             dev.jaewon.net;
+        client_max_body_size    16m;
+        access_log /var/log/nginx/dev.log;
+        charset utf-8;
+        location /api/shop {
+            # 일단 /api/shop로 들어오는 건 Spring WAS로 가게 된다.
+            proxy_pass http://shop_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location /api/cart {
+            # 일단 /api/cart로 들어오는 건 express WAS로 가게 된다.
+            proxy_pass http://cart_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location /api/streaming {
+            # 일단 /api/streaming로 들어오는 건 쟝고 WAS로 가게 된다.
+            proxy_pass http://streaming_servers;
+            proxy_set_header Host $host:$server_port;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+            # WAS에서 response가 오면, session과 관련이 있을 때만 redis server로 가게 된다.
+            # 세션 클러스터링을 위한 Redis 지원을 활성화합니다.
+            # Redis 서버는 upstream 블록에서 정의한 서버 그룹을 사용합니다.
+            # session 관련 요청이 없다면 해당 설정은 무시된다.
+            redis_pass redis_servers;
+        }
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html index.htm;
+            include /etc/nginx/mime.types;
+            try_files $uri $uri/ /index.html;
+        }
+    }
+}
+```
+
 ## <span style="color:#802548">_URI, URL, URN_</span> 
 - uri는 인터넷의 자원을 식별할 수 있는 문자열을 의미한다.
   - 그 중 url은 리소스가 위치한 정보를 사용하는 방식이다.
