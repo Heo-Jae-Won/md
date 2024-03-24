@@ -2573,3 +2573,192 @@ AND t.고객번호(+) = c.고객번호
 - _optimizer_unnest_scalar_sq를 false로 놓는 것은 장기적으론 좋지 않은 선택이다.
 
 <img src="/image/scalar-subquery-unnest-merge.jpg" />
+
+## <span style="color:#802548">_sort 연산_</span>
+- oracle은 가공된 데이터 집합이 필요할 때, PGA와 Temp 테이블스페이스를 활용한다.
+  - sort merge join
+  - hash join
+  - group by
+  - order by
+- sort는 PGA의 Sort Area에서 먼저 이뤄지고, 그거로도 부족하면 Temp 테이블스페이스를 활용한다.
+- Sort Area에서만 끝나면 메모리 소트(Internal sort), 디스크까지 활용하면 디스크 소트(External sort)라고 한다.
+- sort가 이뤄지는 방식은 아래 이미지와 같다.
+
+```
+소트할 대상을 SGA 버퍼캐시를 통해 읽는다.
+sort Area에서 정렬을 해본다.
+안되면 Temp 테이블스페이스에 임시 세그먼트를 만들어 저장한다.
+temp에 저장해 둔 집합을 sort run이라고 부른다.
+클라이언트에 전달할 때는 PGA에 있는 걸 먼저 준다.
+그 다음 temp에 있는 것을 PGA에 merge해서 PGA에서 client로 전달한다.
+```
+
+<img src="/image/sort-process.jpg" />
+
+
+- 소트 연산은 메모리 집약적이며, CPU 집약적이다.
+- 거기다 PGA가 작으면 disk I/O까지 일어나니 쿼리 성능에 핵심적이다.
+- 될 수 있다면 sort를 발생시키지 않는게 좋고, 필요하면 메모리로 끝내야 한다.
+
+
+## <span style="color:#802548">_sort execution plan_</span>
+- sort operation은 아래와 같다.
+  - sort Aggregate
+    - 집계함수를 사용한 것이다.
+    - 실제 데이터 정렬은 없다.
+    - sum, max, min, avg 등이 예시다.
+  - sort order by
+    - 데이터를 정렬한다.
+  - sort group by
+    - 데이터를 정렬한다.
+    - 그룹 개수가 적으면 수억 row가 있어도 temp table space를 쓰지 않는다.
+    - order by가 없으면 대부분 hash group by로 처리된다.
+    - sort group by와 다른 점은 해싱알고리즘이라는 점말고 없다.
+    - hash과 sort나 group by는 결과가 정렬됨을 보장하지 않는다.
+  - sort unique
+    - 서브쿼리를 unnest할 때, 서브쿼리가 1대 다 중 다쪽일 때 
+    - 1쪽 집합인데 조인컬럼에 unique index가 없을 때 나타난다
+    - 메인쿼리와 조인하기 전에 중복 레코드를 제거해야 하기 때문이다.
+    - 아니면 union, minus, intersect, distinct를 써도 나타난다.
+    - distinct의 경우 hash unique가 더 많이 쓰인다.
+  - sort join
+    - sort merge join을 수행할 때 나타난다.
+  - window sort
+    - 윈도우 함수를 수행할 때 나타난다.
+
+
+
+## <span style="color:#802548">_소트가 발생하지 않게 SQL 작성_</span>
+- union, minus, distinct는 최대한 자제해야 한다.
+  - union보다는 union all로 쓸 수 있는지 확인해봐야 한다.
+  - distinct보다는 exists를 사용할 수 있는지 확인해봐야 한다.
+  - 대량데이터가 아니라면 hash join이 아니라 NL join을 써야 한다.
+
+
+- union의 예시를 들어보자.
+```sql
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 결제일자 ='20180316'
+
+UNION
+
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 주문일자 = '20180316'
+```
+
+- 아래와 같이 union all과 <> 연산자를 이용해 sort가 일어나지 않게 바꾼다.
+```sql
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 결제일자 ='20180316'
+
+UNION ALL
+
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 결제일자 = '20180316'
+AND 결제일자 <> '20180316'
+```
+
+- 만약 결제일자가 null 허용 컬럼이면 아래와 같이 바꿔준다.
+```sql
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 결제일자 ='20180316'
+
+UNION ALL
+
+SELECT 결제번호, 결제수단코드, 주문번호, 결제금액, 결제일자, 주문일자
+FROM 결제
+WHERE 결제일자 = '20180316'
+AND (결제일자 <> '20180316' or 결제일자 is null) /** LNNVL(결제일자 ='20180316') */
+```
+
+- distinct를 제거하는 쿼리 튜닝도 보자.
+```sql
+SELECT DISTINCT p.상품번호, p.상품명, p.상품가격
+FROM 상품 p, 계약 c
+WHERE p.상품유형코드 = :pclscd
+AND c.상품번호 = p.상품번호
+AND c.계약일자 BETWEEN :dt1 and :dt2
+AND c.계약구분코드 = :ctpcd
+```
+
+
+- 위의 쿼리 대신 exists를 활용해보자.
+- exists를 이용하면 데이터를 모두 읽지 않아도 된다.
+- distinct를 사용하지 않았으니 부분범위 처리도 가능하다.
+```sql
+SELECT p.상품번호, p.상품명, p.상품가격
+FROM 상품 p
+WHERE p.상품유형코드 = :pclscd
+AND EXISTS (
+          SELECT 'x' FROM 계약 c
+          WHERE c.상품번호 = p.상품번호
+          AND c.계약일자 BETWEEN :dt1 and :dt2
+          AND c.계약구분코드 = :ctpcd
+        )
+```
+
+
+- minus를 튜닝해보자.
+```sql
+SELECT ST.상황접수번호, ST.관제일련번호, ST.상황코드
+FROM 관제진행상황 ST
+WHERE 상황코드 = '0001'
+AND 관제일시 BETWEEN :V_TIMEEFROM || '000000' AND :V_TIMET0 || '235959'
+
+MINUS
+
+SELECT ST.상황접수번호, ST.관제일련번호 ,ST.상황코드, ST.관제일시
+FROM 관제진행상황 ST, 구조활동 RPT
+WHERE 상황코드 = '0001'
+AND 관제일시 BETWEEN :V_TIMEEFROM || '000000' AND :V_TIMET0 || '235959'
+AND RPT.출동센터ID = :V_CNTR_ID
+AND ST.상황접수번호 = PRT.상황접수번호
+ORDER BY 상황접수번호, 관제일시
+```
+
+
+- 아래와 같이 바꿀 수 있다.
+- not exists를 이용하면 데이터를 모두 읽지 않아도 된다.
+- distinct를 사용하지 않았으니 부분범위 처리도 가능하다.
+```sql
+SELECT ST.상황접수번호, ST.관제일련번호 ,ST.상황코드, ST.관제일시
+FROM 관제진행상황 ST, 구조활동 RPT
+WHERE 상황코드 = '0001'
+AND 관제일시 BETWEEN :V_TIMEEFROM || '000000' AND :V_TIMET0 || '235959'
+AND NOT EXISTS (
+              SELECT 'X' FROM 구조활동
+              WHERE 출동센터ID = :V_CNTR_ID
+              AND 상황접수번호 = ST.상황접수번호
+            ) 
+ORDER BY ST.상황접수번호, ST.관제일시
+```
+
+
+- join에 관해서도 이야기해보자.
+- 계약 table의 index가 (지점ID, 계약일시)기 때문에 order by가 생략될 수 있다.
+- 그러나 hash join이 되면서 order by가 일어났다.
+```sql
+SELECT c.계약번호, c.상품코드, p.상품명, p.상품구분코드
+FROM 계약 c, 상품 p
+WHERE c.지점ID = :brch_id
+AND p.상품코드 = c.상품코드
+ORDER BY c.계얄일시 DESC
+```
+
+
+- 이를 NL join으로 바꿔준다.
+```sql
+SELECT /*+ leading(c) use_nl(p) */ c.계약번호, c.상품코드, p.상품명, p.상품구분코드
+FROM 계약 c, 상품 p
+WHERE c.지점ID = :brch_id
+AND p.상품코드 = c.상품코드
+ORDER BY c.계얄일시 DESC
+```
+
+
+<img src="/image/join-sort-NL-hash.jpg" />
