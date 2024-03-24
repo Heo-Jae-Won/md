@@ -2102,4 +2102,474 @@ WHERE 최종주문금액 >= 20000
     - 따라서 수행 빈도가 낮고, 쿼리 수행 시간이 오래 걸리고, 대량 데이터를 join할 때 사용하자.
 
 
-## <span style="color:#802548">_서브쿼리 조인_</span>
+## <span style="color:#802548">_nested subquery_</span>
+- 최근의 optimizer는 쿼리변환부터 진행한다.
+- 문제는 서브쿼리를 모듈별로 나눠 각각 최적화가 진행된다는 점이다.
+- 따라서 효율적이지 못한 sql로 변환될 수도 있다.
+- 서브쿼리는 기본적으로 3가지 종류가 있다.
+  - select: scalar subquery
+  - from: inline view
+  - where: nested subquery
+- 오라클에서 where조건문 subuqery는 filter방식 혹은 unnest 방식으로 처리된다.
+  - 다만 unnest되면서 filter방식으로도 처리할 수 있다.
+  - unnest되지 않으면 무조건 filter 방식으로만 처리된다.
+```sql
+SELECT c.고객번호, c.고객명
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXISTS (
+  SELECT /*+ no_unnest */ 'x'
+  FROM 거래
+  WHERE 고객번호 = c.고객번호
+  AND 거래일시 >= trunc(sysdate, 'mm')
+)
+```
+
+```Execution plan
+------------------------------------------
+0     SELECT STATEMENT 
+1       FILTER
+2         TABLE ACCESS (BY INDEX ROWID) OF '고객'
+3           INDEX (RANGE SCAN) OF '고객_X01'
+4         INDEX (RANGE SCAN) OF '거래_X01' 
+```
+
+- 필터 오퍼레이션은 기본적으로 NL조인과 처리 루틴이 같다.
+- FILTER를 NESTED LOOP라고 생각해도 된다.
+  - 다만 exists기 때문에 조건을 만족하는 순간 진행을 멈추고 메인쿼리의 다음 record에 관해 다시 join된다.
+  - 그것 말고 NL join과 Filter 자체가 다른 점은, Filter는 캐싱 기능이 있다는 점이다.
+  - 또한 필터 서브쿼리는 join순서가 고정이다. 늘 메인쿼리가 driving table이다.
+
+<br />
+
+
+- 그럼 unnest 방식일 때의 실행계획도 살펴보자.
+```sql
+SELECT c.고객번호, c.고객명
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXIST (
+      SELECT /*+ unnest nl_sj */ 'x'
+      FROM 거래
+      WHERE 고객번호 = c.고객번호
+      AND 거래일시 >= trunc(sysdate, 'mm')
+    )
+```
+
+```
+Execution plan
+------------------------------------------
+0     SELECT STATEMENT 
+1       NESTED LOOPS (SEMI)
+2         TABLE ACCESS (BY INDEX ROWID) OF '고객'
+3           INDEX (RANGE SCAN) OF '고객_X01'
+4         INDEX (RANGE SCAN) OF '거래_X01' 
+```
+
+- EXIST를 쓰게 되면 SEMI 조인으로 작동하며 사실상 NL join과 다르지 않다.
+- 그리고 unnest라도 캐싱 기능이 적용되기 때문에 filter operation과 동일하다.
+- 다른 점은 바로 driving 집합이 서브쿼리가 될 수 있다는 사실이다.
+```sql
+SELECT /*+ leading(거래@subq) use_nl(c) */ c.고객번호, c.고객명
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXISTS (
+  SELECT /*+ qb_name(subq) unnest */ 'x'
+  FROM 거래
+  WHERE 고객번호 = c.고객번호
+  AND 거래일시 >= trunc(sysdate, 'mm')
+)
+```
+
+```
+0       SELECT STATEMNT
+1         NESTED LOOPS
+2           NESTED LOOPS
+3             SORT
+4               TABLE ACCESS
+5                 INDEX
+6             INDEX
+7         TABLE ACCESS
+```
+
+- SORT UNIQUE가 뜬 이유는 서브쿼리를 unnest했기 때문이다.
+- unnest하면서 메인쿼리 결과집합이 서브쿼리쪽 집합으로 확장될 수 있기 때문이다.
+- 그래서 서브쿼리에 대해 sort unique를 수행하는 것이다.
+
+
+<br />
+
+- 참고로 subquery 안에 rownum은 쓰면 안 된다.
+- rownum을 쓰게 되면 서브쿼리가 unnest되지 않는다.
+- unnest를 하게 되면 optimizer가 좀더 좋은 경로를 선택할 가능성이 높아지기 때문에 하는 것이다.
+- 그런데 rownum을 써서 unnest를 막아버렸으니 hint를 줘도 소용이 없는 것이다.
+```sql
+SELECT 글번호, 제목, 작성자, 등록일시
+FROM 게시판 b
+WHERE 게시판구분 = '공지'
+AND 등록일시 >= trunc(sysdatet -1)
+AND EXISTS (
+        SELECT /*+ unnest nl_sj */ 'x'
+        FROM 수신대상자
+        WHERE 글번호 = b.글번호
+        AND 수신자 = :memb_no
+        AND ROWNUM <=1
+)
+```
+
+- 필터로 작동하는 서브쿼리의 경우, 서브쿼리 필터링을 먼저 처리하면 성능이 좋아지는 경우가 많다.
+- 아래는 서브쿼리 필터링을 맨 마지막에 처리하는 쿼리다.
+```sql
+SELECT /*+ leading(p) use_nl(t) */ count(distinct p.상품번호), sum(t.주문금액)
+FROM 상품 p, 주문 t
+WHERE p.상품번호 = t.상품번호
+AND p.등록일시 >= trunc(add_months(sysdate, -3), 'mm')
+AND t.주문일시 >= trunc(sysdate - 7)
+AND EXIST (
+        SELECT 'x'
+        FROM 상품분류
+        WHERE 상품분류코드 = p.상품분류코드
+        AND 상위분류코드 = 'AK'
+)
+```
+
+
+<img src="/image/subquery-join.jpg" />
+
+- Filter Operation이기 때문에 main query가 먼저 실행된다.
+- main query는 join문이고, driving table인 상품 table scan부터 시작한다.
+  - 우선 상품 table에 full scan으로 데이터를 가져온다. 그게 1000개다.
+  - table full scan이므로 where 조건문으로 filtering을 해도 별다른 실행계획 뜨지 않고 table access full 상품으로 나온다.
+- 이제 driven table인 주문 table scan을 시작한다.
+  - join이 걸린 주문 table은 index scan을 진행한다. 
+  - 위에서 얻은 1000개의 join record에 대해 index scan을 한 결과로 60,000 record가 뽑힌다.
+  - index range scan이 60,000개인데 table access by index rowid로 접근한 것도 60,000개니까 필터링은 없는 셈이다.
+- 그 뒤에는 exists 절에 있는 내용을 실행한다.
+  - exists절은 index scan을 해서 가져오는데, 3개밖에 없어 보인다.
+  - table access 시에 1개로 줄어든 것을 보면, 상위분류코드는 적어도 index access조건은 아니다.
+  - index filter인지, table filter인지까지는 확인은 어렵다. index definition을 봐야 알 수 있다.
+- exists를 통해 필터링을 마치게 되면 총 3000개의 record를 얻는다.
+
+```
+--------------------------------------------------------------
+| ROW  | Operation                                   | Name        
+--------------------------------------------------------------
+|   0  | SELECT STATEMENT                            |              
+|   1  | SORT AGGREGATE(cr=38103)                    |              
+| 3000 | FILTER(cr=38103)                            |             
+| 60000|   NESTED LOOPS(cr=38097)                    |             
+| 1000 |     TABLE ACCESS FULL(cr=95)                | 상품        
+| 60000|       TABLE ACCESS BY INDEX ROWID(cr=38002) | 주문      
+| 60000|         INDEX RANGE SCAN(cr=2002)           | 주문_PK   
+|    1 |       TABLE ACCESS BY INDEX ROWID(cr=6)     | 상품분류
+|    3 |         INDEX UNIQUE SCAN(cr=3)             | 상품분류_PK
+--------------------------------------------------------------
+```
+
+
+- 블록은 몇개나 읽었을까?
+- 총 읽은 data block의 갯수는 38103개(join 38,097개 + exists 6개)다.
+  - join 과정에서 총 38,097개 data block을 읽었다.
+    - 처음 상품 table full scan을 하며 95개의 cr을 읽는다.
+    - 그 다음 주문 table을 index scan하며 index block을 2002개 읽는다. 이건 총 읽은 블록에서는 제외다.
+    - index block에서 얻은 rowid를 통해 38002개의 data block을 읽는다.
+  - 그리고 마지막에 exists 절에서 index scan을 하면서 3개의 index leaf 블록을 읽는다. 해당 건은 제외다.
+    - 읽은 leaf block에서 rowid를 가져와 6개의 data block을 읽었다.
+- 38103개 block이면 1개 block 당 500개의 table record로 잡아도 엄청나게 많은 양이다.
+
+<br />
+
+- 서브쿼리 필터링을 먼저 처리한다면 어떨까? 읽은 블록이 확 줄어든다.
+- 그러한 기술을 Pushing subquery라고 한다.
+- 이 기능은 unnest되지 않은 subquery에서만 작동한다. 
+- 따라서 push_subq hint는 no_unnest와 같이 사용해야 한다.
+```sql
+SELECT /*+ leading(p) use_nl(t) */ count(distinct p.상품번호), sum(t.주문금액)
+FROM 상품 p, 주문 t
+WHERE p.상품번호 = t.상품번호
+AND p.등록일시 >= trunc(add_months(sysdate, -3), 'mm')
+AND t.주문일시 >= trunc(sysdate - 7)
+AND exists (SELECT /*+ NO_UNNEST PUSH_SUBQ*/ 'x'
+            FROM 상품분류
+            WHERE 상품분류코드 = p.상품분류코드
+            AND 상위분류코드 = 'AK'
+          )
+```
+
+- 서브쿼리 필터링을 먼저처리해서 driving table의 scan을 하고 filtering하는 조건으로 작동한다.
+- 실제 아래 실행계획을 보면 FILTER가 사라지고 맨밑의 상품분류 Operation이 중간으로 갔다.
+- 블록은 몇개나 읽었을까?
+- 총 읽은 data block의 갯수는 1903개(join 1903개)다. exists는 join에 읽은 block 갯수에 포함된다.
+  - join 과정에서 총 1903개 data block을 읽었다.
+    - 처음 상품 table full scan을 하며 101개 cr을 읽는다.
+    - 그 다음 주문 table을 index scan하며 index block을 302개 읽는다. 이건 총 읽은 블록에서는 제외다.
+    - index block에서 얻은 rowid를 통해 1802개의 data block을 읽는다.
+- 1903개 block이면 아까 38103개에 비하면 거의 1/14개로 줄어들은 것이다.
+```
+--------------------------------------------------------------
+| ROW  | Operation                                          | Name        
+--------------------------------------------------------------
+|   0 | SELECT STATEMENT                                    |              
+|   1 |   SORT AGGREGATE(cr=1903)                           |              
+| 3000|     NESTED LOOPS(cr=1903)                           |             
+| 150 |       TABLE ACCESS FULL 상품(cr=101)                 | 상품      
+| 1   |         TABLE ACCESS BY INDEX ROWID 상품분류(cr=6)   | 상품분류
+| 3   |           INDEX UNIQUE SCAN 상품분류_PK(cr=3)        | 상품분류_PK  
+| 3000|       TABLE ACCESS BY INDEX ROWID 주문(cr=1802)      | 주문      
+| 3000|         INDEX RANGE SCAN 주문_PK(cr=302)             | 주문_PK   
+--------------------------------------------------------------
+```
+
+## <span style="color:#802548">_inline view_</span>
+
+- inline view에 쓸 때도 위와 같이 조건문이 아쉬울 때가 있다.
+  - 분명히 어차피 전월 이후 가입한 고객을 필터링할 것이다.
+  - 그런데도 inline view안에 해당 조건문이 없어 inline view는 그냥 scan을 진행한다.
+```sql
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거리
+FROM 고객 c,
+        (SELECT 고객번호, avg(거래금액) 평균거래,
+                min(거래금액) 최소거래, max(거래금액) 최대거래
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm') /**당월 발생한 거래 */
+        group by 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1) ,'mm') /**전월 이후 가입 고객 */
+AND t.고객번호 = c.고객번호
+```
+
+- 실행계획은 아래와 같다.
+- no merge라서 inline view로 진행되고, WHERE 조건문은 맨마지막에 filter로 진행된다.
+
+
+<img src="/image/inline-view-no-merge.jpg" />
+
+
+- 그럴 떄 merge hint를 사용해준다.
+```sql
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거래
+FROM 고객 c,
+      (SELECT /*+ merge */ 고객번호, avg(거래금액) 평균거래,
+        min(거래금액) 최소거래, max(거래금액) 최대거래
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')  /**당월 발생한 거래 */
+        GROUP BY 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate , -1), 'mm') /**전월 이후 가입 고객 */
+AND t.고객번호 = c.고객번호
+```
+
+- 그럼 실행계획이 아래와 같이 바뀐다.
+- view가 사라진 걸 볼 수 있다. 
+- merge hint가 적용되어 WHERE 조건문의 필터링 조건이 inline view에 적용된다.
+- 더 효율적으로 view를 scan해오는 것이다.
+<img src="/image/inline-view-merge-hint.jpg" />
+
+
+- inline view보다는 일반 table을 통한 join 형태로 변환해주는 게 대개 더 좋다.
+  - 다만 위의 방식을 쓰면 group by를 마지막에 쓰기 때문에, 부분범위처리가 불가능하다.
+  - join에 성공한 resultSet을 가지고 group by를 진행해야 하기 때문이다. 
+    - 또한 driving table의 resultSet(여기선 전월 이후 가입한 고객)이 클 때는 join record에 따른 상대 table access가 많아진다.
+    - 마찬가지로 driven table의 resultSet(여기선 당월 거래)가 크다면 table access 이후 range scan양이 많아진다.
+    - 따라서 이러한 경우 hash join으로 table scan을 진행하는 게 좋다.
+- 만약 driving table만 데이터가 너무 많을 때는 inline view를 활용하는 것도 방법이다.
+
+
+<br />
+
+- 그 외 방법으로는 join 조건 pushdown이 있다.
+- merge랑 비슷하게 inline view로 조건절이 들어간다.
+  - pushdown을 이용하면 join record 건건이 group by를 수행하기에, 중간에 멈출 수 있다.
+  - 따라서 group by가 강제되지 않아 부분범위처리가 가능하다는 점이다.
+  - 대개 merge보다는 이 방법이 더 낫다고 볼 수 있다.
+    - hint는 push_pred이며 no_merge와 반드시 같이 써야 한다.
+```sql
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거래
+FROM 고객 c,
+      (SELECT /*+ no_merge push_pred */ 고객번호, avg(거래금액) 평균거래,
+        min(거래금액) 최소거래, max(거래금액) 최대거래
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')  /**당월 발생한 거래 */
+        GROUP BY 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate , -1), 'mm') /**전월 이후 가입 고객. 이게 inline view로 들어간다. */
+AND t.고객번호 = c.고객번호
+```
+
+
+## <span style="color:#802548">_scalar subquery_</span>
+- 스칼라 서브쿼리를 쓰지 않고 프로시저를 사용하면 record마다 호출된다.
+- 당연히 dept table을 record마다 scan한다. 더 큰 문제는 프로시저 호출 시 컨텍스트 스위칭이 일어난다는 점이다.
+```sql
+CREATE OR REPLACE function GET_DNAME(p_deptno number) return varchar2
+is
+  l_dname dept.dname%TYPE;
+  begin
+    select dname into l_dname from dept where deptno = p_deptno;
+    return l_dname;
+  exception
+    when others then
+      return null;
+  end;
+
+
+SELECT empno, ename, sal, hiredate,
+        GET_DNAME(e.deptno) as dname
+FROM emp e
+WHERE sal >= 2000
+```
+
+- 아래같이 스칼라 서브쿼리를 쓸 때도, record마다 dept table을 scan하는 건 같다.
+- 하지만 적어도 context swithcing은 일어나지 않는다.
+```sql
+SELECT empno, ename, sal, hiredate,
+      (SELECT d.danme from dept d where d.deptno = e.deptno) as danme
+FROM emp e
+WHERE sal >= 2000
+```
+
+- 실제 스칼라 서브쿼리는 아래와 같이 NL join과 같이 이뤄진다고 보면 된다.
+```sql
+SELECT /*+ ordered use_nl(d) */ e.empno, e.ename, e.sal, e.hidredate, d.dname
+FROM emp e, dept d
+WHERE d.deptno(+) = e.deptno /** +붙었으니 outer join */
+and e.sal >= 2000
+```
+
+- 스칼라 서브쿼리는 강력한 캐싱 기능을 제공한다.
+- 캐싱 효과를 사용하기 위해 프로시저를 스칼라 서브쿼리로 덮어버리기도 한다.
+- 캐싱효과 덕분에 호출횟수를 최소화할 수 있기 때문이다.
+```sql
+SELECT empno, ename, sal, hiredate,
+        (SELECT GET_DNAME(e.deptno) FROM dual) dname
+FROM emp e
+WHERE sal >= 2000
+```
+
+- join에 쓰이는 데이터를 캐시에서 찾으면 join 성능이 매우 좋아진다.
+  - 첫 시도는 느리지만, 그 다음부터는 매우 빨라진다는 의미다.
+  - 하지만 PGA에 캐시를 할당하는 것이라, 캐시에 담을 join access에 쓰이는 record가 적어야 한다.
+    - 예를 들어, 거래구분코드가 20개라면 캐싱에 충분하고, 캐싱이 제대로 작동할 것이다.
+    - 만약 고객이 100만명인데, 고객ID로 join access를 쓴다면 100만개를 캐시에 저장해야 한다.
+    - 하지만 캐시는 작아서 그만큼 저장하지 못하기 때문에 캐시를 탐색해봐야 없을 것이다.
+    - 이러면 캐시 탐색 비용만 늘어나서 메모리/CPU 사용률만 높아진다.
+```sql
+SELECT 거래번호, 고객번호, 영업조직ID, 거래구분코드,
+        (SELECT 고객명 FROM 고객 WHERE 고객번호 = t.고객번호) 고객명
+FROM 거래 t
+WHERE 거래일자 >= to_char(add_months(sysdate, -3), 'yyyymmdd')
+```
+
+- 캐싱 효과가 부작용을 일으키는 경우가 하나 더 있다.
+- 메인쿼리 집합이 작은 경우다. 스칼라 서브쿼리는 쿼리 단위로 캐싱이 이뤄진다.
+  - 메인쿼리 집합이 커야만 효과가 크다. 그래야 많이 재사용되기 때문이다.
+  - 재사용되지도 않는데 귀한 캐시 영역에 넣었다가 바로 버리면 비효율적인 것이다.
+  - 메인쿼리로 가져오는 record가 1개밖에 없다면 더더욱 그럴 것이다.
+  - 아래 sql을 보면 고객은 보통 계좌를 1개만 갖고 있기 마련이다. 
+    - 그런데 1개에 관해 사용자정의 함수를 호출해 scalar subquery로 덮으면 오히려 성능이 떨어진다.
+
+
+```sql
+SELECT 계좌번호, 계좌명, 고객번호, 개설일자, 계좌종류구분코드, 은행계설여부, 은행연계여부
+      ,(SELECT brch_nm(관리지점코드) from dual) 관리지점명
+      ,(SELECT brch_nm(개설지점코드) from dual) 개설지점명
+FROM 계좌
+WHERE 고객번호 =:고객번호
+```
+
+- 아래는 스칼라 서브쿼리를 사용할 때의 실행계획이다.
+```sql
+SELECT c.고객번호, c.고객명
+      ,(SELECT ROUND(avg(거래금액), 2) 평균거래금액
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')
+        AND 고객번호 = c.고객번호)
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+```
+
+- 실행계획에서 후행 step이 먼저 발동하는 쿼리다.
+- 따라서 고객이 먼저 full scan이 된다. 즉 메인쿼리가 먼저 발동한다.
+- 그 다음 거래 table이 index scan된다. scalar subquery는 나중에 실행되는 것이다.
+```
+EXECUTION PLAN
+----------------------------------------------
+0       SELECT STATEMNT 
+1   0     SORT (AGGREGATE)
+2   1       TABLE ACCESS (BY INDEX ROWID BATCHED) OF '거래'
+3   2         INDEX (RANGE SCAN) OF '거래_X02' (INDEX)
+4   0     TABLE ACCESS (FULL) OF '고객' (TABLE)
+5   4       INDEX (RANGE SCAN) OF '고객_X01' (INDEX)
+```
+
+
+- scalar subquery로 두 개 이상의 값을 얻는 건 불가능하다.
+- 아래와 같은 sql은 불가능하다는 의미다.
+```sql
+SELECT c.고객번호, c.고객명
+      ,(SELECT avg(거래금액), min(거래금액), max(거래금액)
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')
+        AND 고객번호 = c.고객번호)
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+```
+
+- 그렇다고 아래처럼 바꾸면 거래 테이블에서 같은 테이블을 반복해 읽게 된다.
+```sql
+SELECT c.고객번호, c.고객명
+        ,(SELECT AVG(거래금액) FROM 거래
+          WHERE 거래일시 >= trunc(sysdate, 'mm') AND 거래번호 = c.고객번호)
+        ,(SELECT MIN(거래금액) FROM 거래
+          WHERE 거래일시 >= trunc(sysdate, 'mm') AND 거래번호 = c.고객번호)
+        ,(SELECT max(거래금액) FROM 거래
+          WHERE 거래일시 >= trunc(sysdate, 'mm') AND 고객번호 = c.고객번호)
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+```
+
+- 따라서 사실 아래와 같은 방식이 많이 사용됐다.
+```sql
+SELECT 고객번호, 고객명
+      , to_number(substr(거래금액, 1, 10))  평균거래금액
+      , to_number(substr(거래금액, 11, 10)) 최소거래금액
+      , to_number(substr(거래금액, 21))     최대거래금액
+FROM (
+  SELECT c.고객번호, c.고객명
+        , (SELECT LPAD(AVG(거래금액), 10) || LPAD(MIN(거래금액), 10) || MAX(거래금액)
+            FROM 거래
+            WHERE 거래일시 >= trunc(sysdate, 'mm')
+            AND 고객번호 = c.고객번호) 거래금액
+  FROM 고객 c
+  WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+)
+```
+
+- 11g부터는 pushdown이 도입돼 위와 같이 쓰지 않아도 된다.
+- 아래와 같이 inline view를 쓰는 게 가능해져 더 직관적으로 바뀌었다.
+```sql 
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거래
+FROM 고객 c
+    , (SELECT /*+ no_merge push_pred */
+              고객번호, avg(거래금액) 평균거래
+              , min(거래금액) 최소거래, max(거래금액) 최대거래
+      FROM 거래
+      WHERE 거래일시 >= trunc(sysdate, 'mm')
+      GROUP BY 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND t.고객번호(+) = c.고객번호
+```
+
+- pushdown을 사용하면 실행계획은 아래와 같이 VIEW PUSHED PREDICATE가 뜨게 된다.
+
+
+<img src="/image/view-pushdown.jpg" />
+
+
+- scalar subquery는 병렬쿼리에선 엔간하면 쓰면 안된다.
+  - 대량 데이터를 처리하는 병렬쿼리는 해시 조인이 효과적이다.
+- 또한 scalar subquery는 NL join이 이뤄지는 것이다. 
+  - 따라서 캐싱 효과가 작으면 random access의 부담이 있다.
+- 12c부터는 scalar subquery가 효과가 없다면 unnest 해서 merge할 수도 있다.
+- /*+ unnest merge */를 통해 목적을 달성한다.
+- 만약 unnest merge를 해서 문제가 생겼다면, no_unnest hint를 주면 된다.
+- _optimizer_unnest_scalar_sq를 false로 놓는 것은 장기적으론 좋지 않은 선택이다.
+
+<img src="/image/scalar-subquery-unnest-merge.jpg" />
