@@ -2049,9 +2049,9 @@ function ajax(){
 - 이동이 시작되는 페이지에선 아래와 같이 구성한다.
 - 한글의 경우, 인코딩 문제가 있을 수 있기 때문에 아래와 같이 URIComponent로 변환해서 가져간다.
 ```js
-var data = encodeURIComponent($("#firstAddress")+ $("#secondeAddress"));
+const data = encodeURIComponent($("#firstAddress")+ $("#secondeAddress"));
 $("#address").val(data);
-var form = document.form.addressForm;
+const form = document.form.addressForm;
 form.action = '/cardIssueDone';
 form.method = 'post'
 form.submit();
@@ -2084,11 +2084,11 @@ const address = decodeURIComponent("${address}")
 
 - 조금 복잡하게 객체로 바꿔서 보내보자.
 ```js
-var payload = {
+const payload = {
     address: encodeURIComponent($("#firstAddress")+ $("#secondeAddress"));
 }
 $("#payload").val(payload);
-var form = document.form.addressForm;
+const form = document.form.addressForm;
 form.action = '/cardIssueDone';
 form.method = 'post'
 form.submit();
@@ -2109,6 +2109,84 @@ public moveCompletePage(HttpServletRequest request) {
     mav.addObject("address", address);
 }
 ```
+
+
+- 그런데 SPA에서는 해당 방식이 작동하지 않는다.
+- SPA에서 form을 submit하면 페이지 이동을 하는게 아니라, server에 데이터를 받아오는 것이기 때문이다.
+- 따라서 SPA에서는 페이지 이동을 get으로 한다 생각하고 만들어야 한다.
+- 그럼 어떻게 해야할까? client단에 암/복호화 library를 사용하는 게 일단 가장 간단한 해결방법이다.
+- 암호화를 해서 get 쿼리 스트링으로 보낸다.
+```js
+import {encrypt} from 'enc/dec';
+
+const basicAddress = ref('');
+const additionalAddress = ref('');
+async function cardIssue(){
+    const cardIssueResponse = await cardIssue(data);
+    if(cardIssueResponse.status !== 200) {
+        alert('시발 에러야..')
+        return;
+    }
+
+    const encryptAddress = encrypt(basicAddress.value + additionalAddress.value);
+    router.push(`/cardIssueDone?address=${encryptAddress}`)
+}
+
+<input v-model="basicAddress" />
+<input v-model="additionalAddress" />
+<button type="button" id="cardIssue" @click="cardIssue" />
+```
+
+- page가 load될 때 복호화를 해서 원래 값으로 보여준다.
+```js
+const address =ref('');
+onMounted(async ()=>{
+   const decryptAddress = decrypt(router.param.address);
+   address.value = decryptAddress;
+})
+
+<input v-model="address" />
+```
+
+- 아니면 서버단에 post로 데이터 암호화 요청을 날려서 query string으로 붙인다.
+```js
+const basicAddress = ref('');
+const additionalAddress = ref('');
+function encryptAddress() {
+    const address = basicAddress.value + additionalAddress.value;
+    const result = axios.post('/encryptData', address);
+
+    return result;
+}
+
+async function cardIssue(){
+    const cardIssueResponse = await cardIssue(data);
+    if(cardIssueResponse.status !== 200) {
+        alert('시발 에러야..')
+        return;
+    }
+
+    const addressResponse = await encryptAddress();
+    const encryptedAddress = addressResponse.data.encryptedAddress;
+    router.push(`/cardIssueDone?address=${encryptAddress}`)
+}
+
+<input v-model="basicAddress" />
+<input v-model="additionalAddress" />
+<button type="button" id="cardIssue" @click="cardIssue" />
+```
+
+- 이동한 뒤에 page를 처음 load할 때 복호화 요청을 날려서 해당 주소가 복호화된 값으로 보이게 한다.
+```js
+const address =ref('');
+onMounted(async ()=>{
+   const decryptedAddressResponse = await axios.post('/decryptAddress',router.param.address);
+   address.value = decryptedAddressResponse.data.decryptAddress;
+})
+
+<input v-model="address" />
+```
+
 
 ## <span style="color:#802548">_느린 네트워크에서 CSS 무너짐_</span>
 - 3층 환경이 AP 기기가 줫구려서 너무 느렸다. 
