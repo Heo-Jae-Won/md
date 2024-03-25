@@ -1248,3 +1248,68 @@ declare global {
 
 export {} //없으면 script가 되어 오류가 난다. global은 module에서만 존재할 수 있다.
 ```
+
+
+
+# <span style="color:#802548">_this_</span>
+- this를 setTimeout같은 객체에 감싸게 되면 undefined가 뜨는 경우가 있다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(function(){
+            console.log(this.time);
+        },1000);
+    }
+}
+
+myObj.info(); //undefined
+```
+
+- js에서 this는 실행 timing에 결정되서 그런 것이다.
+- 따라서 this가 값이 있는 scope에서 지역변수로 저장하는 것도 방법이다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        const that = this; //여기서 this는 name값이 frongt다.
+        setTimeout(function(){
+            console.log(that.time);
+        },1000);
+    }
+}
+
+myObj.info(); //frongt
+```
+
+
+- 아니면 this 값을 특정한 형태로 강제하는 bind함수를 쓸 수도 있다.
+- 그러면 실행타이밍이 아니라 확실한 고정된 값에 묶인다.
+- function에 bind(this)를 하면 this가 myObj라는 객체에 묶인 새로운 함수를 반환한다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(function(){
+            console.log(that.time);
+        }.bind(this),1000);
+    }
+}
+
+myObj.info(); //frongt
+```
+
+
+- 아니면 ES6를 활용한 화살표함수를 쓰면 된다. 사실 제일 간단한 해결법이다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(() => {
+            console.log(this.name)
+        },1000);
+    }
+}
+
+myObj.info(); //frongt
+```
