@@ -2901,4 +2901,142 @@ AND b.no >= (:page - 1) * 10 + 1;
 
 - 거래PK는 (거래일자, 계좌번호, 거래순번)로 이뤄졌다.
 - 거래_X01은 (계좌번호, 거래순번, 결제구분코드)로 이뤄졌다.
-- 
+  - 그 상황에서 아래 SQL을 실행하면 TOP N 알고리즘은 타지만, sort by 연산을 생략하지 못한다.
+  - 부분범위 처리는 불가능하다는 의미다. 전체를 다 읽어야 하니 오래걸린다.
+```sql
+SELECT *
+FROM (
+  SELECT 계좌번호, 거래순번, 주문금액, 주문수량, 결제구분코드
+  FROM 거래
+  WHERE 거래일자 = :ord_dt
+  ORDER BY 계좌번호, 거래순번, 결제구분코드
+)
+WHERE ROWNUM <=50
+```
+
+- 위의 SQL의 실행계획은 아래와 같다.
+  - 어차피 거래_X01 index는 쓸수가 없다.
+  - 그럼 거래PK를 쓰는데, 하필 결제구분코드가 더 들어갔다.
+  - 그래서 sort order by 연산이 진행된 것이다.
+  - 반대로 말하면 결제구분코드만 없으면 된다. 실제로 필요하지 않다면 없애자.
+    - index가 (거래일자, 계좌번호, 거래순번)이고 거래일자가 = 조건이다.
+    - 그럼 거래일자 데이터를 계좌번호, 거래순번 순으로 정렬하면 중복 레코드가 없다.
+    - 다시 말하면 결제구분코드는 없어도 된다는 의미다. 없애면 부분범위 처리가 가능해져 매우 빨라진다.
+
+
+<img src="/image/top-n-useless-column-delete.jpg" />
+
+
+- 최소 최대를 구하는 연산도 sort 연산이 일어난다.
+- 전체 데이터를 정렬하진 않지만, 전체 데이터를 읽으면서 값을 비교한다.
+- 아래와 같이 sort aggregate라는 연산이 실행계획에 보인다.
+
+
+<img src="/image/max-sort-aggregate.jpg" />
+
+
+
+- index가 정렬되어 있다면, 전체 데이터를 읽지 않아도 된다.
+  - index를 맨 왼쪽으로 내려가면 첫번쨰 읽는 게 최소값이다.
+  - index를 맨 오른쪽으로 내려가면 첫번째 읽는 게 최대값이다.
+  - index leaf block은 양방향리스트니 왼쪽이나 오른쪽이나 가는 방향을 선택할 수 있다.
+
+<img src="/image/max-min-index-sort-aggregate.jpg" />
+
+
+- 단 위처럼 전체 데이터를 읽지 않으려면 조건이 있다.
+  - 조건절 컬럼이 index에 있어야 한다.
+  - max/min 컬럼이 index에 있어야 한다.
+- 아래의 sql을 보자.
+- deptno, mgr, sal이 모두 index에 포함되어 있으면 전체 데이터를 읽지 않아도 된다.
+- 아래는 (deptno, mgr, sal)로 index를 구성한 경우다.
+  - 이 경우 deptno와 mgr이 index access조건이다.
+```sql
+SELECT MAX(SAL) FROM EMP WHERE DEPTNO = 30 AND MGR = 7698;
+```
+
+
+- 그 경우, 아래와 같이 FIRST ROW라는 실행계획이 추가된다.
+- 매우 효율적인 min,max 연산이 이뤄졌다는 의미다.
+
+
+<img src="/image/first-row-stopkey.jpg" />
+
+- 그림으로 이해하면 아래와 같다.
+- 조건절이 모두 index access일 때의 상황이다.
+<img src="/image/max-index-range-both-access-firstrow-stop.jpg" />
+
+
+- index를 조금 바꿔서 (deptno, sal, mgr)로 구성해보자.
+  - 이 경우 deptno이 index access조건이다.
+  - mgr은 index filter조건이다.
+  - 그러나 First row key연산인 점은 변하지 않는다.
+    - deptno = 30인 index record 범위에서 가장 오른쪽으로 내려가 가장 큰 SAL 값을 읽는다.
+    - 거기서부터 스캔을 시작해 MGR = 7698을 만족하는 레코드를 찾으면 멈춘다.
+
+
+- 그림으로 이해하면 아래와 같다.
+- 조건절 선두컬럼은 index access고, 후행은 index filter인 상황이다.
+<img src="/image/max-index-range-one-access-one-filter-firstrow-stop.jpg" />
+
+
+
+- index를 조금 바꿔서 (sal, deptno, mgr)로 구성해보자.
+  - 이 경우 deptno와 mgr 모두 선두컬럼이 아니다.
+  - 따라서 index range scan이 아니라 index full scan이 일어난다.
+  - deptno와 mgr 모두 index filter 조건이된다.
+  - 그러나 First row key연산인 점은 변하지 않는다.
+    - index record 범위에서 가장 오른쪽에서 스캔을 시작한다.
+    - DEPTNO = 30이면서 MGR = 7698인 조건을 찾으면 멈춘다.
+
+
+- 그림으로 이해하면 아래와 같다.
+- 조건절 모두가 index filter인 상황이다.
+<img src="/image/max-index-full-both-filter-firstrow-stop.jpg" />
+
+
+
+
+- index를 조금 바꿔서 (deptno, sal)로 구성해보자.
+  - 이경우 조건절에 쓰인 mgr 컬럼이 없다.
+  - DEPTNO = 30이면서 MAX(SAL)인 값은 오른쪽에서부터 시작해 쉽게 찾는다.
+  - 그러나 mgr 컬럼이 index에 없어 MGR = 7698 조건은 테이블에서 필터링해야한다.
+  - 따라서 First row key연산이 작동하지 않는다.
+
+
+
+- 그림으로 이해하면 아래와 같다.
+- index column에 조건절이 없어 first row가 작동하지 않았다.
+<img src="/image/max-table-scan-not-first-row.jpg" />
+
+
+- first row key로만 빠르게 max나 min을 찾는 건 아니다.
+- 여기도 TOP N 쿼리를 활용할 수 있다.
+- 특히 여기는 index 중 하나가 빠져도 작동해서 유연하다.
+- (DEPTNO, SAL)로 구성해도 TOP N 쿼리는 작동한다.
+```sql
+SELECT *
+FROM (
+  SELECT SAL
+  FROM EMP
+  WHERE DEPTNO = 30
+  AND MGR = 7698
+  ORDER BY SAL DESC
+    )
+WHERE ROWNUM <= 1;
+```
+
+- 실행계획은 아래와 같이 나타난다.
+<img src="/image/max-topn-execution-plan.jpg" />
+
+
+- 그림으로 보면 아래와 같다.
+- MGR 컬럼이 index에 없어도, 전체 레코드를 읽지 않는다.
+- DEPTNO = 30을 만족하는 가장 오른쪽부터 역순으로 스캔하며 table을 access한다.
+- 그 중 MGR = 7698 조건을 만족하는 레코드를 하나 찾는 순간 바로 멈춘다.
+<img src="/image/max-topn.jpg" />
+
+- min으로 하고 싶다면 DESC가 아니라 AESC로 주면 된다.
+
+
+
