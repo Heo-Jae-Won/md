@@ -2187,6 +2187,7 @@ onMounted(async ()=>{
 <input v-model="address" />
 ```
 
+- post방식의 이동은 SPA의 router로는 불가능하니 시도하지 말자.
 
 ## <span style="color:#802548">_느린 네트워크에서 CSS 무너짐_</span>
 - 3층 환경이 AP 기기가 줫구려서 너무 느렸다. 
