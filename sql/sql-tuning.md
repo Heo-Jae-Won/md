@@ -2762,3 +2762,143 @@ ORDER BY c.계얄일시 DESC
 
 
 <img src="/image/join-sort-NL-hash.jpg" />
+
+
+## <span style="color:#802548">_인덱스를 이용한 소트 연산 생략_</span>
+- 아래 SQL은 인덱스 선두 컬럼을 (종목코드, 거래일시)로 구성하지 않으면, sort 연산을 생략할 수 없다.
+```sql
+SELECT 거래일시, 체결건수, 체결수량, 거래대금
+FROM 종목거래
+WHERE 종목코드 = 'KR123456'
+ORDER BY 거래일시
+```
+
+
+- 그럼 아래와 같이 실행계획에 SORT ORDER BY가 나타난다.
+
+
+<img src="/image/sortby-omit.jpg" />
+
+
+
+- 인덱스를 (종목코드, 거래일시)로 구성하면 sort by 연산이 생략된다.
+- 이 의미는 부분범위처리가 가능하다는 의미다. 전체를 보지 않아도 되기 때문이다.
+- 특히 Web 환경에서도 부분범위처리는 여전히 의미가 있다.
+- Top N 쿼리가 그 중 하나다.
+- (종목코드, 거래일시)로 index를 구성하면 열개 레코드를 읽는 순간 멈춘다.
+```sql
+SELECT * FROM (
+  SELECT 거래일시, 체결건수, 체결수량, 거래대금
+  FROM 종목거래
+  WHERE 종목코드 = 'KR123456'
+  AND 거래일시 >= '20180304'
+  ORDER BY 거래일시
+)
+WHERE ROWNUM <= 10
+```
+
+
+- 실행계획은 아래와 같이 나타난다.
+- Sort Order by는 사라지고 Count Stopkey가 생겨났다.
+
+
+<img src="/image/top-n-stopkey.jpg" />
+
+
+
+- 실제 웹의 페이징처리를 top n query를 적용하면 보통 아래와 같다.
+- top n 쿼리므로 ROWNUM으로 지정한 건수만큼 결과 레코드를 얻으면 거기서 멈춘다.
+- 뒤쪽 페이지로 이동할수록 읽는 데이터량도 많아지지만, 보통 앞쪽만 확인하니 문제가 거의 없다.
+```sql
+SELECT *
+FROM (
+  SELECT ROWNUM no, a.*
+  FROM (
+    /** SQL Body */
+
+      ) a
+  WHERE ROWNUM <= (:page * 10)
+  )
+WHERE no >= (:page - 1)*10 + 1
+```
+
+- 위와 같은 sql은 아래와 같은 원칙을 구현한 것이다.
+  - 부분범위 처리가 가능하도록 SQL을 작성한다.
+  - 작성한 SQL문을 SQL BODY쪽에 집어넣는다.
+- 이게 뜻하는 바는 아래와 같다.
+  - 인덱스 사용 가능하도록 조건절을 구사한다.
+  - 조인은 NL조인 위주로 처리한다.
+  - ORDER BY절이 있어도 소트 연산을 생략할 수 있게 인덱스를 구성한다.
+- 해당 원칙을 지켜 만든 SQL을 만든다면 아래와 같은 형태일 것이다.
+```sql
+SELECT *
+FROM (
+  SELECT ROWNUM no, a.*
+  FROM (
+    /** SQL Body */
+      SELECT 거래일시, 체결건수, 체결수량, 거래대금
+      FROM 종목거래
+      WHERE 종목코드 = 'KR123456'
+      AND 거래일시 >= '20180304'
+      ORDER BY 거래일시
+      ) a
+  WHERE ROWNUM <= (:page * 10)
+  )
+WHERE no >= (:page - 1)*10 + 1
+```
+
+
+<img src="/image/rownum-top-n-count-stopkey.jpg" />
+
+
+
+- 페이징 처리의 안티 패턴은 rownum을 지워버리는 것이다.
+- rownum을 쓸데없다고 생각하고 지우는 순간, top n stopkey 알고리즘은 멈춘다.
+```sql
+SELECT *
+FROM (
+  SELECT ROWNUM no, a.*
+  FROM (
+    SELECT 거래일시, 체결건수, 체결수량, 거래대금
+    FROM 종목거래
+    WHERE 종목코드 = 'KR123456'
+    AND 거래일시 >= '20180304'
+    ORDER BY 거래일시
+  ) a
+)
+WHERE no BETWEEN (:page -1) * 10 +1 and (:page * 10)
+```
+
+- rownum을 지우면 아래와 같이 실행계획이 바뀐다.
+- count 옆에 stopkey가 없다. 소트연산은 생략되어도 전체범위를 처리한다는 의미다.
+<img src="/image/rownum-top-n-count-no-stopkey.jpg" />
+
+
+- mysql로는 아래와 같다.
+```sql
+SELECT *
+FROM (
+  SELECT (@row_number:=@row_number + 1) AS no, a.*
+  FROM (
+    /** SQL Body */
+      SELECT 거래일시, 체결건수, 체결수량, 거래대금
+      FROM 종목거래, (SELECT @row_number:=0) AS r
+      WHERE 종목코드 = 'KR123456'
+      AND 거래일시 >= '2018-03-04'
+      ORDER BY 거래일시
+      ) a
+  ) b
+WHERE b.no <= (:page * 10)
+AND b.no >= (:page - 1) * 10 + 1;
+```
+
+
+- stopkey를 못 하면 아래와 같이 되어버린다.
+- 전체범위를 전부 훑어야 되는 것이다.
+<img src="/image/sort-omit-no-stopkey.jpg" />
+
+
+
+- 거래PK는 (거래일자, 계좌번호, 거래순번)로 이뤄졌다.
+- 거래_X01은 (계좌번호, 거래순번, 결제구분코드)로 이뤄졌다.
+- 
