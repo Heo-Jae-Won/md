@@ -1819,6 +1819,8 @@ function sendRequestOnlyOnce(ajaxFn, successCallback) {
 - 이제 ajax들은 모두 common.js에서 가져온 sendRequestOnlyOnce 함수로 wrapping할 수 있다.
 - 그러면 별다른 처리 없이 간단하게 아래와 같은 순서로 하면 중복클릭방지가 저절로 들어가는 것이다.
 - script import --> ajax 함수 정의 --> ajax의 successCallback 정의 --> 실행컨텍스트 저장을 위한 변수 정의 --> data collection --> eventListener에서 함수실행
+- 다만 여기서 ajax에 절대로 async:false 옵션이 있으면 안 된다.
+- 그럼 어떤 방식(버튼 disabled, 전역변수 flag 등..)을 쓰든 중복클릭 방지가 작동하지 않는다.
 ```js
 //teenAger.jsp
 <script src ="/my/common.js"/>
@@ -1834,8 +1836,9 @@ function testAjax(data) {
     }
 
     return $.ajax({
-                .
-                .
+                url:'~~',
+                method:'post',
+                dataType:'json',
                 data:data
             })
 }
@@ -1996,3 +1999,115 @@ async function handleLoginClick() {
     }
 }
 ```
+
+
+- 물론 아래와 같이 전역변수를 쓰는 것도 가능하다.
+```js
+var dualExistsFlag = false;
+
+function ajax(){
+    if($(this).hasClass('disabled')) {
+        return;
+    }
+
+    if(dualExistsFlag) {
+        return;
+    }
+    dualExistsFlag = true;
+
+    $.ajax({
+        url:'ddd',
+        method:'post',
+        data:data,
+        dataType:'json',
+        success:function(res,status,xhr){
+            .
+            .
+            .
+
+        },
+        error:function(){
+            .
+            .
+            .
+
+        },
+        complete:function(){
+            dualExistsFlag = false;
+        }
+    })
+}
+```
+
+## <span style="color:#802548">_post 방식으로 페이지 이동하며 한글값 가져가기_</span>
+- 개인정보 보호법을 보면, 개인정보는 URL에 노출시키는 것이 금지되어있다.
+- 따라서 get 방식 query string으로 직접 주소값을 넣을 수가 없다.
+- 암호화를 해야한다. 하지만 보통 암호화까지 하기는 부담스럽다.
+- 그런데 개인정보를 페이지 내에 보여줘야할 때가 있다. DB에서 조회하지 않고 이전 페이지 값을 통해서 말이다.
+- 카드를 발급했을 때 쓴 주소를 그 다음 페이지에 보여주는데, db에 주소 값을 저장하지는 않는 상황이라면 더더욱 그러하다.
+- 그럴땐 post를 사용해서 페이지를 이동하며, body data로 개인정보를 갖고 간다.
+- 이동이 시작되는 페이지에선 아래와 같이 구성한다.
+- 한글의 경우, 인코딩 문제가 있을 수 있기 때문에 아래와 같이 URIComponent로 변환해서 가져간다.
+```js
+var data = encodeURIComponent($("#firstAddress")+ $("#secondeAddress"));
+$("#address").val(data);
+var form = document.form.addressForm;
+form.action = '/cardIssueDone';
+form.method = 'post'
+form.submit();
+
+<form id="addressForm" name="addressForm" accept-charset='utf-8'>
+    <input type="hidden" id="address" name="address" value="" />
+</form>
+```
+
+- URI componenet는 encoding에 따라 값이 달라지지 않아 encoding 문제가 없다.
+- controller에서는 해당 값을 꺼내 돌려줄 페이지에 셋팅해준다.
+```java
+@Controller
+public moveCompletePage(HttpServletRequest request) {
+    String address = request.getParameter('address');
+    mav.addObject("address", address);
+}
+```
+
+- 이동한 페이지에서 아래와 같이 꺼내서 쓰면 된다.
+- URIComponenet로 encoding했으니 다시 decode하는 것이다.
+```js
+const address = decodeURIComponent("${address}")
+```
+
+- 인터넷에서 말하는 여러가지 설정 다해봤지만 encoding 문제가 해결이 안된다.
+- URIEncoding, request.setCharacterEncoding 등 전부 안돼서 위와 같이 조금 byte를 먹더라고 저렇게 처리하는 게 맘 편하다.
+- web.xml은 하청업체가 건드리기도 어려우니까 애초에 선택지도 아니었다.
+
+
+- 조금 복잡하게 객체로 바꿔서 보내보자.
+```js
+var payload = {
+    address: encodeURIComponent($("#firstAddress")+ $("#secondeAddress"));
+}
+$("#payload").val(payload);
+var form = document.form.addressForm;
+form.action = '/cardIssueDone';
+form.method = 'post'
+form.submit();
+
+<form id="addressForm" name="addressForm" accept-charset='utf-8'>
+    <input type="hidden" id="payload" name="payload" value="" />
+</form>
+```
+
+- URI componenet는 encoding에 따라 값이 달라지지 않아 encoding 문제가 없다.
+- controller에서는 해당 값을 꺼내 돌려줄 페이지에 셋팅해준다.
+```java
+@Controller
+public moveCompletePage(HttpServletRequest request) {
+    HashMap<String, Object> payloadMap = (HashMap<String,Object>)request.attribute('payload');
+    String address = (String) payloadMap.get("address");
+
+    mav.addObject("address", address);
+}
+```
+
+
