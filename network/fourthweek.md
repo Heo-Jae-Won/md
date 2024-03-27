@@ -145,6 +145,10 @@
     - Timer는 각 packet마다 별도로 만들지 않고 os별 공용 timer 설정을 사용한다.
     - Timeout이 되거나 3-duplicated ACK를 받았을 때 fast retransmission이 일어난다.
 
+```sh
+sudo sysctl -w net.ipv4.tcp_syn_retries=3
+```
+
 
 ## <span style="color:#802548">_출처_</span>
 - https://velog.io/@nnnyeong/Network-TCP-3-way-4-way-Handshake - tcp 3/4 way handshake
