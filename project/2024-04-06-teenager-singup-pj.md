@@ -1772,7 +1772,7 @@ function successCallback(res) {
     }
 
     poupHtml = $("#errorGuide").text(popupText);
-    popupHtml.html(). ??
+    popupHtml.html(popupHtml.html().replace(/\n/g,'<br>'));
 
     Layer.open("#errorPopup");
 }
@@ -2002,6 +2002,9 @@ async function handleLoginClick() {
 
 
 - 물론 아래와 같이 전역변수를 쓰는 것도 가능하다.
+- async는 false로 쓰면 절대 안된다.
+- async는 false로 쓰면 ajax의 success에서 return한 값을 쓰겠다는 의미다.
+- 이런 식으로 쓰면 안되고, 콜백함수를 활용해줘야 한다.
 ```js
 var dualExistsFlag = false;
 
@@ -2200,3 +2203,75 @@ onMounted(async ()=>{
 - font를 가져오는 게 가장 느렸는데, 그래서 font를 적용하지 않고 그냥 DOM을 그려버렸다.
 - 그래서 원하는 CSS가 안나왔던 것이다. 실제로 가끔 빠르게 화면이 뜨면 정상적으로 입력 CSS가 한줄에 나왔는데, 그런 이유였던 것이다.
 - 만약 느린 환경까지 고려한다면, 폰트를 최대한 압축하는 것도 중요하겠다는 생각이 들었다.
+
+
+## <span style="color:#802548">_에러코드_</span>
+- request가 서비스가 두 개를 한꺼번에 처리할 때, 성공은 같은 코드로 주어도 실패는 서로 다르게 가져가야 한다.
+- 실패를 서로 같은 코드로 주게 되면 각 서비스 실패에 관한 분기 메시지 처리가 불가능해지기 때문이다.
+- 다만 에러코드를 바라보는게 아니라, 에러 메시지를 바라보게 처리할 경우, 이러한 제약은 무의미해진다.
+- 서버에서 에러 메시지를 관리하는 경우라면 별로 문제가 없다. 따라서 서버에서 enum으로 에러 메시지를 관리할 떄, 사용자가 이해할 만한 메시지로 써야 한다.
+  
+
+
+## <span style="color:#802548">_jsp include directive_</span>
+- footer와 header를 jsp에서 넣을 땐 보통 jsp:include를 쓴다.
+- 반면에 원 jsp와 타 jsp의 HTML 및 js 소스코드가 합쳐져야 하는 경우도 있다.
+- vue로 따지면 component를 분리한 뒤 emit으로 함수를 보내는 형태다.
+- 그 땐 include directive를 쓴다.
+
+```js
+<% include file="/web-inf/jsp/transfer/financialSelectPop.jsp" %>
+```
+
+- 어디서나 쓸 수 있는 공통 오픈뱅킹 팝업 render함수를 위의 financialSelectPop.jsp에 넣는다.
+- 해당 jsp를 include할 pair jsp에서는 render 이후 일어질 일들을 프로세스처리에 필요한 함수를 규정한다.
+
+
+- financalSelectPop.jsp는 아래와 같이 만든다.
+- render함수에서 DOM의 이미지 안에 onClick 함수를 만들어놓는다.
+```html
+<html>
+    .
+    .
+    .
+    <a href="#bank">은행</a>
+    <a href="#security">증권사</a>
+    <div id="bank">
+        <ul class = "bank_popup"></ul>
+    </div>
+    <div id="security">
+        <ul class = "security_popup"></ul>
+    </div>
+</html>
+<script>
+    $.ajax({
+        .
+        .
+        .
+        success:function(res){
+            const data = res
+            renderPopup(data);
+        }
+    })
+
+    function renderPopup(data){
+        const bankHtml = [];
+        const securityHtml = [];
+        for(const element of data.list){
+            html.push(element.bankCode);
+            html.push(element.bankName);
+            .
+            .
+            html.push('<a onClick="financialSelect(this,\"+bankCode+'\',\"+  ');
+        }
+    }
+</script>
+```
+
+- 해당 onClick함수는 process를 처리하는 함수이므로, include directive를 사용한 jsp에서 정의한다.
+- 예를 들자면 계좌등록 화면이다.
+```js
+function financialSelect(obj, bankCode,...) {
+    //logic
+}
+```
