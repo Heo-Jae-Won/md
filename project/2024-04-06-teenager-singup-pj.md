@@ -2275,3 +2275,91 @@ function financialSelect(obj, bankCode,...) {
     //logic
 }
 ```
+
+## <span style="color:#802548">_실행계획과 index 조회_</span>
+- oracle execution plan은 아래와 같이 볼 수 있다.
+```sql
+EXPLAIN PLAN FOR [query문]
+
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY)
+```
+
+- mysql의 execution plan은 아래와 같이 볼 수 있다.
+```sql
+explain [query]
+```
+
+- oracle의 index 구성은 아래와 같이 볼 수 있다.
+- comment를 포함하여 보는 방법이다.
+```sql
+SELECT a.table_name
+    ,  a.index_name
+    ,  a.column_name
+    ,  b.comments
+FROM all_ind_columns a
+    , all_col_comments b
+WHERE a.table_name = 'emp'
+AND a.table_owner = b.owner
+AND a.table_name = b.table_name
+AND a.column_name = b.column_name
+ORDER BY a.index_name,
+        a.column_position
+```
+
+- oracle에서 comment 없이 index 구성만 보는 법은 아래와 같다.
+```sql
+SELECT a.table_name 
+     , a.index_name 
+     , a.column_name 
+  FROM all_ind_columns a 
+ WHERE a.table_name = 'EMP' 
+ ORDER BY a.index_name
+        , a.column_position
+```
+
+- mysql은 아래와 같이 간단하다.
+```sql
+show index from [table이름]
+```
+
+## <span style="color:#802548">_암호화 풀기_</span>
+- 암호화의 경우, get parameter로 갈 때도 이용된다.
+  - 그래서 주의할점이 바로 url-safe한 지 봐야 한다는 점이다.
+  - 특히 +(띄어쓰기)나 /(path)나 =(query string)를 유의해야 한다.
+  - 따라서 암호화한 값을 다시 base64 url-safe하게 encoding하는 게 좋다.
+- Java에서 하는 방식과 Android에서 하는 방식이 다르지 않을 확률이 높다.
+  - base64 url-safe는 공식 스펙으로 지정되어있기 때문이다.
+  - JDK 1.8이라면 Base64 package를 사용하면 되지만, 1.7에서는 공식으로 지원되지 않는다.
+  - 따라서 org.apache.commons.codec.binary.Base64 package를 사용해야한다.
+  - 소스코드는 아래와 같다.
+```java
+String encryptedData = (String)req.getParameter("encryptedString");
+byte[] encodedBytes = Base64.encodeBase64URLSafe(encryptedData.getBytes());
+String encodedString = new String(encodedBytes);
+
+byte[] decodedBytes = Base64.decodeBase64(encodedString.getBytes());
+String decodedString = new String(decodedBytes);
+```
+
+- 여기의 경우, urlsafe의 문제는 아니었다.
+- 그것보단 split의 문제였다. 우리 서버에서 저쪽으로 보낼 때, plain data가 구분자를 |로 하여 가져갔었다.
+- 주민번호|ci|고객번호|고객명|....과 같은 식이다. 그런데 빈값은 그냥 보냈다.
+- 따라서 |||고객명||...과 같은 식으로 연속 ||이 붙은 경우가 생겼다.
+- 이 경우 split으로 가져올 때 무시되어 8개만 파싱됐다.
+- 따라서 빈 값의 경우, "empty"로 주기로 결정했다.
+```java
+String[] plainDataArray= {"empty", ciNo, cusNm, phoneNo, "empty", "empty"};
+List<String> plainDataList = new ArrayList<>();
+for (String element:plainDataArray) {
+    plainDataList.add(element);
+}
+
+String entryString = StringUtils.join(plainDataList, "|");
+```
+
+- 인터넷을 찾아보니 join은 List interface만이 아니라 배열에도 가능하다고 한다.
+- 아래와 같이 수정해도 될 거 같다.
+```java
+String[] plainDataArray= {"empty", ciNo, cusNm, phoneNo, "empty", "empty"};
+String entryString = StringUtils.join(plainDataList, "|");
+```
