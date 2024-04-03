@@ -3306,7 +3306,7 @@ ORDER BY 총예수금 DESC
 
 - sort area를 최소화하는 기술로 top n sort도 있다.
 - top n sort는 top n stopkey보단 비효율적이지만, sort 용량을 크게 줄여주는 데서 의미가 있다.
-- top n stopkey를 유도하는 SQL패턴을 그대로 사용하면 된다. 거기서 index를 타지 않으면 top n sort가 된다.
+- top n stopkey를 유도하는 SQL패턴을 그대로 사용하면 된다. 거기서 index를 불완전하게 타거나 안타게되면 top n sort가 된다.
   - top n sort는 딱 가져올 만큼의 공간만 존재하면 된다. 
   - 10개라면 10개를 저장한 공간만 있으면 총데이터 집합이 엄청 커도 10개만 가져오고 멈춘다.
   - 따라서 sort area에 들어가는 건 10개의 byte뿐이다.
@@ -3408,6 +3408,311 @@ GROUP BY region
 <img src="/image/sort-group-by.jpg" />
 
 
+## <span style="color:#802548">_기본 DML 튜닝_</span>
+- 인덱스가 있으면 DML 성능이 더 떨어진다.
+  - 테이블 data block에 추가하는 것에 더해 index leaf block에도 추가해야 하기 때문이다.
+  - 그런데 index leaf block을 찾기 위해 수직적 탐색이 있어야 한다.
+  - 거기다 인덱스는 정렬된 집합이라서 정렬순서를 맞춰줘야 해서 관련 operation이 모두 이뤄진다.
+    - index가 PK만 있다면 100만건을 넣을 때 4초지만, index를 2개 더 넣으면 40초다.
+    - index 중에서도 PK, FK제약이 DML 성능에 미치는 영향이 크다.
+
+<img src="/image/index-dml.jpg" />
 
 
+
+## <span style="color:#802548">_redo로그_</span>
+- DML을 수행할 때마다 Redo 로그를 생성한다.
+- Redo 로그는 아래와 같은 목적이다.
+  - 물리적으로 디스크가 깨지면 복구(database recovery)
+  - 정전 등으로 버퍼캐시에 못들어가고 날라갔을 때 복구(cache recovery)
+  - 로그 파일에 먼저 기록하고, 동기화는 나중에 배치로 반영(fast commit)
+    - 변경된 메모리 버퍼블록과 데이터파일 블록 간 동기화는 async로 수행
+    - async라고 해도 몇 밀리초에서 수십 밀리초 정도 수준
+    - 참고로 insert에는 redo 로그를 안남기는 것도 가능하다.
+- 아래와 같이 하면 총 redo 로그 파일이 크기를 볼 수 있다.
+```sql
+SELECT 
+    ROUND(SUM(bytes) / (1024 * 1024), 2) AS "Size_MB"
+FROM 
+    v$log;
+```
+
+
+- 아래와 같이 하면 각 redo 로그 파일이 크기를 볼 수 있다.
+```sql
+SELECT 
+    member AS "Redo_Log_File",
+    bytes / (1024 * 1024) AS "Size_MB"
+FROM 
+    v$logfile;
+```
+
+- 아래와 같이 하면  현재 Redo 로그의 보관 설정을 확인할 수 있다.
+```sql
+SELECT destination, TO_CHAR(next_time, 'YYYY-MM-DD HH24:MI:SS') AS next_archive_time
+FROM v$archive_dest
+WHERE destination IN ('LOG_ARCHIVE_DEST_1', 'LOG_ARCHIVE_DEST_2'); -- 원하는 로그 보관 설정을 확인합니다.
+```
+
+
+- 새롭게 들어오는 DML은 아래와 같이 추가된 redo 로그에 기록되게 된다.
+- 다만 새로운 redo 로그를 반영하려면 DB서버를 다시 재시작시켜야 한다.
+```sql
+ALTER SYSTEM SET LOG_ARCHIVE_DEST_1 = 'LOCATION=/archivelog DESTINATION=USE_DB_RECOVERY_FILE_DEST REOPEN=60'; -- 60분 유지 설정
+ALTER DATABASE ADD LOGFILE GROUP 4 ('/arch1/log4a.rdo', '/arch2/log4b.rdo') SIZE 50M; -- redo 파일 해당 크기로 추가
+```
+
+
+## <span style="color:#802548">_undo로그_</span>
+- DML을 수행할 때마다 undo 로그(롤백)도 생성된다.
+  - redo가 트랜잭션을 재현하는 데 필요한 정보였다.
+  - undo로그의 목적은 아래와 같다.
+    - 변경된 블록을 이전 상태로 되돌리는 데 필요하다(transaction rollback)
+    - transaction recovery
+    - read consistency
+  - undo 로그는 가장 오래된 곳부터 갈아끼워지므로 과거 트랜잭션은 사라지게 된다.
+  - 실제 undo로그의 용량은 undo 테이블스페이스 크기와 undo로그가 유지되는 시간에 의해 결정된다.
+  - undo 로그는 당연하게도 db 관리자만이 변경가능하다.
+```sql
+ALTER SYSTEM SET UNDO_RETENTION = 3600; -- undo로그 유지시간은 3600초(1시간)
+ALTER DATABASE DATAFILE '/path/to/undo/datafile.dbf' RESIZE 100M; -- undo 테이블스페이스 크기 조정.
+SELECT tablespace_name, sum(bytes)/1024/1024 AS "Size_MB" -- 실제로 조정됐는지 확인
+FROM dba_data_files
+WHERE tablespace_name = 'UNDOTBS1';
+```
+
+## <span style="color:#802548">_MVCC모델_</span>
+- 오라클은 MVCC모델을 쓰는데, select문은 항상 consistent모드로 읽는다.
+- 반면에 DML을 consistent 모드로 record를 찾고, cuirrent 모드로 DML을 수행한다.
+  - consistent모드로 DML문이 시작된 지점에 존재했던 데이터 블록을 찾는다.
+  - consistent모드에서 얻은 rowid를 가지고 current모드로 원본 블록을 찾아서 갱신한다는 의미다.
+- current모드는 디스크에서 캐시로 적재된 원본 블록을 현재상태 그대로 읽는 것이다.
+- consistent 모드는 트랜잭션에 의해 변경된 블록을 만나면 쿼리가 시작된 지점으로 되돌려 읽는 방법이다.
+
+
+<img src="/image/mvcc-consistent-select.jpg" />
+
+## <span style="color:#802548">_Lock_</span>
+- lock은 트랜잭션 격리수준, 레벨과 관련이 높다. 둘 모두 높아질수록 DML 성능이 나빠진다.
+- 트랜잭션 격리성 수준은 4가지로 나뉜다. oracle은 read commited와 Serializable만 지원한다.
+  - read uncommitted
+  - read commited
+  - repeatable read
+  - serializable
+- lock 레벨은 4가지로 나뉜다. oracle은 lock 에스컬레이션은 사용하지 않는다.
+  - row
+  - block
+  - extent
+  - table
+- 그렇다고 lock수준을 떨어뜨리면 데이터 품질이 나빠진다. 동시에 들어오는 데이터 처리가 원활하지 않다.
+- 동시에 실행되는 트랜잭션 수를 최대화(고성능)하면서 DML 시 데이터 무결성을 유지(고품질)하는 게 동시성 제어다.
+
+
+## <span style="color:#802548">_commit_</span>
+- 특히 Lock에 걸린 경우 commit을 해야 lock이 풀리게 되므로 commit은 매우 중요한 역할을 한다.
+- commit은 아래와 같은 과정을 거쳐서 만들어진다.
+  - DML 실행 -> redo로그버퍼에 변경사항 기록
+  - 버퍼블록에서 데이터를 변경. 버퍼캐시에 없으면 데이터파일 읽기(disk I/O)
+  - commit
+  - LGWR process가 redo로그버퍼 내용 로그파일에 일괄 저장
+  - DBWR 프로세스가 변경된 버퍼블록을 데이터파일에 일괄 저장.
+
+
+<img src="/image/dml-process.jpg" />
+
+- 버퍼캐시가 휘발성이어서 redo 로그를 남긴다.
+- 그런데 redo 로그도 휘발성 로그버퍼에 기록하면 영속성이 보장될까?
+- 그렇다. redo로그만 디스크에 기록되어있다면 영속성이 보장된다.
+- commit 시점에 LGWR 프로세스가 꺠어나기 때문이다.
+  - 서버 프로세스가 commit record를 로브버퍼에 기록한다.
+  - 서버 프로세스가 LGWR 프로세스에 신호를 보내고 wait 큐에서 sleep상태로 전환한다.
+  - LGWR 프로세스가 로그 버퍼를 디스크에 기록하는 작업을 마친다.
+  - LGWR 프로세스가 wait 큐에 대기중인 서버 프로세스에 완료 메시지를 전송한다.
+  - 신호를 받은 서버 프로세스는 runnable 큐로 옮겨진 후 CPU를 할당받아 다음 작업을 이어간다.
+- 위에서 보았듯 LGWR 프로세스가 redo로그를 기록하는 작업은 disk I/O기 때문에 생각보다는 느리다.
+  - 트랜잭션을 너무 잘게 짜르면 disk I/O가 많아져 성능이 나빠진다.
+  - 트랜잭션을 너무 길게 유지하면 undo로그 공간이 부족해져 시스템 장애가 올 수 있다.
+- Spring에서는 @Transactional로 트랜잭션을 만드는데, 3개의 db조작 method를 모아서 하나의 method에 @Transactional을 달아준다.
+- 그럼 그 3개 중 하나만 잘못돼도 모두 rollback되는데, 이러한 작용을 할 때 transaction이 너무 긴 건 아닌지 고려해야 할 때도 있다.
+
+
+## <span style="color:#802548">_db call_</span>
+- db call은 3가지 종류가 있다.
+  - parse call
+    - SQL 파싱과 최적화. 소프트파싱이면 최적화는 생략
+  - execute call
+    - SQL 실행. DML은 여기까지 끝
+  - fetch call
+    - resultSet을 네트워크로 전송하여 사용자가 볼 수 있게 함
+- 떄로는 인입 경로에 따라 2개로 나누기도 한다.
+  - user call
+    - 네트워크를 경유해 DB외부에서 들어오는 call
+    - 대부분 WAS에서 넘어오는 call이다.
+  - recursive call
+    - DB 내부에서 발생하는 call.
+    - 주로 parse call에서 발생하는 데이터 딕셔너리조회
+    - PL/SQL로 만들어진 함수/프로시저/트리거에 내장된 SQL 실행
+- db call이 많을수록 당연히 성능이 느리다.
+- 그 중에 user call은 특히나 성능에 미치는 영향이 크다.
+  - WAS와 같은 LNA안에 있으면 낫지만, 다른 LAN이라면 특히 더 크다.
+  - PL/SQL로 recursive call을 하면 29초인것도 Java로 user call하면 210초 걸린다.
+  - 그래서 하나의 SQL에서 모든 business를 다 처리하는 게 중요하다.
+- 그게 불가능하다면 array processing을 활용하는 게 좋다.
+```java
+public void  execute() throws Exception {
+  int arraySize = 10000;
+  long[] no     = new long [arraySize];
+  long[] empno     = new long [arraySize];
+  long[] ename  = new long [arraySize];
+  long[] job  = new long [arraySize];
+  long[] mgr    = new long [arraySize];
+  long[] hiredate    = new long [arraySize];
+  long[] sal    = new long [arraySize];
+  long[] comm    = new long [arraySize];
+  long[] deptno   = new long [arraySize];
+
+  String SQLStmt = "select no, empno, ename, job, mgr" 
+                  + ", to_char(hiredate, 'yyyymmdd hh24miss'), sal, comm, deptno "
+                  + "from source";
+
+  PreparedStatement st = con.prepareStatement(SQLStmt);
+  st.setFetchSize(arraySize);
+
+  ResultSet rs = st.executeQuery();
+
+  int i = 0;
+  while(rs.next()) {
+    no [i] = rs.getLong(1); //i = 0이돼도 rs.next로 인해 어차피 다음 record를 받게 됨.
+    empno [i] = rs.getLong(2);
+    ename [i] = rs.getString(3);
+    job[i] = rs.getString(4);
+    mgr[i] = rs.getInt(5);
+    hiredate[i] = rs.getString(6);
+    sal[i] = rs.getLong(7);
+    comm[i] = rs.getLong(8);
+    deptno[i] = rs.getInt(9);
+    
+    i = i + 1
+    if(i == arraySize) {
+      insertTarget(i,no,empno,ename,job,mgr,hiredate,sal,comm,deptno);
+      i = 0;
+    }
+  }
+
+  //10,000개를 다 못채운 경우도 insert
+  if(i > 0) {
+    insertTarget(i,no,empno,ename,job,mgr,hiredate,sal,comm,deptno);
+  }
+
+  rs.close();
+  st.close();
+}
+```
+
+- insert 함수는 아래와 같다.
+```java
+public void insertTarget(int length
+                        ,long[] p_no
+                        ,long[] p_empno
+                        ,String[] p_ename
+                        ,String[] p_job
+                        ,int [] p_mgr
+                        ,String[] p_hiredate
+                        ,long[] p_sal
+                        ,long[] p_comm
+                        ,int[] p_deptno) throws Exception {
+  String SQLStmt = "insert into target "
+                  + "(no, empno, ename, job, mgr, hiredate, sal, comm, deptno) "
+                  + "values (?, ?, ?, ?, ?, to_date(?, 'yyyymmdd hh24miss'), ?, ?, ?)"                          
+
+  PreparedStatement st = con.prepareStatement(SQLStmt);
+
+  for (int i = 0; i <length; i++) {
+    st.setLong (1, p_no [i]);
+    st.setLong (2, p_empno [i]);
+    st.setString (3, p_ename [i]);
+    st.setString (4, p_job [i]);
+    st.setInt (5, p_mgr [i]);
+    st.setString (6, p_hiredate [i]);
+    st.setLong (7, p_sal [i]);
+    st.setLong (8, p_comm [i]);
+    st.setInt (9, p_deptno [i]);
+    st.addBatch();
+  };
+  
+  st.executeBatch();
+  st.close();
+}
+```
+
+
+## <span style="color:#802548">_PK제약 해제 후 배치_</span>
+- index와 무결성 제약은 DML 성능을 떨어뜨린다.
+- 그래서 배치 프로그램에서는 해당 기능을 해제하는 경우도 많다.
+- 테스트 데이터를 넣은 테이블을 만들어보자.
+```sql
+CREATE TABLE source
+as 
+SELECT b.no, a.*
+FROM (SELECT * FROM emp WHERE rownum <= 10) a
+    ,(SELECT ROWNUM AS no FROM dual CONNECT BY LEVEL <= 1000000) b;
+
+CREATE TABLE target
+AS
+SELECT * FROM source WHERE 1 = 2;
+
+ALTER TABLE target ADD CONSTRAINT
+target_pk PRIMARY KEY(no, empno);
+
+CREATE INDEX target_x1 on target(ename);
+```
+
+- source table에 천만건의 데이터가 생겼다. 
+- 이제 이를 target table에 넣어보자.
+- PK와 일반 INDEX 총 2개로 천만개를 넣으면 1분 19초가 걸린다.
+```sql
+SET TIMING ON;
+
+INSERT /*+ append */ into target
+SELECT * FROM source;
+
+commit;
+```
+
+- PK제약과 index를 해제하고 넣어보자.
+```sql
+TRUNCATE TABLE target;
+ALTER TABLE target MODIFY CONSTRAINT target_pk DISABLED DROP index; --PK 제약 해제
+ALTER INDEX target_x1 UNUSABLE;                                     --일반 INDEX 해제
+
+ALTER SESSION SET skip_unusable_indexes = true;                     --INDEX unusable 데이터 입력가능하게 설정. 기본이 true
+```
+
+- 다시 insert를 해보자.
+- 그럼 5초만에 끝난다.
+```sql
+SET TIMING ON;
+
+INSERT /*+ append */ into target
+SELECT * FROM source;
+
+commit;
+```
+
+- 그리고 다시 PK와 일반 index제약을 생성해주자.
+- 재활성화에 8초가 걸린다.
+- 총 13초밖에 안걸린다. 제약이 있는 상태에서 insert는 1분 19초가 걸렸다.
+```sql
+ALTER TABLE target MODIFY CONSTRAINT target_pk enable NOVALIDATE; -- PK제약 재활성화
+ALTER INDEX target_x1 rebuild;                                    -- 일반 index 제약 활성화
+```
+
+- NOVALIDATE 옵션을 써서 더 빠른 것도 있다.
+- 데이터 무결성 확신이 없다면 아래 query를 통해 확인해보자.
+```sql
+SELECT no, empno, count(*)
+FROM source
+GROUP BY no, empno
+HAVING COUNT(*) > 1;
+```
 
