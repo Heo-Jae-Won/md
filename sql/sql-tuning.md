@@ -3716,3 +3716,255 @@ GROUP BY no, empno
 HAVING COUNT(*) > 1;
 ```
 
+
+## <span style="color:#802548">_수정가능 조인뷰_</span>
+- 전통적인 update문으로는 다른 table과 join이 필요한 update를 할 때 select를 여러 번 하는 비효율이 발생한다.
+```sql
+UPDATE 고객 c
+SET     최종거래일시 = (SELECT MAX(거래일시) FROM 거랙
+                        WHERE 고객번호 = c.고객번호
+                        AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+        , 최근거래횟수 = (SELECT COUNT(*) FROM 거래
+                          WHERE 고객번호 = c.고객번호
+                          AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+        , 최근거래금액 = (SELECT SUM(거래금액) FROM 거래
+                          WHERE 고객번호 = c.고객번호
+                          AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+WHERE exists (SELECT 'x' FROM 거래
+              WHERE 고객번호 = c.고객번호
+              AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))                        
+```
+
+- 약 4번의 SELECT를 하는 걸 2번의 SELECT로 고칠 수도 있다.
+- 다만 여기도 총고객수가 엄청나게 많다면 버벅거릴 수 있다.
+```sql
+UPDATE 고객 c
+set (최종거래일시, 최근거래횟수, 최근거래금액) =
+    (SELECT MAX(거래일시), count(*), sum(거래금액)
+      FROM 거래
+      WHERE 고객번호 = c.고객번호
+      AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+WHERE EXISTS (SELECT 'x' FROM 거래
+              WHERE 고객번호 = c.고객번호
+              AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+```
+
+- 그래서 총고객 수가 많다면 아래와 같이 바꿔줄 수도 있다.
+- exists 서브쿼리를 hash semi join으로 바꿨다.
+```sql
+UPDATE 고객 c
+set (최종거래일시, 최근거래횟수, 최근거래금액) =
+    (SELECT MAX(거래일시), count(*), sum(거래금액)
+      FROM 거래
+      WHERE 고객번호 = c.고객번호
+      AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+WHERE EXISTS (SELECT /*+ unnest hash_sj */'x' FROM 거래
+              WHERE 고객번호 = c.고객번호
+              AND 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1)))
+```
+
+- 수정 가능 조인 뷰를 활용하면 참조 테이블과 두 번 조인하는 비효율마저도 없앨 수 있다.
+- 단, 수정 가능 조인 뷰의 경우, 1 : M 집합 중 M 집합만 DML이 허용된다.
+- 또한 1쪽 집합에 반드시 unique index 설정이 있어야만 한다. 
+- 즉 키보존 테이블이어야 한다는 의미다.
+  - 키보존 테이블이란view에 rowid를 제공할 수 있는 unique index를 가진 column이다.
+- 다만 아래 쿼리는 12c 이상 버전부터만 실행된다.
+```sql
+UPDATE
+  (SELECT /*+ ORDERED USE_HASH(c) no_merge(t) */
+    c.최종거래일시, c.최근거래횟수, c.최근거래금액
+    , t.거래일시, t.거래횟수, t.거래금액
+  FROM (SELECT 고객번호
+              , MAX(거래일시) 거래일시
+              , COUNT(*) 거래횟수
+              , SUM(거래금액) 거래금액
+        FROM 거래
+        WHERE 거래일시 >= TRUNC(ADD_MONTHS(sysdate, -1))
+        GROUP BY 고객번호
+        ) t
+  )
+  SET 최종거래일시 = 거래이릿
+    , 최근거래횟수 = 거래횟수
+    , 최근거래금액 = 거래금액
+```
+
+- 11g에서는 위의 update를 사용할 수가 없고, merge into문으로 바꿔줘야 한다.
+- 12c 이상 버전부터는 unique index가 없어도 inline view에 group by를 쓰면 에러가 나지 않는다.
+- GROUP BY를 한 집합과 조인한 테이블은 key가 보존된다는 점을 오라클에서 인정한 것이다. 
+
+## <span style="color:#802548">_merge 문 활용_</span>
+- merge문의 기본 구성은 아래와 같다.
+```sql
+MERGE INTO CUSTOMER t using customer_delta s on (t.cust_id = s.cust_id)
+WHEN MATCHED THEN update
+  SET t.cust_nm = s.cust_nm, t.email = s.email, ..
+WHEN NOT MATCHED THEN insert
+  (cust_id, cust_nm, email, ...) values
+  (s.cust_id, s.cust_nm, s.email, s.tel_no, s.region, s.addr....)
+```
+
+- 두 개 중 하나만 선택해서 할 수도 있다.
+```sql
+MERGE INTO CUSTOMER t using customer_delta s on (t.cust_id = s.cust_id)
+WHEN MATCHED THEN update
+  SET t.cust_nm = s.cust_nm, t.email = s.email, ..
+```
+```sql
+MERGE INTO CUSTOMER t using customer_delta s on (t.cust_id = s.cust_id)
+WHEN NOT MATCHED THEN insert
+  (cust_id, cust_nm, email, ...) values
+  (s.cust_id, s.cust_nm, s.email, s.tel_no, s.region, s.addr....)
+```
+
+- on 외에도 다른 조건절을 where로 걸 수도 있다.
+- 이미 저장된 데이터를 조건에 따라 지울 수도 있다.
+```sql
+MERGE INTO CUSTOMER t using customer_delta s on (t.cust_id = s.cust_id)
+WHEN MATCHED THEN 
+update SET t.cust_nm = s.cust_nm, t.email = s.email, ..
+DELETE WHERE t.withdraw_dt is not null
+WHEN NOT MATCHED THEN insert
+  (cust_id, cust_nm, email, ...) values
+  (s.cust_id, s.cust_nm, s.email, s.tel_no, s.region, s.addr....)
+```
+
+## <span style="color:#802548">_direct path I/O_</span>
+- direct path는 버퍼캐시를 경유하지 않고 직접 data block을 읽고 쓰는 I/O다.
+- 특히 대량 데이터를 읽을 때 많이 사용된다. 대용량 처리 프로그램이 읽은 data를 버퍼캐시에 넣는 건 재활용성이 나쁘기 때문이다.
+- 아래와 같은 경우에 direct path I/O가 수행된다.
+  - 병렬힌트로 select/insert
+  - direct 옵션 지정하고 SQL Loader로 데이터 적재
+  - insert ... select문에 append hint 사용
+- 쿼리에 병렬 hint를 제공하면 병렬도만큼 병렬 프로세스가 떠서 동시에 작업을 한다.
+```sql
+SELECT /*+ full(t) parallel(t 4)  */ * FROM big_table t;
+```
+
+- 위처럼 병렬도를 4로 지정하면 성능이 4배가 아니라 수십 배 빨라진다.
+- order by, group by, hash join, sort merge join의 경우 힌트로 지정한 병렬도보다 두 배 많은 프로세스가 사용된다.
+- direct path I/O가 빠른 이유는 아래와 같다.
+  - freelist를 참조하지 않고 HWM 바깥 영역에 데이터를 순차적으로 입력한다.
+  - 블록을 버퍼캐시에서 탐색하지 않는다.
+  - 버퍼캐시에 적재하지 않고, 데이터파일에 직접 기록한다.
+  - read consistency, transaction rollback, transaction recovery를 위한 undo 로깅이 없다.
+  - redo 로깅을 안 할수도 있다.
+    - 한 마디로 많은 절차가 생략되기 때문에 빠른 것이다.
+- 성능은 빨라지지만 주의점이 있다.
+  - exclusive lock이 걸린다. 따라서 transaction이 일어나는 주간에는 쓰면 안 된다.
+  - table에 여유 공간이 있어도 table 바깥 영역에 할당되어 디스크를 낭비할 수도 있다.
+    - 특히 레인지 파티션 테이블이면 이게 문제가 될 수 있다. 
+    - 과거 데이터를 delete해도 의미가 없고, 반드시 파티션을 drop해야만 디스크 공간을 반환하기 때문이다.
+
+
+<img src="/image/hwm-direct-path.jpg" />
+
+
+- insert의 경우 append를 활용하면 direct path I/O가 된다.
+- 하지만 update, delete의 경우는 append hint가 무의미하다.
+- 병렬 DML을 활용해야만 한다.
+- 다만 exclusive TM Lock이 걸리므로, transaction이 빈번한 주간에는 사용하면 안 된다.
+```sql
+ALTER session enable parallel dml;
+
+INSERT /*+ parallel(c 4)  */ into 고객 c
+SELECT /*+ parallel(o 4) */ * FROM 외부가입고객 o;
+```
+## <span style="color:#802548">_range partition_</span>
+- 파티셔닝은 테이블 또는 index data를 특정 컬럼(파티션 키) 값에 따라 별도 segment에 나눠 저장하는 것을 의미한다.
+- 파티션이 좋은 이유는 아래와 같다.
+  - 관리의 측면에서 파티션 단위로 백업, 추가 ,삭제 등이 일어나면 가용성이 높다.
+  - 성능의 측면에서 파티션 단위로 조회하고 경합하기 때문에 전체 table을 모두 조회하지 않는다.
+- 테이블 파티션의 종류는 3가지가 있다. 인덱스 파티션하고는 다르다.
+  - range
+  - 해쉬
+  - 리스트
+- range는 주로 날짜 컬럼을 기준으로 파티셔닝한다.
+```sql
+CREATE TABLE 주문 (주문번호 number , 주문일자 varchar2(8), ...)
+partition by range(주문일자) (
+  partition P2017_Q1 values less than ('20170401')
+  partition P2017_Q2 values less than ('20170701')
+  partition P2017_Q3 values less than ('20171001')
+  partition P2017_Q4 values less than ('20180101')
+)
+```
+
+- 파티션을 만들면 아래와 같은 이미지로 형성된다고 보면 된다.
+- 파티션이 있으면 원하는 파티션만 골라 읽을 수 있어 full scan의 성능이 크게 향상된다.
+<img src="/image/partition.jpg" />
+
+- 실제 파티션의 성능 향상 원리가 파티션 pruning에 있다.
+- SQL 하드파싱이나 실행 시점에 조건절을 분석한다.
+- 읽지 않아도 되는 파티션은 액세스 대상에서 제외해버린다.
+- 예를 들어보자.
+  - 1200만건의 25%를 index를 써서 조회하자니 full scan보다 느리다.
+  - 그렇다고 full scan하면 사이즈가 너무 커서 부담스럽다.
+  - 그럴 때 100만건 단위로 파티션을 나누면 일부 파티션만 읽으면 되기에 성능이 좋아진다.
+  - 특히 병렬처리와 같이 이뤄진다면 더더욱 성능이 좋다.
+
+<img src="/image/partition-fullscan.jpg" />
+
+
+## <span style="color:#802548">_hash partition_</span>
+- hash partition 은 PK처럼 변별력이 좋고 데이터 분포가 고른 컬럼을 파티션 기준으로 선정해야 한다.
+- 반드시 = 조건으로 풀려야 한다.
+
+
+## <span style="color:#802548">_list partition_</span>
+- 사용자가 정의한 그룹핑 기준에 따라 데이터를 분할한다.
+```sql
+CREATE TABLE 인터넷매물 (물건코드 varchar2(5), 지역분류 varchar2(4), ...)
+PARTITION BY list(지역분류) (
+  partition P_지역1 values ('서울')
+, partition P_지역2 values ('경기', '인천'
+, partition P_지역3 values ('부산', '대구', '대전', '광주')
+, partition P_기타 values (DEFAULT) 
+  )
+);
+```
+
+- 이 경우에는 될 수 있으면 값이 최대한 고르게 나오게끔 data를 유도하는 게 좋다.
+- 비즈니스 도메인용으로 쓰이는 테이블 파티션 종류다.
+  
+
+
+
+## <span style="color:#802548">_index partition_</span>
+- 인덱스 파티션은 3가지로 나뉜다.
+- local partitioned index
+  - table partition과 index partition이 같은 경우다.
+  - index 만들면서 뒤에 LOCAL을 붙여주면 끝이다.
+  - 오라클이 자동 관리하며, table partition 구성을 변경해도 index 재생성 안해도 됨
+  - 변경작업이 매우 빠르게 끝나므로 피크시간대만 피하면 된다.
+
+<img src="/image/local-partitioned-index.jpg" />
+
+
+- global partitioned index
+  - table partition과 index partition이 다른 경우다.
+  - index 만들면서 뒤에 GLOBAL을 붙여주면 끝이다.
+  - 비파티션 테이블에도 사용가능하다.
+  - 테이블 구성이 바뀌는 순간 index를 재생성해줘야 한다.
+
+<img src="/image/global-partitioned-index.jpg" />
+
+
+- non-partitioned index
+  - 일반 create index 문이다.
+  - 테이블 파티션 구성을 바꾸는 순간 인덱스를 재생성해야한다.
+
+
+<img src="/image/global-non-partitioned-index.jpg" />
+
+
+```sql
+CREATE INDEX 주문_X01 on 주문 (주문일자, 주문금액) LOCAL
+
+CREATE INDEX 주문_X03 on 주문 (주문금액, 주문일자) GLOBAL
+PARTITION BY RANGE(주문금액) (
+  PARTITION P_01 values less than (100000)
+  PARTITION P_MX values less than (MAXVALUE)
+)
+
+CREATE INNDEX 주문_X04 on 주문 (고객ID, 배송일자);
+```
