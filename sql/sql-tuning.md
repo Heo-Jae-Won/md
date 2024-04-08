@@ -3968,3 +3968,162 @@ PARTITION BY RANGE(주문금액) (
 
 CREATE INNDEX 주문_X04 on 주문 (고객ID, 배송일자);
 ```
+
+- 인덱스 파티션과 관련해 중요한 제약은 아래와 같다.
+- unique index(주로 PK)를 파티셔닝하려면, 테이블 파티션 키가 모두 index 구성 컬럼이어야한다는 점이다.
+- 만약 PK index 키가 주문번호인데, 파티션 키는 주문일자라면?
+  - 주문번호가 123456인 주문 레코드를 입력하려면, 중복값이 있는지 확인하려고 인덱스 파티션을 모두 탐색한다.
+  - 주문번호가 123456인 레코드는 어떤 파티션에든 입력될 수 있기 때문이다.
+  - 따라서 PK 인덱스 키를 (주문일자, 주문번호)로 해줘야 한다.
+  - 게다가 레코드를 입력하고 커밋하기 전까지, 다른 트랜잭션이 같은 주문번호로 다른 파티션에 입력하는 현상까지 막아야 한다.
+  - 그러면 추가적인 lock 메커니즘까지 필요해서 느려진다.
+
+## <span style="color:#802548">_파티션 exchange를 이용한 데이터 변경_</span>
+- 테이블이 파티셔닝되어있고, 인덱스도 다행히 로컬 파티션이라면, 임시 테이블을 만들어 원본 파티션과 바꿔치기하기도 한다.
+- 만약 상태코드가 추가되면서 기존 상태코드도 바꾸기로 결정했다고 해보자.
+- 그럼 기존의 상태코드들을 모두 바꿔야 할 것이다. 그런데 그냥  update하기에는 index 구조 등 시간이 오래걸린다.
+- 따라서 만약 파티션 테이블이라면 미리 임시 파티션 테이블을 바꾼 상태코드로 복제해서 만든다. 
+- 프로세스는 아래와 같이 진행하면 된다.
+```
+1. 임시 테이블을 생성한다. 가능하면 nologging 모드
+2. 거래데이터를 읽어 임시 테이블에 insert하면서 상태코드 값을 수정한다.
+3. 임시 테이블에 원본 테이블과 같은 구조로 index를 insert한다. 가능하면 nologging 모드
+4. 2014년 12월 파티션과 임시 테이블을 exchange한다.
+5. 임시 테이블을 drop한다.
+6. 만약 nologging모드였다면, 파티션을 logging 모드로 전환한다.
+```
+
+
+- sql로는 아래와 같다.
+```sql
+1. CREATE TABLE 거래_t nologging as SELECT * FROM 거래 WHERE 1 = 2;
+
+2. INSERT /*+ append */ into 거래_t
+SELECT 고객번호, 거래일자, 거래순번, (CASE WHEN 상태코드 <> 'ZZZ' THEN 'ZZZ' ELSE 상태코드 END) 상태코드
+FROM 거래
+WHERE 거래일자 < '20150101'
+
+1. CREATE UNIQUE INDEX 거래_t_pk on 거래_t (고객번호, 거래일자, 거래순번) nologging;
+CREATE INDEX 거래_t_x1 on 거래_t(거래일자, 고객번호) nologging;
+CREATE INDEX 거래_t_x2 on 거래_t(상태코드, 거래일자) nologging;
+
+1. ALTER TABLE 거래
+EEXCHANGE PARTITION p201412 WITH TABLE 거래_t
+INCLUDING INDEXES WITHOUT validation;
+
+1. DROP TABLE 거래_t;
+
+2. ALTER TABLE 거래 MODIFY partition p201412 logging;
+ALTER TABLE 거래_pk MODIFY partition p201412 logging;
+ALTER TABLE 거래_x1 MODIFY partition p201412 logging;
+ALTER TABLE 거래_x2 MODIFY partition p201412 logging;
+```
+
+
+## <span style="color:#802548">_파티션 truncate를 이용한 데이터 삭제_</span>
+- 그냥 delete를 하면 굉장히 느리다.
+- 아래와 같은 기나긴 추가과정을 거쳐야 한다.
+```
+1. 테이블 레코드 삭제
+2. 테이블 레코드 삭제에 대한 undo logging
+3. 테이블 레코드 삭제에 대한 redo logging
+4. 인덱스 레코드 삭제
+5. 인덱스 레코드 삭제에 대한 undo logging
+6. 인덱스 레코드 삭제에 대한 redo logging
+7. undo에 대한 redo logging(2번과 5번)
+```
+
+
+
+- 따라서 partition drop이나 truncate를 하면 시간이 크게 단축된다.
+- 정말 간단한 경우는 아래와 같이 진행한다.
+```sql
+ALTER TABLE 거래 DROP PARTITION p201412;
+```
+
+- 만약 조건절이 복잡하다면?
+- 임시 테이블(거래_t)를 생성하고, 남길 데이터만 복제한다.
+- 프로세스는 아래와 같다.
+```
+1. 임시 테이블을 생성하고, 남길 데이터만 복제한다.
+2. 삭제 대상 테이블 파티션을 truncate한다.
+3. 임시 테이블에 복제해 둔 데이터를 원본 테이블에 입력한다.
+4. 임시 테이블을 drop한다.
+```
+
+- sql로는 아래와 같다.
+```sql
+1. CREATE TABLE 거래_t
+AS 
+SELECT *
+FROM 거래
+WHERE 거래일자 < '20150101'
+AND 상태코드 = 'ZZZ'
+
+2. ALTER TABLE 거래 TRUNCATE PARTITION p201412;
+
+3. INSERT INTO 거래
+SELECT * FROM 거래_t;
+
+4. DROP TABLE 거래_t;
+```
+
+
+- 서비스 중단 없이 파티션을 drop 또는 truncate하려면 아래 조건을 모두 만족해야 한다.
+  - 파티션키와 커팅 기준 컬럼일 일치
+    - 파티션 키와 조건절 컬럼이 모두 신청일자
+  - 파티션 단위와 커팅 주기가 일치
+    - 월단위 파티션을 월 주기로 조건절 걸음
+  - 인덱스가 모두 로컬 파티션 인덱스
+    - 파티션 키가 PK 구성에 포함되어야 함.
+
+
+## <span style="color:#802548">_direct path I/O를 이용한 데이터 삽입_</span>
+- 비파티션의 경우에는 index를 unusable 하는 방식을 사용한다.
+- 프로세스는 아래와 같다.
+```
+1. 테이블을 nologging 모드로 전환
+2. index를 unusable 상태로 전환
+3. direct path I/O로 데이터 입력
+4. no logging 모드로 index 재생성
+5. nologging 모드를 logging모드로 전환
+```
+
+
+- sql로는 아래와 같다.
+```sql
+1. ALTER TABLE taregt_t nologging;
+
+2. ALTER INDEX target_t_x01 unusable;
+
+3. INSERT /*+ append   */ INTO target_t
+SELECT * FROM source_t;
+
+4. ALTER INDEX target_t_x01 REBUILD nologging;
+
+5. ALTER TABLE target_t logging;
+ALTER INDEX target_t_x01 logging;
+```
+
+
+- 보통 엔간하면 index를 unusable로 전환하지 않고 insert를 하지만, 조건이 만족된다면 unusable을 한다.
+  - table이 partitioned다.
+  - index가 local partition이다.
+- 프로세스는 아래와 같다.
+- 아까전과 크게 다른 게 거의 없다. 그저 작업이 파티션 단위로 이뤄지는 점만 다르다.
+```sql
+1. ALTER TABLE taregt_t MODIFY partition p_201712 nologging;
+
+2. ALTER INDEX target_t_x01 MODIFY partition p_201712 unusable;
+
+3. INSERT /*+ append   */ INTO target_t
+SELECT * FROM source_t WHERE dt BETWEEN '20171201' AND '20171231';
+
+4. ALTER INDEX target_t_x01 REBUILD partition p_201712 nologging;
+
+5. ALTER TABLE target_t MODIFY PARTITION p_201712 logging;
+ALTER INDEX target_t_x01 MODIFY partition p_201712 logging;
+```
+
+
+## <span style="color:#802548">_LOCK_</span>
