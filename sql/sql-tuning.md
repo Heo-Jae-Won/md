@@ -4127,3 +4127,161 @@ ALTER INDEX target_t_x01 MODIFY partition p_201712 logging;
 
 
 ## <span style="color:#802548">_LOCK_</span>
+- 오라클은 공유 리소스와 사용자 데이터를 보호할 목적으로 lock을 사용한다.
+  - DML lock
+  - DDL Lock
+  - latch
+  - buffer lock
+  - library cache lock
+  - pin
+- 가장 중요한 것은 DML Lock이다. 
+- DML Lock은 동시 트랜잭션에 대한 데이터의 무결성을 보호하는 핵심 기법이다.
+- DML Lock은 두 가지로 나뉜다.
+- Table Lock
+  - TM Lock이라고도 부른다.
+  - table Lock은 모드가 여러가지인데, 선행 트랜잭션이 특정 모드가 되면 후행 트랜잭션은 그에 호환되어야 한다.
+  - Table Lock은 후행 트랜잭션은 절대 접근못하게 막는 그런 개념이 아니다. 다음에 올 수 있는 모드를 제시하는 푯말에 가깝다.
+  - 예를 들어 insert, update, delete, merge를 하려고 row lock을 설정한다면 table에 먼저 RX 모드 table lock을 설정해야 한다.
+  - 호환이 안 되는 모드는 기다리던지(wait 3), 포기하던지 해야 한다.(nowait)
+
+
+<img src="/image/table-lock.jpg" />
+
+
+- Row Lock
+  - 두 개의 동시 transaction이 같은 row를 변경하는 것을 방지한다.
+  - row lock은 모두 배타적 모드를 사용한다.
+  - update와 delete를 할 때는 어떤 경우에도 row lock이 걸린다.
+  - insert의 경우 unique index일 때만 row lock이 걸린다.
+  - select의 경우 row lock이 없다. MVCC 모델이라 consistency 모드로 읽기 떄문이다.
+  - mysql은 select에도 공유 lock을 사용하기에 DML과 SELECT도 서로 경합한다.
+- lock이 오래 지속될수록 SQL을 오래 붙잡기에 프로세스가 늘어지고 성능이 떨어지게 된다.
+- lock을 오래 지속시키지 않는 기법이 바로 적절한 commit이다.
+- commit을 해야 lock이 풀리기 때문이다.
+- commit은 너무 자주 해도, 너무 안 해도 좋지 않다.
+- transaction을 적절하게 잘 잘라서 사용해야 한다.
+- 옵션은 아래와 같다.
+
+
+```sql
+commit write immediate wait     -- LGWR이 로그버퍼를 파일에 기록했다는 완료 메시지를 받을 떄까지 대기
+commit write immediate nowait;  -- LGWR을 기다리지 않고 다음 transaction 수행
+commit write batch wait;        -- commit 명령을 받을 때마다 LGWR이 로그 버퍼를 파일에 기록
+commit write batch nowait;      -- session 내부에 transaction data를 일정량 buffering했다가 일괄 처리
+```
+
+
+- lock에 따른 장애가 일어나기도 하는 데 아래 두가지 상황이 있다.
+  - blocking
+    - 선행 transaction이 설정한 lock 때문에 후행 transcation이 작업을 진행하지 못하고 멈춰 있는 상태다.
+  - deadlock
+    - DB Deadlock은 상대방이 소유하고 있는 Lock을 요청해서 작업의 처리를 진행하지 못하는 상태다.  
+    - 이를 먼저 인지한 transaction이 롤백을 진행한다. 롤백이 되면 이제 blocking 상태로 전환된다.
+    - blocking 상태에서 커밋을 할지, 롤백을 할 지 결정해야 대기를 지속하지 않는다.
+
+
+## <span style="color:#802548">_동시성 제어_</span>
+- 비관적 동시성 제어와 낙관적 동시성 제어로 나뉜다.
+  - 비관적 동시성 제어
+    - 사용자들이 같은 데이터를 동시에 수정할 것으로 가정한다.
+    - 한 사용자가 데이터를 읽는 시점에 lock을 걸고 조회/갱신처리가 완료될때까지 유지
+    - 첫 사용자가 transaction을 완료할 때까지 해당 data 수정이 불가능
+    - 주로 select for update로 구현한다. 특히 무한대기에 이르지 않게 for update wait 3를 준다.
+    - 3초 뒤에도 update가 이뤄지지 않으면 oracle이 exception을 던지고, Spring에서도 exception을 인식한다.
+    - 대신 Spring에서 exception을 인식하는 예외처리를 반드시 사용자가 알 수 있게 해줘야 한다.
+    - select는 DML과 서로 양립가능하기 때문에 select for update가 걸려도 다른 사용자가 select하는 데는 문제가 없다.
+    - 다만 실제 JPA나 mybatis에서는 method 단위로 tranasction이 묶이기에 실제로 사용하기는 어렵다.
+    - 특히 webpage의 경우, fetch를 위한 select와 수정을 위한 udpate가 다른 tranasction이다.
+    - 이럴 땐 낙관적 동시성 제어를 사용하는 게 더 수월하다.
+  - 낙관적 동시성 제어
+    - 사용자들이 같은 데이터를 동시에 수정하지 않을 것으로 가정한다.
+      - 한 사용자가 데이터를 읽는 시점에 lock을 설정하지 않는다.
+      - 대신 수정 시점에 앞서 읽은 데이터가 다른 사용자에 의해 변경되었는지 검사 필요
+      - 이전의 값을 받아서 그대로 같이 update를 쳐주는데 count가 0이면 다른 사용자에 의해 변경됨을 알린다.
+```sql
+SELECT 적립포인트, 방문횟수, 최근방문일시, 구매실적 into :a, :b, :c, :d
+FROM 고객
+WHERE 고객번호 = :cust_num;
+
+UPDATE 고객
+SET 적립포인트 = :적립포인트
+AND 적립포인트 = :a
+AND 방문횟수 = :b
+AND 최근방문일시 = :c
+AND 구매실적 = :d
+
+if sql%rowcount = 0 THEN
+  alert('다른 사용자에 의해 변경되었습니다.');
+end if;
+```
+
+
+- 만약 최종변경 일시를 관리한다면 아래와 같이 쵲오변경일시만 검색해주면 된다.
+```sql
+SELECT 적립포인트, 방문횟수, 최근방문일시, 구매실적 into :a, :b, :c, :d
+FROM 고객
+WHERE 고객번호 = :cust_num;
+
+UPDATE 고객 SET 적립포인트 = :적립포인트, 변경일시 = SYSDATE
+WHERE 고객번호 = :cust_num
+AND 변경일시 = :mod_dt;
+
+if sql%rowcount = 0 THEN
+  alert('다른 사용자에 의해 변경되었습니다.');
+end if;
+```
+
+- 아니면 update 전에 select for update를 할 수도 있다.
+- 대신 비관적 lock과 달리 무조건 nowait 옵션을 써야 한다.
+- 대신 Spring에선 하나의 transaction으로 묶이게 @Transactional을 달아줘야 된다.
+```sql
+--method1
+SELECT 고객번호
+FROM 적립
+WHERE 고객번호 = :cust_num
+AND 변경일시 = :mod_dt
+FOR UPDATE NOWAIT;
+
+if(rowCount > 0) {
+  method2();
+}
+--method2
+update 고객번호
+SET 적립포인트 = :적립포인트
+WHERE 고객번호 = :cust_num
+```
+
+- 특히 상품조회의 경우, 가격은 반드시 비관적이든 낙관적이든 lock을 구현해야만 한다.
+- 아래와 같이 주문을 구현해서는 안 된다. 상품가격을 상품 공급업체가 결정하기 때문이다.
+```sql
+INSERT INTO 주문(상품코드, 고객ID, 주문일시, 상점번호, ...)
+values(#{상품코드}, #{고객ID}, #{주문일시}, #{상점번호}, ...)
+```
+
+- 따라서 아래와 같이 table에 있는 값을 select해오는 형태로 구현되어야 한다.
+- 주문을 하려고 주문 페이지에 들어오고 주문을 누르려는 직전에 상품 공급업체가 가격을 바꿀수도 있다.
+- 그래서 웹페이지에서 본 가격을 지닌 상품이 있는지 판단하기 위한 조건절에도 넣어줘야 한다.
+```sql
+INSERT INTO 주문
+SELECT :상품코드, :고객ID, :주문일시, :상점번호, ...
+FROM 상품
+WHERE 상품코드 = :상품코드
+AND 가격 = :가격 --주문을 시작한 시점 가격
+
+if sql%rowcount = 0 THEN
+  alert('상품가격이 변경되었습니다.');
+end if;
+```
+
+- 비관적 동시성 제어는 성능을 떨어뜨리기 때문에 select for update는 자주 쓰이지 않지만, 데이터 무결성을 위해 필요하면 꼭 써야한다.
+- 부담된다면 처음엔 낙관적 동시성 제어를 하고, 데이터가 변경된게 발견된다면 롤백하고 다시 시도할 때 비관적 동시성 제어를 사용하는 방식이다.
+- 혹시 select를 join으로 가져온다면, for update를 하게 되면 양쪽 table에 모두 lock이 걸린다.
+- 그럴 때 한쪽 table에만 lock을 걸고 싶다면 아래와 같이 해줄 수 있다. 주문 table에만 lock이 걸린다.
+```sql
+SELECT b.주문수량
+FROM 계좌마스터 a, 주문 b
+WHERE a.고객번호 = :cust_no
+AND b.계좌번호 = a.계좌번호
+AND b.주문일자 = :ord_dt
+FOR UPDATE OF b.주문수량
+```
