@@ -4285,3 +4285,72 @@ AND b.계좌번호 = a.계좌번호
 AND b.주문일자 = :ord_dt
 FOR UPDATE OF b.주문수량
 ```
+
+## <span style="color:#802548">_채번방식에 따른 INSERT 성능 비교_</span>
+- 신규 데이터를 입력하려면 PK 중복을 방지하기 위한 채번이 선행되어야 한다.
+- PK를 채번하는 데는 4가지 방법이 있다.
+  - IDENETITY
+  - 채번 테이블
+  - 시퀀스 오브젝트
+  - MAX + 1 조회
+- IDENTITY는 12c 버전부터만 사용 가능하다.
+- 채번 테이블의 경우를 살펴보자.
+  - 결번이 없다.
+  - 복합 컬럼 PK를 만들 수 있다.
+  - 성능이 안 좋다.
+    - 채번 레코드를 변경하기 위한 row lock 경합
+    - 동시 INSERT가 심하면 채번 table data block 자체도 경합
+    - 그래서 잘 안 쓰인다.
+- 시퀀스 오브젝트를 살펴보자.
+  - IDENTITY 이전에 가장 널리 쓰이는 방식이다.
+  - 시퀀스 오브젝트는 오라클 내부에서 관리하는 채번 테이블이다.
+  - 단점으로는 채번 이후 롤백, instance 재가동, 삭제에 따라 결번이 생긴다는 점이다.
+  - 시퀀스는 비록 lock이 걸리지만 성능이 빠르다.
+  - 로우 캐시 lock
+    - 딕셔너리 정보(테이블, index, tablespace, data file, segment, extent, user, constraint, sequence, DB link)는 disk가 아닌 SGA에서 가져온다.
+    - SGA이기 때문에 공유되는 영역이라 접근 직렬화가 필요하다. 동시에 nextval이 호출되면 row cache에서 시퀀스 레코드를 변경한다.
+    - 시퀀스 레코드를 변경할 때 시퀀스 채번에 의한 로우 캐시 lock 경합을 줄이려면 해당 cache를 1000까지 늘리면 된다. 기본은 20이다.
+  - 시퀀스 캐시 lock
+    - 시퀀스 레코드를 변경할 때가 아니라 시퀀스 값을 얻어올 때도 lock이 필요하다.
+  - SV lock
+    - RAC 환경(이중화 같은 느낌)에선 sequence를 쓰려면 ORDER 옵션이 필요하다.
+    - ORDER 옵션을 사용하면 SV Lock으로 시퀀스 캐시에 대한 액세스를 직렬화한다.
+  - 
+- MAX + 1 조회를 살펴보자.
+  - 해당 방법은 시퀀스나 채번 테이블같이 별도 테이블이 필요 없다.
+  - PK가 복합컬럼일 때도 사용가능하다.
+  - 단점으론 다중 tranasction이 많아지면 성능이 급격히 나빠진다.
+
+
+## <span style="color:#802548">_sequence보다 나은 채번 방식_</span>
+- 시퀀스보다 좋은 솔루션은 PK를 만들 때, 입력일시를 같이 붙이는 방식이다.
+- PK 구분속성에다가 입력일시를 같이 붙여주면 lock 이슈를 거의 해소할 수 있다.
+- PK를 (구분속성, 입력일시)와 같이 구성하는 것이다. 구분속성이 앞에 와야 한다.
+  - 그럼 특히 파티션 단위로 데이터를 삭제할 때 굉장히 유용하다.
+  - 특히 데이터가 빠르게 대량으로 쌓이는 환경이면 데이터 삭제하기가 쉬워야 한다.
+  - 삭제할 공간을 바로 시스템에 반납시켜야 DB를 scale-up하는 데 드는 비용이 적다.
+    - 그 떄 입력일시를 PK에 포함시키면 파티션키(입력일시)가 PK에 포함된다.
+    - 서비스 중단 없이 매우 빠르게 partition drop/truncate를 수행할수 있다는 의미다.
+  
+
+## <span style="color:#802548">_INSERT가 빨라도 문제_</span>
+- INSERT가 너무 빨라도 INDEX 경합이 생긴다. 특히 채번 과정이 없으면 INDEX BLOCK 경합이 나타난다.
+- INSERT 하는 row는 달라도, 같은 INDEX LEAF BLOCK을 갱신하려니 프로세스 간 버퍼 LOCK 경합이 발생한다.
+- 특히 순차적으로 값이 증가하는 일련번호, 입력일시 등의 단일컬럼 인덱스는 right growing이라서 이런 현상이 심하다.
+- 이러한 경우 RAC 환경에서는 특히나 더 심각한 성능 저하를 일으킨다. 여러 instance가 동시에 current block을 주고받으면 값을 입력해서다.
+- 해결방법으론 아래와 같다.
+  - 복합 컬럼에서는 거의 일어나지 않으니 복합 컬럼으로 만드는 것도 좋은 선택이다. 
+  - 인덱스를 해쉬 파티셔닝한다.
+  - 12c의 경우, global 시퀀스와 session sequence를 만든다.
+```sql
+CREATE sequence g_seq global;
+CREATE sequence s_seq session;
+```
+
+- 글로벌 시퀀스는 커넥션 풀 프로세스가 DB에 접속하는 순간 호출된다.
+- 세션 시퀀스는 INSERT를 수행할 때 호출한다.
+- 따라서 아래와 같이 PK를 만들면 서로 다른 index leaf block에 값을 입력해 경합이 없다.
+```sql
+INSERT INTO t(id, c1,c2) values
+(to_char(g_seq.currval, 'fm0000') || to_char(s_seq.nextval,'fm0000'), 'A', 'B')
+```
