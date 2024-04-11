@@ -812,12 +812,14 @@ AND 거래일자 BETWEEN :trd_dt1 and :trd_dt2
 
 ## <span style="color:#802548">_index 구성 보기_</span>
 - oracle에서 comment 없이 index 구성만 보는 법은 아래와 같다.
+- column_position이 1번이면 leading column, 2번이면 그 뒤에 붙는 컬럼이라고 보면 된다.
 ```sql
 SELECT a.table_name 
      , a.index_name 
      , a.column_name 
+     , a.column_position 
   FROM all_ind_columns a 
- WHERE a.table_name = 'EMP' 
+ WHERE a.table_name = '테이블 이름' 
  ORDER BY a.index_name
         , a.column_position
 ```
@@ -1753,8 +1755,6 @@ FROM (
     )
 WHERE rownum <= 11
 ```
-
-
 
 
 ## <span style="color:#802548">_SORT를 피하는 SQL 3 -first row_</span>
