@@ -16,6 +16,8 @@
     - 공유기를 사용한 인터넷 접속 환경일 경우 공유기까지는 공인 IP 할당을 한다.
     - 공유기에 연결되어 있는 가정이나 회사의 각 네트워크 기기에는 사설 IP를 할당한다.
     - 사설 IP는 어떤 네트워크 안에서 내부적으로 사용되는 고유한 주소이다.
+    - linux에서 named.conf를 구성할 때는 공인IP를 활용해야 한다.
+    - 인터넷에서 쓰이는 것은 공인IP이기 때문이다.
 
 
 - linux에서 공인 IP와 사설IP를 모두 볼 때는 아래와 같은 명령어를 사용한다.
@@ -193,6 +195,48 @@ traceroute google.com
   - Ping of Death
     - 최대 허용 크기보다 큰 패킷을 전송하는데, 처음에는 세그먼트로 쪼개지니 용량제한이 걸리지 않는다.
     - 대상 컴퓨터에서 조각을 다시 조립하려고 하면 합계가 크기 제한을 초과하고 버퍼 오버플로가 발생한다.
+
+
+## <span style="color:#802548">_웹 브라우저에 URL을 입력하면 벌어지는 일_</span>
+1. 주소창에 URL을 입력하고 Enter를 입력한다.
+
+2. 웹 브라우저가 URL을 해석한다.
+- URL 문법에 맞지 않으면 입력을 웹 브라우저의 기본 검색엔진으로 검색 요청을 한다.
+
+3. URL이 문법에 맞으면 URL에 인코딩을 적용한다.
+- URL은 역사적으로 US-ASCII 문자 집합을 사용해왔다. 만약 URL에 US-ASCII가 아닌 문자가 존재하면 인코딩 해줘야한다.
+- 도메인 네임은 퓨니코드(Punnycode) 인코딩을 적용한다.
+- 도메인 네임이하 경로에는 퍼센트 인코딩을 적용한다.
+
+4. HSTS(HTTP Strict Transport Security) 목록을 로드한다.
+- HSTS : HTTP 대신 HTTPS만을 사용하여 통신해야 한다고 웹 사이트가 웹 브라우저에 알리는 보안 기능
+- HSTS 목록에 있으면 HTTPS로 요청한다.
+- 목록에 없는 경우 HTTP로 요청한다.
+
+5. DNS(Domain Name Server)를 조회하여 IP주소를 얻어낸다.
+- 브라우저 cache에 해당 domain이 존재 하는지 확인한다.
+- 호스트 파일(hosts)에 해당 domain이 존재 하는지 확인한다.
+- 1, 2가 실패했을 경우 DNS로 요청을 보낸다.
+
+6. ARP(Address Resolution Protocol)로 IP주소에 대한 MAC 주소를 얻어낸다.
+
+7. TCP 통신을 시작한다.
+- 3-way-handshake를 통해 TCP 연결을 확립한다.
+- 4-way-handshake를 통해 TCP 연결을 종료한다.
+
+8. HTTPS인 경우 SSL(TLS) handshake 과정이 추가된다.
+
+9. HTTP 프로토콜로 요청한다.
+
+10. HTTP 서버가 응답한다.
+
+11. 웹 브라우저가 렌더링한다.
+- 서버가 리소스(HTML, CSS, JS, Image)를 브라우저에게 제공하면
+- DOM Tree, CSSSOM Tree, Render Tree를 만들고 렌더링한다.
+    - DOM(Document Object Model) : HTML 요소들의 구조화된 표현
+    - CSSOM(Cascading Style Sheets Object Model) : 요소들과 연관된 스타일 정보의 구조화된 표현
+    - Render Tree : DOM Tree와 CSSSOM Tree를 결합하여 렌더링 트리를 기준으로 화면에 페인팅한다.
+
 
 ## <span style="color:#802548">_출처_</span>
 https://study-recording.tistory.com/m/7 - IP
