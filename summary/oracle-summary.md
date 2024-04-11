@@ -1508,6 +1508,12 @@ WHERE ROWNUM <= 10
 
 - 실행계획은 아래와 같이 나타난다.
 - Sort Order by는 사라지고 Count Stopkey가 생겨났다.
+- COUNT STOPKEY만 있고 SORT ORDER BY STOPKEY가 없으면 top n stopkey로 가장 좋은 경우다.
+- COUNT STOPKEY가 있고 SORT ORDER BY STOPKEY가 있으면 top n sort로 그래도 괜찮은 경우다.
+- COUNT가 있고 SORT ORDER BY가 있으면 top n query 어느것도 이용하지 못한 경우다. 
+  - sort를 하게 되는데, 필요한만큼만 덜어서 PGA를 채우지 못하기 때문에 disk I/O가 일어날 확률이 높아진다.
+- COUNT가 있고 SORT ORDER BY가 없는 경우도 top n query 어느것도 이용하지 못한 경우다.
+  - 그래도 sort는 하지 않기 때문에 disk I/O가 일어날 확률은 낮다. COUNT + SORT ORDER BY보단 성능이 낫다.
 
 
 <img src="/image/top-n-stopkey.jpg" />
@@ -1562,7 +1568,8 @@ WHERE no >= (:page - 1)*10 + 1
 
 
 - 페이징 처리의 안티 패턴은 rownum을 지워버리는 것이다.
-- rownum을 쓸데없다고 생각하고 지우는 순간, top n stopkey 알고리즘은 멈춘다.
+- rownum을 쓸데없다고 생각하고 지우는 순간, top n query 알고리즘은 멈춘다.
+- 더 문제는 top n sort 마저도 작동하지 않아 pr, pw를 해야할 수도 있다는 사실이다.
 ```sql
 SELECT *
 FROM (
@@ -1579,7 +1586,7 @@ WHERE no BETWEEN (:page -1) * 10 +1 and (:page * 10)
 ```
 
 - rownum을 지우면 아래와 같이 실행계획이 바뀐다.
-- count 옆에 stopkey가 없다. 소트연산은 생략되어도 전체범위를 처리한다는 의미다.
+- count 옆에 stopkey가 없다. 소트연산은 생략되어도 top n query가 작동하진 않는다.
 <img src="/image/rownum-top-n-count-no-stopkey.jpg" />
 
 
@@ -1588,7 +1595,7 @@ WHERE no BETWEEN (:page -1) * 10 +1 and (:page * 10)
 <img src="/image/sort-omit-no-stopkey.jpg" />
 
 - 또 다른 안티 패턴은 아래와 같이 rownum의 <= 조건에서 rownum을 별칭으로 사용하는 것이다.
-- 그럼 stopkey 알고리즘이 사라진다. 따라서 전체범위를 훑게 된다.
+- 그럼 top n query 알고리즘은 멈춘다. 따라서 전체범위를 훑게 된다.
 ```sql
 SELECT *
 FROM (
@@ -1607,7 +1614,7 @@ WHERE no >= (:page - 1)*10 + 1
 ```
 
 - 또 다른 안티 패턴은 아래와 같이 body SQL에서 형변환을 해버리는 것이다.
-- 그럼 가공된 컬럼이 되어, 정렬이 필요해지고 stopkey 알고리즘이 사라진다. 따라서 전체범위를 훑게 된다.
+- 그럼 가공된 컬럼이 되어, 정렬이 필요해지고 top n query 알고리즘은 멈춘다. 따라서 전체범위를 훑게 된다.
 ```sql
 SELECT *
 FROM (
@@ -1646,8 +1653,6 @@ FROM (
   )
 WHERE no >= (:page - 1)*10 + 1
 ```
-
-
 
 - 거래PK는 (거래일자, 계좌번호, 거래순번)로 이뤄졌다.
 - 거래_X01은 (계좌번호, 거래순번, 결제구분코드)로 이뤄졌다.
@@ -1728,6 +1733,26 @@ SELECT * FROM (
 WHERE ROWNUM <= 1
 ```
 
+
+- top n sort를 응용하면 더보기도 만들어줄 수 있다.
+- index 구성이 모자라서 top n stopkey로 작동은 못해도 top n sort로는 작동가능하다.
+```sql
+SELECT CASE WHEN COUNT(1) = 11  THEN 1 ELSE 0 END AS HAS_MORE
+FROM (
+  SELECT board_sqno
+  FROM board
+  WHERE board_clf = #{board_clf}
+  AND board_display = 'Y'
+  <if test = "latestNo != null" >
+    AND board_sqno < #{latestNo}
+    AND board_display_fix_yn <> 'Y'
+  </if>
+  ORDER BY board_display_fix_yn DESC
+          , board_display_order ASC
+          , board_sqno DESC
+    )
+WHERE rownum <= 11
+```
 
 
 
@@ -2482,9 +2507,11 @@ AND EXIST (
 - 총 읽은 data block의 갯수는 38103개(join 38,097개 + exists 6개)다.
   - join 과정에서 총 38,097개 data block을 읽었다.
     - 처음 상품 table full scan을 하며 95개의 cr을 읽는다.
-    - 그 다음 주문 table을 index scan하며 index block을 2002개 읽는다. 이건 총 읽은 블록에서는 제외다.
+    - 그 다음 join access를 한 뒤 주문 table을 index scan하며, index block을 2002개 읽는다.
+    - 이 과정을 index lookup이라고 하는데, index lookup은 loop 과정에서 읽은 cr 집계에서는 제외된다.
     - index block에서 얻은 rowid를 통해 38002개의 data block을 읽는다.
-  - 그리고 마지막에 exists 절에서 index scan을 하면서 3개의 index leaf 블록을 읽는다. 해당 건은 제외다.
+  - 그리고 마지막에 exists 절에서 index scan을 하면서 3개의 index leaf 블록을 읽는다.
+    - data block만 cr 집계에 포함되며, index leaf는 제외된다. 그러나 집계만 안 나온 거고 실제 index scan도 읽는 것에 포함된다. 
     - 읽은 leaf block에서 rowid를 가져와 6개의 data block을 읽었다.
 - 38103개 block이면 1개 block 당 500개의 table record로 잡아도 엄청나게 많은 양이다.
 
@@ -3796,6 +3823,119 @@ EXPLAIN PLAN FOR [query문]
 
 SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY)
 ```
+
+
+- 실행계획을 이해하기 위해 위에서 썼던 예제를 하나 가져왔다.
+```sql
+SELECT /*+ leading(p) use_nl(t) */ count(distinct p.상품번호), sum(t.주문금액)
+FROM 상품 p, 주문 t
+WHERE p.상품번호 = t.상품번호
+AND p.등록일시 >= trunc(add_months(sysdate, -3), 'mm')
+AND t.주문일시 >= trunc(sysdate - 7)
+AND EXIST (
+        SELECT 'x'
+        FROM 상품분류
+        WHERE 상품분류코드 = p.상품분류코드
+        AND 상위분류코드 = 'AK'
+)
+```
+
+
+<img src="/image/subquery-join.jpg" />
+
+- Filter Operation이기 때문에 main query가 먼저 실행된다.
+- main query는 join문이고, driving table인 상품 table scan부터 시작한다.
+  - 우선 상품 table에 full scan으로 데이터를 가져온다. 그게 1000개다.
+  - table full scan이므로 where 조건문으로 filtering을 해도 별다른 실행계획 뜨지 않고 table access full 상품으로 나온다.
+- 이제 driven table인 주문 table scan을 시작한다.
+  - join이 걸린 주문 table은 index scan을 진행한다. 
+  - 위에서 얻은 1000개의 join record에 대해 index scan을 한 결과로 60,000 record가 뽑힌다.
+  - index range scan이 60,000개인데 table access by index rowid로 접근한 것도 60,000개니까 필터링은 없는 셈이다.
+- 그 뒤에는 exists 절에 있는 내용을 실행한다.
+  - exists절은 index scan을 해서 가져오는데, 3개밖에 없어 보인다.
+  - table access 시에 1개로 줄어든 것을 보면, 상위분류코드는 적어도 index access조건은 아니다.
+  - index filter인지, table filter인지까지는 확인은 어렵다. index definition을 봐야 알 수 있다.
+- exists를 통해 필터링을 마치게 되면 총 3000개의 record를 얻는다.
+
+```
+--------------------------------------------------------------
+| ROW  | Operation                                   | Name        
+--------------------------------------------------------------
+|   0  | SELECT STATEMENT                            |              
+|   1  | SORT AGGREGATE(cr=38103)                    |              8번
+| 3000 | FILTER(cr=38103)                            |              7번
+| 60000|   NESTED LOOPS(cr=38097)                    |              2번  
+| 1000 |     TABLE ACCESS FULL(cr=95)                | 상품         1번   
+| 60000|       TABLE ACCESS BY INDEX ROWID(cr=38002) | 주문         4번
+| 60000|         INDEX RANGE SCAN(cr=2002)           | 주문_PK      3번
+|    1 |       TABLE ACCESS BY INDEX ROWID(cr=6)     | 상품분류      6번
+|    3 |         INDEX UNIQUE SCAN(cr=3)             | 상품분류_PK   5번
+--------------------------------------------------------------
+```
+
+
+- 블록은 몇개나 읽었을까?
+- 총 읽은 data block의 갯수는 38103개(join 38,097개 + exists 6개)다.
+  - join 과정에서 총 38,097개 data block을 읽었다.
+    - 처음 상품 table full scan을 하며 95개의 cr을 읽는다.
+    - 그 다음 join access를 한 뒤 주문 table을 index scan하며, index block을 2002개 읽는다.
+    - 이 과정을 index lookup이라고 하는데, index lookup은 loop 과정에서 읽은 cr 집계에서는 제외된다.
+    - index block에서 얻은 rowid를 통해 38002개의 data block을 읽는다.
+  - 그리고 마지막에 exists 절에서 index scan을 하면서 3개의 index leaf 블록을 읽는다.
+    - data block만 cr 집계에 포함되며, index leaf는 제외된다. 그러나 집계만 안 나온 거고 실제 index scan도 읽는 것에 포함된다. 
+    - 읽은 leaf block에서 rowid를 가져와 6개의 data block을 읽었다.
+- 38103개 block이면 1개 block 당 500개의 table record로 잡아도 엄청나게 많은 양이다.
+
+- 아래와 같이 되어 있으면 index range scan을 먼저하고, 그 뒤에 random access가 이뤄지는 것이다.
+```
+|    1 |       TABLE ACCESS BY INDEX ROWID(cr=6)     | 상품분류      6번
+|    3 |         INDEX UNIQUE SCAN(cr=3)             | 상품분류_PK   5번
+```
+
+- 아래와 같이 NL join이면 driving table부터 쿼리가 실행된다.
+- 즉 상품 table full scan이 첫 시작이다.
+- 그리고 NL이 일어나 join access를 한다.
+- join access에 해당하는 record를 찾기 위해 drivent table에서 index scan이 실행된다.
+```
+NESTED LOOPS(cr=38097)                    |               
+  TABLE ACCESS FULL(cr=95)                | 상품            
+    TABLE ACCESS BY INDEX ROWID(cr=38002) | 주문         
+      INDEX RANGE SCAN(cr=2002)           | 주문_PK      
+```
+
+- 위에서 보는 cr은 consistent read라 하여 버퍼캐시를 읽는 행위다.
+- 즉 메모리에서 data block을 가져오는 행위였다.
+- 하지만 disk에서 가져오는 경우도 있다. 아래는 top n stopkey와 top n sort 모두 실패한 사례다.
+```sql
+SELECT *
+FROM (
+  SELECT ROWNUM no, a.*
+  FROM (
+    SELECT 거래일시, 체결건수, 체결수량, 거래대금
+    FROM 종목거래
+    WHERE 종목코드 = 'KR123456'
+    AND 거래일시 >= '20180304'
+    ORDER BY 거래일시
+      ) a 
+    )
+WHERE no BETWEEN (:page - 1) * 10 + 1 and (:page * 10)
+```
+
+- pr과 pw는 각각 디스크에서 읽고 쓰는 행위다.
+- disk I/O가 발생했으므로 굉장히 느려졌다는 의미다.
+```
+STATEMENT
+  VIEW (cr=690 pr=698 pw=698)
+    COUNT (cr=690 pr=698 pw=698)
+      VIEW (cr=690 pr=698 pw=698)
+       SORT ORDER BY (cr=690 pr=698 pw=698)
+        TABLE ACCESS FULL 종목거래(cr=690 pr=0 pw=0)
+```
+
+
+## <span style="color:#802548">_execution plan 지시어_</span>
+
+
 
 ## <span style="color:#802548">_trace파일 만드는법_</span>
 - 이를 측정하기 위한 도구로 버퍼캐시 히트율(BCHR)이 있다. 
