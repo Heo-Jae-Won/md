@@ -809,6 +809,183 @@ AND 거래일자 BETWEEN :trd_dt1 and :trd_dt2
   - 거래일자 조회 범위에 속한 거래 데이터를 먼저 모두 읽으면서 계좌번호를 필터링하기 때문이다.
 - 저 경우에는 dynamic sql을 WAS에서 사용해주는 게 좋다.
 
+## <span style="color:#802548">_Mybatis의 dynamic SQL_</span>
+- mybatis의 경우 아래와 같이 if test로 만들 수 있다.
+
+```xml
+<mapper namespace="com.example.EmployeeMapper">
+
+    <select id="getEmployeesByCriteria" resultType="Employee">
+        SELECT * FROM employees
+        <where>
+            <if test="firstName != null">
+                AND first_name = #{firstName}
+            </if>
+            <if test="lastName != null">
+                AND last_name = #{lastName}
+            </if>
+            <if test="departmentId != null">
+                AND department_id = #{departmentId}
+            </if>
+        </where>
+    </select>
+
+</mapper>
+```
+
+- choose when으로도 구현 가능하다.
+
+```xml
+<mapper namespace="com.example.EmployeeMapper">
+
+    <select id="getEmployeesByJobAndSalary" resultType="Employee">
+        SELECT * FROM employees
+        <where>
+            <choose>
+                <when test="jobTitle != null">
+                    AND job_title = #{jobTitle}
+                </when>
+                <otherwise>
+                    <!-- default condition if no job title is provided -->
+                    AND 1=1
+                </otherwise>
+            </choose>
+            
+            <choose>
+                <when test="minSalary != null and maxSalary != null">
+                    AND salary BETWEEN #{minSalary} AND #{maxSalary}
+                </when>
+                <otherwise>
+                    <!-- default condition if no salary range is provided -->
+                    AND 1=1
+                </otherwise>
+            </choose>
+        </where>
+    </select>
+
+</mapper>
+```
+
+
+## <span style="color:#802548">_JPA의 dynamic SQL_</span>
+- Mybatis가 xml에 직접 query를 썼던 것과 달리 JPA는 모두 Java 소스코드로 query를 만들어낸다.
+- JPA의 경우 JPQL은 아래와 같다.
+
+```java
+import java.util.List;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+
+public class EmployeeRepositoryImpl {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public List<Employee> findByCriteria(String firstName, String lastName, Long departmentId) {
+        String jpql = "SELECT e FROM Employee e WHERE 1=1 ";
+        if (firstName != null) {
+            jpql += "AND e.firstName = :firstName ";
+        }
+        if (lastName != null) {
+            jpql += "AND e.lastName = :lastName ";
+        }
+        if (departmentId != null) {
+            jpql += "AND e.department.id = :departmentId ";
+        }
+
+        javax.persistence.Query query = entityManager.createQuery(jpql, Employee.class);
+        if (firstName != null) {
+            query.setParameter("firstName", firstName);
+        }
+        if (lastName != null) {
+            query.setParameter("lastName", lastName);
+        }
+        if (departmentId != null) {
+            query.setParameter("departmentId", departmentId);
+        }
+
+        return query.getResultList();
+    }
+}
+```
+
+- Specification은 아래와 같이 만들어준다.
+
+```java
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Repository;
+import com.example.Employee;
+import javax.persistence.criteria.*;
+
+@Repository
+public class EmployeeRepositoryImpl {
+
+    public List<Employee> findByCriteria(String firstName, String lastName, Long departmentId) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Employee> query = cb.createQuery(Employee.class);
+        Root<Employee> root = query.from(Employee.class);
+
+        Predicate predicate = cb.conjunction();
+        if (firstName != null) {
+            predicate = cb.and(predicate, cb.equal(root.get("firstName"), firstName));
+        }
+        if (lastName != null) {
+            predicate = cb.and(predicate, cb.equal(root.get("lastName"), lastName));
+        }
+        if (departmentId != null) {
+            Join<Employee, Department> departmentJoin = root.join("department");
+            predicate = cb.and(predicate, cb.equal(departmentJoin.get("id"), departmentId));
+        }
+
+        query.select(root).where(predicate);
+
+        return entityManager.createQuery(query).getResultList();
+    }
+}
+```
+
+- QueryDSL로는 아래와 같다.
+
+```java
+import com.example.Employee;
+import com.example.QEmployee;
+import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.impl.JPAQuery;
+import org.springframework.stereotype.Repository;
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
+import java.util.List;
+
+@Repository
+public class EmployeeRepositoryImpl {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    public List<Employee> findByCriteria(String firstName, String lastName, Long departmentId) {
+        JPAQuery<Employee> query = new JPAQuery<>(entityManager);
+        QEmployee employee = QEmployee.employee;
+
+        BooleanExpression predicate = employee.isNotNull(); // Start with true
+
+        if (firstName != null) {
+            predicate = predicate.and(employee.firstName.eq(firstName));
+        }
+        if (lastName != null) {
+            predicate = predicate.and(employee.lastName.eq(lastName));
+        }
+        if (departmentId != null) {
+            predicate = predicate.and(employee.department.id.eq(departmentId));
+        }
+
+        return query.select(employee)
+                    .from(employee)
+                    .where(predicate)
+                    .fetch();
+    }
+}
+```
+
 
 ## <span style="color:#802548">_index 구성 보기_</span>
 - oracle에서 comment 없이 index 구성만 보는 법은 아래와 같다.
@@ -822,6 +999,24 @@ SELECT a.table_name
  WHERE a.table_name = '테이블 이름' 
  ORDER BY a.index_name
         , a.column_position
+```
+
+- where문의 조건절에 쓰인 순서는 optimizer가 index 구성에 맞춰 다시 해석한다.
+- 아래와 같이 index구성 순서와 무관하게 조건문을 쓸 수도 있다.
+- index 구성은 (고객ID, 고객등급, 가입일자)다.
+- 그럼 가입일자가 > 기 때문에 고객등급과 고객ID가 index filter조건이라 착각할 수 있다.
+```sql
+WHERE 가입일자 > TO_DATE('20240415')
+AND 고객등급 = 'B'
+AND 고객ID = #{고객ID}
+```
+
+- 하지만 index구성에 맞춰서 재해석 되므로 실제로는 아래와 같이 작동하게 된다.
+- 따라서 처음부터 아래와 같이 index 구성에 맞게 써주는 게 필요하다.
+```sql
+WHERE 고객ID = #{고객ID}
+AND 고객등급 = 'B'
+AND 가입일자 > TO_DATE('20240415')
 ```
 
 
