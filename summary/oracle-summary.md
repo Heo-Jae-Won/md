@@ -1013,6 +1013,7 @@ AND 고객ID = #{고객ID}
 
 - 하지만 index구성에 맞춰서 재해석 되므로 실제로는 아래와 같이 작동하게 된다.
 - 따라서 처음부터 아래와 같이 index 구성에 맞게 써주는 게 필요하다.
+- 3가지 모두 index filter로서 작동하게 된다.
 ```sql
 WHERE 고객ID = #{고객ID}
 AND 고객등급 = 'B'
@@ -1949,6 +1950,84 @@ FROM (
           , board_sqno DESC
     )
 WHERE rownum <= 11
+```
+
+- top n 쿼리가 좋은 점은 index 구성이 조금 불완전함에도 작동하기 때문이다.
+- 아래 board table은 (board_sqno, board_clf)밖에 없지만, 그럼에도 아래 쿼리는 top n sort로 작동한다.
+- count stopkey와 sort oredr by stopkey 지시어가 execution plan에 모두 나오는 것을 확인할 수 있다.
+- 그러나 굳이 이렇게 길게 쓸 필요가 없다. inline view를 쓸데없이 길게 쓴 것에 불과하다. 
+- inline view를 가공하지 않게 하려고 inline view를 덧씌우는 inline view를 쓰는 것인데, 형변환이 없어 불필요하다.
+```sql
+SELECT b.*
+        , TO_CHAR(TO_DATE(b.registered_datetime, 'YYYYMMDDHH24MISS'), 'YYYY-MM-DD') AS rgdm
+        , CASE WHEN(TO_CHAR(SYSDATE,'YYYYMMDD') - TO_CHAR(TO_DATE(b.rgdm, 'YYYYMMDDHH24MISS'), 'YYYYMMDD')) <= 7 THEN 'Y' ELSE 'N' END AS boolYN
+FROM (
+    SELECT a.board_sqno
+            , a.board_title
+            , a.image_path
+            , a.rgdm
+            , changed_date
+    FROM (
+        SELECT board_sqno
+                , board_title
+                , board_title
+                , image_path
+                , registered_date
+                , changed_date
+        FROM board
+        WHERE board_display_yn = 'Y'
+        ORDER BY fix_exps_yn DESC
+                , fix_exps_sq ASC
+                , board_sqno DESC
+        ) a
+    ) b
+WHERE ROWNUM <= 10;
+```
+
+
+- 아래와 같이 간결하게 바꿔주자.
+```sql
+SELECT b.*
+        , TO_CHAR(TO_DATE(b.registered_datetime, 'YYYYMMDDHH24MISS'), 'YYYY-MM-DD') AS rgdm
+        , CASE WHEN(TO_CHAR(SYSDATE,'YYYYMMDD') - TO_CHAR(TO_DATE(b.rgdm, 'YYYYMMDDHH24MISS'), 'YYYYMMDD')) <= 7 THEN 'Y' ELSE 'N' END AS boolYN
+FROM (
+        SELECT board_sqno
+                , board_title
+                , board_title
+                , image_path
+                , registered_date
+                , changed_date
+        FROM board
+        WHERE board_display_yn = 'Y'
+        ORDER BY fix_exps_yn DESC
+                , fix_exps_sq ASC
+                , board_sqno DESC
+        ) b
+WHERE ROWNUM <= 10;
+```
+
+- 위에서 말했던 것처럼 AS는 함부로 쓰면 안된다.
+- 아래와 같이 ROWNUM을 별칭으로 바꾸는 순간 STOPKEY가 전부 사라진다.
+- 일반적인 sort 연산을 수행하게 바뀌어버리는 것이다.
+```sql
+SELECT b.*
+        , TO_CHAR(TO_DATE(b.registered_datetime, 'YYYYMMDDHH24MISS'), 'YYYY-MM-DD') AS rgdm
+        , CASE WHEN(TO_CHAR(SYSDATE,'YYYYMMDD') - TO_CHAR(TO_DATE(b.rgdm, 'YYYYMMDDHH24MISS'), 'YYYYMMDD')) <= 7 THEN 'Y' ELSE 'N' END AS boolYN
+FROM (
+        SELECT ROWNUM AS RN
+                , board_sqno
+                , board_title
+                , board_title
+                , image_path
+                , registered_date
+                , changed_date
+        FROM board
+        WHERE board_display_yn = 'Y'
+        ORDER BY fix_exps_yn DESC
+                , fix_exps_sq ASC
+                , board_sqno DESC
+        ) b
+WHERE b.RN <= 10;
 ```
 
 
