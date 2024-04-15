@@ -1531,8 +1531,14 @@ WHERE 변경순번 = 최종변경순번
     - 윈도우 함수를 수행할 때 나타난다.
 
 
+- 만약 정렬된 그룹핑결과를 얻고자 할 때는, order by를 명시해야 한다.
+- 실행계획에 sort group by로 표시된다고 순서 정렬을 의미하지 않는다.
+  - 물리적으로 저장된 순서에 따라 값을 읽는 게 이득이기 때문에 정렬을 보장하지 않는 것이다.
+- 물론 group by에 order by를 추가했다고 그룹핑과 정렬을 각각 수행하지는 않는다.
+  - 다만 group by 혼자일 때와 group by와 order by가 같이 있을 때 정렬 알고리즘이 달라지면서 성능 차이가 생길 순 있다.
 - 참고로 SORT GROUP BY에서도 index를 활용해 SORT를 하지 않을 수 있다.
-- 이 경우 region이 선두컬럼이어야 한다.
+  - 이 경우 region이 선두컬럼이어야 한다.
+  - 다만 order by하고 같이 되면 어떻게 되는지는 잘 모르겠다..
 ```sql
 SELECT region, avg(age), count(*)
 FROM customer
@@ -1811,6 +1817,7 @@ FROM (
 WHERE no >= (:page - 1)*10 + 1
 ```
 
+
 - 또 다른 안티 패턴은 아래와 같이 body SQL에서 형변환을 해버리는 것이다.
 - 그럼 가공된 컬럼이 되어, 정렬이 필요해지고 top n query 알고리즘은 멈춘다. 따라서 전체범위를 훑게 된다.
 ```sql
@@ -1830,7 +1837,7 @@ FROM (
 WHERE no >= (:page - 1)*10 + 1
 ```
 
-- 그럴 땐 아래와 *를 사용하지 않고 column들을 모두 전부 쓰는 수밖에 없다.
+- 그럴 땐 아래처럼 *를 사용하지 않고 column들을 모두 전부 쓰는 수밖에 없다.
 ```sql
 SELECT *
 FROM (
@@ -1850,6 +1857,21 @@ FROM (
   WHERE ROWNUM <= (:page * 10)
   )
 WHERE no >= (:page - 1)*10 + 1
+```
+
+- 형변환과 별칭 실수가 겹쳐도 문제가 될 수 있다. 아래는 (주문일자, 주문번호)로 index가 구성되어 있어 top n stopkey가 가능하다.
+- 주문번호라는 컬럼이 언뜻보면 주문 테이블의 column으로 보이지만, AS로 인해 가공되면서 top n stopkey가 불가능해진다.
+- 가공된 컬럼을 기준으로 order by를 진행해서 sort 연산이 진행된다. 
+```sql
+SELECT *
+FROM (
+  SELECT TO_CHAR(A.주문번호, 'FM000000') AS 주문번호, A.업체번호, A.주문금액
+  FROM 주문 A
+  WHERE A.주문일자 = :dt
+  AND A.주문번호 > NVL(:next_ord_no, 0)
+  ORDER BY 주문번호
+)
+WHERE ROWNUM <= 30
 ```
 
 - 거래PK는 (거래일자, 계좌번호, 거래순번)로 이뤄졌다.
@@ -2030,6 +2052,49 @@ FROM (
 WHERE b.RN <= 10;
 ```
 
+- 혹시 join을 하게 되는 경우에는 바깥에도 ORDER BY를 써줘야만 한다.
+- 배치 I/O가 작동하는 경우에는 NL join 결과집합이 늘 일정한 결과로 출력되지 않기 때문이다.
+- 따라서 배치 I/O가 작동하지 않게 바깥에 ORDER BY를 써줘야 한다.
+- 아니면 no_nlj_batching(b) hint를 추가해줘야 한다.
+
+```sql
+SELECT /*+ ordered use_nl(b) */
+      A.등록일시, A.번호, A.제목, B.회원명, A.게시판유형, A.질문유형
+FROM (
+      SELECT A.*, ROWNUM NO
+      FROM (
+            SELECT 등록일시, 번호, 제목, 작성자번호, 게시판유형, 질문유형
+            FROM 게시판
+            WHERE 게시판유형 = :TYPE
+            ORDER BY 등록일시 DESC --index 구성: (게시판유형, 등록일시) 제거하면 top n sort 망함
+          ) A
+      WHERE ROWNUM <= (:page * 10)
+    ) A, 회원 B
+WHERE A.NO >= (:page - 10) + 1
+AND B.회원번호 = A.작성자번호
+ORDER BY A.등록일시 DESC
+```
+
+- top n stopkey는 아래와 같은 형태에서도 충분히 가능하다.
+- 마지막(최신) 변경일자를 가져오는 쿼리를 짤 때 index를 역순으로 읽게 한다.
+- PK index를 역순으로 읽어오게 하여 order by 없이도 top n stopkey를 구현한다.
+
+```sql
+SELECT 장비번호, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종변경일자
+      , TO_NUMBER(SUBSTR(최종이력, 9, 4)) 최종변경순번
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+      SELECT 장비번호, 장비명
+      , (SELECT //*+ INDEX_DESC(X 상태변경이력_PK) */
+                변경일자 || LPAD(변경순번, 4) || 상태코드
+                FROM 상태변경이력 X
+                WHERE 장비번호 = P.장비번호
+                AND ROWNUM <=1) 최종이력
+          FROM 장비 P
+          WHERE 장비구분코드 = 'A001'
+    )
+```
 
 ## <span style="color:#802548">_SORT를 피하는 SQL 3 -first row_</span>
 - 위에서는 MAX, MIN을 TOP N 쿼리로 구해왔다. 
@@ -4089,6 +4154,278 @@ INSERT INTO t(id, c1,c2) values
 
 
 ## <span style="color:#802548">_Oracle hint 사용법_</span>
+- hint는 , 로 연결할 수 없다.
+
+```sql
+/*+ INDEX(A_A_X01) INDEX(B, B_X03) */ 모두 유효
+/*+ INDEX(C), FULL(D) */  첫번쨰 힌트만 유효
+```
+
+- table을 지정할 때 아래와 같이 스키마명까지 명시하면 안 된다.
+
+```sql
+SELECT /*+ FULL(SCOTT.EMP) */
+FROM EMP
+```
+
+- FROM 절 테이블 옆에 alias를 지정했다면 hint에도 alias를 사용해야 한다.
+- EMP가 아니라 E로 써줘야 한다.
+
+```sql
+SELECT /*+ FULL(EMP) */ --무효
+FROM EMP E
+
+SELECT /*+ FULL(E) */
+FROM EMP E
+```
+
+- OR 조건을 union ALL로 변환하는 expansion을 쓸 때는 아래와 같은 hint를 준다.
+- execution plan에는 CONCATENATION이 추가된다.
+
+```sql
+SELECT /*+ use_concat */ 
+FROM 고객
+WHERE (전화번호 = :tel_no OR 고객명 = :cust_nm)
+```
+
+- IN-LIST를 유도하려면 in절의 column을 access 조건으로 만들면 된다.
+- index는 (고객번호, 상품ID)로 구성되어있다.
+- 그래서 index access key를 조건절 2개까지 넣는다.
+
+```sql
+SELECT /*+ num_index_keys(a 고객별가입상품_X1 2)  */ *
+FROM 고객별가입상품 a
+WHERE 고객번호 = :cust_no
+AND 상품ID in ('NH00037', 'NH00041', 'NH00050')
+```
+
+
+- batch I/O를 사용하면 index에 따른 자동 정렬 기능을 수행할 수 없다.
+- 하지만 index 구성상 order by에서 sort 연산을 생략할 수 없다면 batch I/O를 사용하는 게 이득이다.
+- batch I/O를 사용하게 되면 TABLE RANDOM ACCESS 시 몰아서 batch로 block에 접근하기에 이득을 보게 된다.
+- TABLE ACCESS BY INDEX ROWID 옆에 BATCHED가 추가된다.
+
+```sql
+SELECT /*+ batch_table_access_by_rowid(e) */ *
+FROM EMP e
+WHERE deptno = 20
+ORDER BY job, empno;
+```
+
+- join의 경우 leading table도 정할 수 있고, 방식도 정할 수 있다.
+- ordered는 FROM절에 기술된 순서대로 간다.
+- driving table은 A이며, B와 nl로 join한다. C와는 merge로 join한다. D와는 hash로 join한다.
+
+```sql
+SELECT /*+ ordered use_nl(B) use_merge(C) use_hash(D) */ *
+FROM A, B, C, D
+WHERE ...
+```
+
+- nl join만 정해주고 나머지는 optimizer에게 맡길 수도 있다. 
+
+```sql
+SELECT /*+ use_nl(A,B,C,D) */ *
+FROM A, B, C, D
+WHERE ...
+```
+
+- nested subquery의 경우 filter operation으로 쓰게 되면 아래와 같이 no_unnest hint를 사용한다.
+
+```sql
+SELECT c.고객번호
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXISTS (
+            SELECT /*+ no_unnest  */ 'x'
+            FROM 거래
+            WHERE 고객번호 = c.고객번호
+            AND 거래일시 >=trunc(sysdate, 'mm')
+          )
+```
+
+- nested subquery에서 unnest를 하게 되면 여러가지 hint를 사용할 수 있다.
+
+```sql
+SELECT c.고객번호, c.고객명
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXISTS (
+            SELECT /*+ unnest nl_sj */  /*+ unnest hash_sj */
+            FROM 거래
+            WHERE 고객번호 = c.고객번호
+            AND 거래일시 >= trunc(sysdate, 'mm')
+          )
+```
+
+
+- unnest 된 서브쿼리는 아래와 같이 hint를 주면 driving table로도 활용가능하다.
+
+```sql
+SELECT /*+ leading(거래@subq) use_nl(c) */ c.고객번호, c.고객명
+FROM 고객 c
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND EXISTS (
+        SELECT /*+ qb_name(subq) unnest */ 'x'
+        FROM 거래
+        WHERE 고객번호 = c.고객번호
+        AND 거래일시 >= trunc(sysdate, 'mm')
+          )
+```
+
+- filter로 이득을 보는 경우는 서브쿼리를 push하여 서브쿼리 필터링을 먼저 처리할 때다.
+- 그러할 때는 NO_UNNEST PUSH_SUBQ hint를 사용한다.
+
+```sql
+SELECT /*+ leading(p) use_nl(t) */ count(distinct p.상품번호), sum(t.주문금액)
+FROM 상품 p, 주문 t
+WHERE p.상품번호 = t.상품번호
+AND p.등록일시 >= trunc(add_months(sysdate, -3), 'mm')
+AND t.주문일시 >= trunc(sysdate - 7)
+AND EXISTS (
+          SELECT /*+ NO_UNNEST PUSH_SUBQ */ 'x' FROM 상품분류
+          WHERE 상품분류코드 = p.상품분류코드
+          AND 상위분류코드 = 'AK'
+        )
+```
+
+- nested subquery를 unnest하여 semi join으로 유도했던 것처럼, inline view도 merge hint를 이용해 join으로 바꿀 수 있다.
+
+```sql
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거래
+FROM 고객 c
+      ,(SELECT /*+ merge */ 고객번호, avg(거래금액) 평균거래
+            , min(거래금액) 최소거래, max(거래금액) 최대거래
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')
+        GROUP BY 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1) , 'mm')
+AND t.고객번호 = c.고객번호
+```
+
+- nested subquery에서 filtering subquery를 join에 밀어넣은 것처럼, 조건절을 밀어넣을 수 있다.
+- 단 join 조건절만 밀어넣는 것이고 그 외 조건절은 들어가지 않는다. 아래서도 t.고객번호 = c.고객번호 절만 들어간다.
+- 이를 위해선 no_merge push_pred hint를 사용한다. push_pred는 무조건 no_merge와 함께 써야한다.
+- merge 되는 순간 push_pred가 무용지물이 된다.
+
+```sql
+SELECT c.고객번호, c.고객명, t.평균거래, t.최소거래, t.최대거래
+FROM 고객 c
+      , (SELECT /*+ no_merge push_pred */ 
+                고객번호, avg(거래금액) 평균거래
+                , min(거래금액) 최소거래, max(거래금액) 최대거래
+        FROM 거래
+        WHERE 거래일시 >= trunc(sysdate, 'mm')
+        GROUP BY 고객번호) t
+WHERE c.가입일시 >= trunc(add_months(sysdate, -1), 'mm')
+AND t.고객번호 = c.고객번호
+```
+
+
+## <span style="color:#802548">_execution plan 지시어_</span>
+- or expansion을 쓰면 아래와 같이 CONCATENATION이 추가된다.
+
+<img src="/image/or-expansion.jpg" />
+
+- or expansion과 비슷하게 in절도 UNION ALL로 풀리게 되면 INLIST ITERATOR가 추가된다.
+- (판매월, 판매구분)으로 index를 만들었다. index access 조건으로 풀려고 BETWEEN이 아닌 IN을 사용했다.
+- 그 결과 cr이 3014에서 314로 줄어들었다. 
+- 그냥 BETWEEN에 index skip hint를 쓰는 것도 하나의 선택지다.
+
+<img src="/image/inlist-iterator.jpg" />
+
+- index가 적절하게 구성되어 있지 않으면 order by 시 sort 연산이 일어난다.
+
+<img src="/image/sort-order-by.jpg" /> 
+
+- index가 적절하게 구성되어 있으면 order by 시에도 sort 연산이 일어나지 않는다.
+
+<img src="/image/index-no-order-by.jpg" />
+
+- 그 중에서도 query를 더 잘 쓰면 top n stopkey 알고리즘이 발동한다.
+- count stopkey면서 sort order by stopkey가 없다.
+<img src="/image/top-n-stopkey1.jpg" />
+
+- index 구성에 약간의 문제가 있다면  top n sort 알고리즘이 발동한다.
+- count stopkey면서 sort order by stopkey가 있다.
+<img src="/image/top-n-sort1.jpg" />
+
+- max/min도 index 구성이 잘 되어 있지 않다면 아래와 같이 나타난다.
+
+<img src="/image/unefficient-max.jpg" />
+
+- max/min이 index 구성이 잘되어 있다면 아래와 같이 나타난다.
+- first row 지시어가 추가된다.
+
+<img src="/image/efficient-max-first-row.jpg" />
+
+- 묵시적 형변환을 하게 되면 아래와 같이 predicate에 나타난다.
+- filter를 보면 TO_NUMBER가 되어있다.
+- LIKE는 특히 무조건 문자형으로 컬럼을 형변환시킨다. 문자형이 아니라면 조심해야 한다.
+
+<img src="/image/implicit-type-convsersion.jpg" />
+
+- 등치의 경우는 더 우선되는 type으로 형변환한다.
+- 숫자 > 문자 > date 순이다. 숫자가 가장 우위에 있어 숫자로 컬럼이 형변환된다.
+
+<img src="/image/implicit-type-convsersion1.jpg" />
+
+- batch I/O를 사용하면 index에 따른 자동 정렬 기능을 수행할 수 없다.
+- 하지만 index 구성상 order by에서 sort 연산을 생략할 수 없다면 batch I/O를 사용하는 게 이득이다.
+
+<img src="/image/batch-io-index.jpg" />
+
+- nl join은 아래와 같이 보인다.
+
+<img src="/image/use-nl.jpg" />
+
+- merge join은 아래와 같이 보인다.
+
+<img src="/image/sort-merge.jpg" />
+
+- hash join은 아래와 같이 보인다.
+
+<img src="/image/hash-join.jpg" />
+
+- nested subquery를 unnest하지 않으면 FILTER라고 지시어가 나타난다.
+- 대개 no_unnest hint를 주지 않는 이상 unnest 되는 편이다.
+
+<img src="/image/no-unnest-nested-subquery.jpg" />
+
+- unnnest를 하면 다양한 join 방식으로 활용이 가능하다.
+- 단, unnest를 원한다면 subquery에 절대 rownum을 넣으면 안 된다.
+
+<img src="/image/hash-join-subquery.jpg" />
+
+- subuqery가 unnest되는 경우 아래와 같이 sort unique 연산이 실행되기도 한다.
+- 1 : M의 문제라는데 정확히 이해하진 못했다.
+
+<img src="/image/subquery-sort-unique.jpg" />
+
+- 상품 테이블이 주문 테이블과 join하기 전에 먼저 subquery filtering을 밀어넣는 경우 아래처럼 나온다.
+- join하는 record 수가 크게 줄어들어서 join양이 줄어서 이득인 경우에 사용된다.
+
+<img src="/image/push-subquery.jpg" />
+
+- inline view를 merge해서 일반 join처럼 바꾸면 아래와 같은 실행계획이 생겨난다.
+
+<img src="/image/inline-view-merge-hint1.jpg" />
+
+- inline view를 merge하지 않고 조건절을 join에 껴넣으면 아래와 같이 view pushed predicate 지시어가 생긴다.
+- 메인 쿼리를 실행하면서 join 조건절 값을 건건이 view 안으로 밀어넣는다. 부분범위처리가 가능하다.
+
+<img src="/image/no-merge-push-pred.jpg" />
+
+- push-pred라는 지시어가 없어도 실제로는 그와 같이 작동하는 경우도 있다.
+- WHERE 조건문 밖에 있지만, 실제로는 inline view로 join 조건절인 장비번호 = P.장비번호가 들어온다.
+- 잘구성된 order by와 rownum을 통해서 top n stopkey 알고리즘도 발동시켰다.
+
+<img src="/image/top-n-stopkey2.jpg" />
+
+
+
+
+
 
 ## <span style="color:#802548">_execution plan 읽는법_</span>
 - oracle에서 실행계획을 보는 방법은 아래와 같다.
@@ -4205,10 +4542,6 @@ STATEMENT
        SORT ORDER BY (cr=690 pr=698 pw=698)
         TABLE ACCESS FULL 종목거래(cr=690 pr=0 pw=0)
 ```
-
-
-## <span style="color:#802548">_execution plan 지시어_</span>
-
 
 
 ## <span style="color:#802548">_trace파일 만드는법_</span>
