@@ -299,7 +299,16 @@ HashAggregate (rows=10)             //select
             Filter: (sex = '2')     //no index filtering
 ```
 
-- 위의 subquery union을 CASE WHEN으로 바꿔주자.
+- 처음에는 실수로 아래와 같이 바꿀수도 있다. 그러나, case문은 ELSE와 END를 모두 써주어야 한다.
+```sql
+select prefecture, case when sex = '1' then sum(pop_men) as pop_men
+			, case when sex = '2' then sum(pop_women) as pop_women
+from Popullation
+group by prefecture;
+```
+			
+
+- 아래와 같은 CASE WHEN으로 다시 바꿔주자.
 ```sql
 select 
         prefacture, 
