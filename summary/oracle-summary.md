@@ -4543,6 +4543,13 @@ STATEMENT
         TABLE ACCESS FULL 종목거래(cr=690 pr=0 pw=0)
 ```
 
+- 실행계획은 기본적으로 아래에 있을수록 먼저 실행된다.
+  - nested loop가 먼저 일어나는 게 아니라, table accees와 index scan이 먼저다.
+- 그런데 같은 중첩단계에서는 위에 있는 게 먼저 실행된다.
+  - 따라서 index scan이 먼저가 아니라 table access scan이 먼저다.
+
+<img src="/image/execution-plan.jpg" />
+
 
 ## <span style="color:#802548">_trace파일 만드는법_</span>
 - 이를 측정하기 위한 도구로 버퍼캐시 히트율(BCHR)이 있다. 
