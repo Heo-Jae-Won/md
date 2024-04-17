@@ -2363,3 +2363,74 @@ String entryString = StringUtils.join(plainDataList, "|");
 String[] plainDataArray= {"empty", ciNo, cusNm, phoneNo, "empty", "empty"};
 String entryString = StringUtils.join(plainDataList, "|");
 ```
+
+
+## <span style="color:#802548">_jquery의 dom life cycle_</span>
+- Jquery에도 DOM의 lifecycle을 관리할 수 있는 method들이 있다.
+- 해당 method들을 무시하면 page 관리에서 오류가 날 수 있다.
+- 난 농좆에서 웹뷰의 title을 바꾸는데, $(window).load()와 $().ready()의 차이를 몰라서 해결하는 데 오래 걸렸다.
+  - 참고로 아래가 ready()와 동일한 method다.
+  - ready는 DOM 생성이 끝나면 발생한다. vue의 onMounted나 react의 useEffect와 같다. DOM 생성과 함께 js가 읽히기 때문에 변수가 undefined일 위험은 없다.
+  - load는 DOM만이 아니라 DOM의 content까지 모두 완료되었을 때 발동한다. 따라서 SSR용코드라고 보면된다.
+- 아래와 같은 상황에서 init이 먼저 발동하여 title이 hide 되지만, load가 뒤이어 발동하면서 title이 change되면서 show된다.
+  - 팝업에 header가 있다면 title이 중복으로 뜨는 것과 같은 효과를 내게 된다.
+```js
+$(window).on('load',function() {
+    location.href = '앱스키마://titleChange?title=A'
+})
+
+$(function(){
+    init();
+})
+
+function init() {
+    const isValid = computedValidationResult(accidentCode);
+    if(!isValid) {
+        location.href = '앱스키마://titleHide'
+        openPopup('사고코드가 있어 페이지 진입이 불가능합니다');
+    }
+}
+```
+
+- 그럴 때 아래와 같이 순서를 바꿔준다.
+- 페이지 진입과 동시에 title이 바뀌어야 하므로 load가 아닌 ready에 title을 change하는 함수를 먼저 명시하는 것이다.
+  - load는 지워버린다.
+  - 그럼 먼저 title이 바뀌고, 뒤이어 init함수 내에서 조건을 만족하면 title이 hide되게 된다.
+  - 팝업에 header가 있다면 title이 popup의 header만 있기 때문에 1개만 유일하게 뜨게 된다.
+```js
+$(function(){
+    location.href = '앱스키마://titleChange?title=A'
+    init();
+})
+
+function init() {
+    const isValid = computedValidationResult(accidentCode);
+    if(!isValid) {
+        location.href = '앱스키마://titleHide'
+        openPopup('사고코드가 있어 페이지 진입이 불가능합니다');
+    }
+}
+```
+
+- setTimeout 등을 주는 것은 아무런 의미가 없다.
+  - 그건 UI 변화가 event loop와 연관있을 때 가능한 trick이다.
+  - 따라서 아래와 같이 setTimeout을 줘도 타이틀이 중복으로 뜨는 현상을 막을 수는 없다.
+```js
+$(window).on('load',function() {
+    location.href = '앱스키마://titleChange?title=A'
+})
+
+$(function(){
+    init();
+})
+
+function init() {
+    const isValid = computedValidationResult(accidentCode);
+    if(!isValid) {
+        setTimeout(function() {
+            location.href = '앱스키마://titleHide'
+        }, 500);
+        openPopup('사고코드가 있어 페이지 진입이 불가능합니다');
+    }
+}
+``` 
