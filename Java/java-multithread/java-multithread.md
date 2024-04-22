@@ -1,46 +1,46 @@
 ```java
 Thread thread = new Thread(new Runnable() {
 
-			@Override
-			public void run() {
-				// TODO Auto-generated method stub
-				System.out.println("We are now in thread " + Thread.currentThread().getName()); //eclipse랑 다르게 thread에만 breakpoint 잡은 거 아니면 thread 안의 breakpoint가 잡히지 않는다.
-				System.out.println("We are now in thread " + Thread.currentThread().getPriority());
+@Override
+public void run() {
+// TODO Auto-generated method stub
+System.out.println("We are now in thread " + Thread.currentThread().getName()); //eclipse랑 다르게 thread에만 breakpoint 잡은 거 아니면 thread 안의 breakpoint가 잡히지 않는다.
+System.out.println("We are now in thread " + Thread.currentThread().getPriority());
 
-			}
-		});
-		
-		thread.setName("New Worker Thread"); //debugging할 때 나중에 의미 있는 이름이 필요함.
-		thread.setPriority(Thread.MAX_PRIORITY); //OS에 thread의 동적 우선순위를 알려줌. 10이고. 제일 우선순위 떨어지는 것.
-		System.out.println("we ard in thread: " + Thread.currentThread().getName() + " before starting a new thread");
-		thread.start();
-		System.out.println("we ard in thread: " + Thread.currentThread().getName() + " after starting a new thread");
+}
+});
 
-		//Thread.sleep(10_000);// OS에 지시하는 것. 이 시간 동안 CPU르 쓰지 않음.
-		/*
-		 * we ard in thread: main before starting a new thread 
-		 * we ard in thread: main after starting a new thread 
-		 * We are now in thread Thread-0
-		 */
-		//start하는 데 시간이 걸려서 main after가 먼저 나옴.
-		
-		
-		Thread thread1 = new Thread(new Runnable() {
+thread.setName("New Worker Thread"); //debugging할 때 나중에 의미 있는 이름이 필요함.
+thread.setPriority(Thread.MAX_PRIORITY); //OS에 thread의 동적 우선순위를 알려줌. 10이고. 제일 우선순위 떨어지는 것.
+System.out.println("we ard in thread: " + Thread.currentThread().getName() + " before starting a new thread");
+thread.start();
+System.out.println("we ard in thread: " + Thread.currentThread().getName() + " after starting a new thread");
 
-			@Override
-			public void run() {
-				throw new RuntimeException("Internal Exception");
-			}
-		});
-		
-		thread1.setName("misbehaving thread");
-		thread1.setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
-			@Override
-			public void uncaughtException(Thread t, Throwable e) {
-				System.out.println("A critical Error happened in thread" + t.getName() + " the error is " + e.getMessage());				
-			}
-		});
-		thread1.start();
+//Thread.sleep(10_000);// OS에 지시하는 것. 이 시간 동안 CPU르 쓰지 않음.
+/*
+* we ard in thread: main before starting a new thread 
+* we ard in thread: main after starting a new thread 
+* We are now in thread Thread-0
+*/
+//start하는 데 시간이 걸려서 main after가 먼저 나옴.
+
+
+Thread thread1 = new Thread(new Runnable() {
+
+@Override
+public void run() {
+throw new RuntimeException("Internal Exception");
+}
+});
+
+thread1.setName("misbehaving thread");
+thread1.setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+@Override
+public void uncaughtException(Thread t, Throwable e) {
+System.out.println("A critical Error happened in thread" + t.getName() + " the error is " + e.getMessage());				
+}
+});
+thread1.start();
 ```
 
 ```java
@@ -705,3 +705,141 @@ public class ThroughputHttpServer {
     }
 }
 ```
+
+- Process는 Context와 동일하다.
+- Process는 Main Thread와 하위 thread를 가진다.
+- 그 외에 process는 Heap와 Code도 가진다.
+- Thread는 stack을 가진다. stack은 method를 호출할 때 필요한 영역이다.
+- thread 간 stack은 공유되지 않는다. 
+- heap은 모든 Thread가 공유하는 공간이다.
+- heap에는 모든 객체가 저장된다. 
+  - String
+  - Object
+  - Collection
+  - static variable
+  - memeber variable of classes
+
+
+- allNames는 reference로서 stack에 저장되지만, 이 reference가 가리키는 ArrayList<String> 유형의 객체는 heap에 할당된다.
+```java
+  public List<String> getAllNames() {
+           int count = idToNameMap.size();
+           List<String> allNames = new ArrayList<>();
+            
+            allNames.addAll(idToNameMap.values());
+           
+           return allNames;
+       }
+```
+
+- 아래와 같이 start()와 join()을 순서대로 thread마다 실행하면 0이 나온다. 
+```java
+public class Main {
+    public static void main(String[] args) 
+            throws InterruptedException {
+        InventoryCounter inventoryCounter = new InventoryCounter();
+        IncrementingThread incrementingThread = new IncrementingThread(inventoryCounter);
+        DecrementingThread decrementingThread = new DecrementingThread(inventoryCounter);
+
+        incrementingThread.start();
+        incrementingThread.join();
+
+        decrementingThread.start();
+        decrementingThread.join();
+
+        System.out.println("We currently have " + inventoryCounter.getItems() + " items"); //0
+    }
+
+    public static class DecrementingThread extends Thread {
+
+        private InventoryCounter inventoryCounter;
+
+        public DecrementingThread(InventoryCounter inventoryCounter) {
+            this.inventoryCounter = inventoryCounter;
+        }
+
+        @Override
+        public void run() {
+            for (int i = 0; i < 10000; i++) {
+                inventoryCounter.decrement();
+            }
+        }
+    }
+
+    public static class IncrementingThread extends Thread {
+
+        private InventoryCounter inventoryCounter;
+
+        public IncrementingThread(InventoryCounter inventoryCounter) {
+            this.inventoryCounter = inventoryCounter;
+        }
+
+        @Override
+        public void run() {
+            for (int i = 0; i < 10000; i++) {
+                inventoryCounter.increment();
+            }
+        }
+    }
+
+    private static class InventoryCounter {
+        private int items = 0;
+
+        public void increment() {
+            items++;
+        }
+
+        public void decrement() {
+            items--;
+        }
+
+        public int getItems() {
+            return items;
+        }
+    }
+}
+
+```
+
+
+- 하지만 start시켜놓고 join을 몰아서 하면 예상하지 않은 결과가 도출된다.
+  - static class이므로 inventoryCounter가 thread 간 공유되는 Heap에 저장되며, items도 static class의 멤버변수이므로 동일하다.
+  - items에 관한 연산인 items++, items--가 atomic operation이 아니다. all or nothing이 이뤄지지 않은 것이다.
+  - 
+```java
+public static void main(String[] args) 
+        throws InterruptedException {
+    InventoryCounter inventoryCounter = new InventoryCounter();
+    IncrementingThread incrementingThread = new IncrementingThread(inventoryCounter);
+    DecrementingThread decrementingThread = new DecrementingThread(inventoryCounter);
+
+    incrementingThread.start();
+    incrementingThread.join();
+
+    decrementingThread.start();
+    decrementingThread.join();
+
+    System.out.println("We currently have " + inventoryCounter.getItems() + " items"); //-176도 나오고, -851도 나오고...
+}
+```
+
+- 그럼 왜 items++는 원자적 연산이 아닌가? 이는 Java에서는 단일 연산으로 보이지만, 실제론 3개 연산을 같이 진행하기 때문이다.
+  - items의 현재 value를 가져오고
+  - 1을 더한 뒤
+  - items에 해당 value를 저장한다
+- 이 3가지 과정이 multi thread 간에 작동하면 OS의 스케쥴링에 따라 아래와 같은 시나리오도 가능하다.
+  - (1) IncrementingThread에서  items 값을 가져온다.
+  - (2) IncrementingThread에서  items 값을 1을 더한다.
+  - (3) 아직 저장을 하지 않았는데, DecrementingThread에서 items 값을 가져오니 0이다.
+  - (4) DecrementingThread에서 해당 items 값에 -1을 한다.
+  - (5) DecrementingThread에서 items 값에 -1한 새로운 값을 저장한다.
+  - (6) IncrementingThread에서에서 새로운 items 값은 1이기 때문에, 1로 저장한다.
+  - (7) heap에서 items는 -1이었다가 1로 바뀌게 된다.
+- 이 3가지 과정이 multi thread 간에 작동하면 OS의 스케쥴링에 따라 아래와 같은 시나리오도 가능하다.
+  - (1) IncrementingThread에서  공유된 items 값을 가져온다.
+  - (2) IncrementingThread에서  items 값을 1을 더한다.
+  - (4) DecrementingThread에서  공유된 items 값을 가져온다. 아직 IncrementingThread에서 값을 저장하지 않아 0이다.
+  - (5) DecrementingThread에서 items 값에 -1연산을 한다.
+  - (6) IncrementingThread에서 새로운 items 값은 1이기 때문에, 1로 저장한다.
+  - (3) DecrementingThread에서 새로운 items 값은 -1이기 때문에 -1로 저장된다.
+  - (7) heap에서 items는 1이었다가 -1로 바뀌게 된다.
