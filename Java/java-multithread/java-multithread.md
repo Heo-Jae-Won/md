@@ -1,10 +1,12 @@
+## <span style="color:#802548">_thread 생성_</span>
+- Thread는 아래와 같이 Runnable interface를 생성자에 넣어 구현할 수 있다.
+- name과 priority를 설정하여 start시킨다.
 ```java
 Thread thread = new Thread(new Runnable() {
 
         @Override
         public void run() {
-            // TODO Auto-generated method stub
-            System.out.println("We are now in thread " + Thread.currentThread().getName()); //eclipse랑 다르게 thread에만 breakpoint 잡은 거 아니면 thread 안의 breakpoint가 잡히지 않는다.
+            System.out.println("We are now in thread " + Thread.currentThread().getName()); //eclipse는 hread에만 breakpoint 잡은 거 아니면 thread 안의 breakpoint가 잡히지 않는다. intelliijay는 잡아준다.
             System.out.println("We are now in thread " + Thread.currentThread().getPriority());
 
         }
@@ -43,9 +45,103 @@ Thread thread = new Thread(new Runnable() {
     thread1.start();
 ```
 
+- Thread를 생성시켜 작동시킨 예제다.
+- 금고 class를 만든다. 
 ```java
-public class Main {
-    public static final int MAX_PASSWORD = 9999;
+private static class Vault {
+    private int password;
+
+    public Vault(int password) {
+        this.password = password;
+    }
+
+    public boolean isCorrectPassword(int guess) {
+        try {
+            Thread.sleep(5);
+        } catch (InterruptedException e) {
+        }
+        return this.password == guess;
+    }
+}
+```
+
+- 금고를 풀려고 하는 Hacker thread class를 만든다.
+- HackerThread는 abstract class이므로 이를 실제로 구현할 Thread class를 따로 만들어준다.
+```java
+private static abstract class HackerThread extends Thread {
+    protected Vault vault;
+
+    public HackerThread(Vault vault) {
+        this.vault = vault;
+        this.setName(this.getClass().getSimpleName());
+        this.setPriority(Thread.MAX_PRIORITY);
+    }
+
+    @Override
+    public void start() {
+        System.out.println("Starting thread " + this.getName());
+        super.start();
+    }
+}
+
+private static class AscendingHackerThread extends HackerThread {
+
+    public AscendingHackerThread(Vault vault) {
+        super(vault);
+    }
+
+    @Override
+    public void run() {
+        for (int guess = 0; guess < MAX_PASSWORD; guess++) {
+            if (vault.isCorrectPassword(guess)) {
+                System.out.println(this.getName() + " guessed the password " + guess);
+                System.exit(0);
+            }
+        }
+    }
+}
+
+private static class DescendingHackerThread extends HackerThread {
+
+    public DescendingHackerThread(Vault vault) {
+        super(vault);
+    }
+
+    @Override
+    public void run() {
+        for (int guess = MAX_PASSWORD; guess >= 0; guess--) {
+            if (vault.isCorrectPassword(guess)) {
+                System.out.println(this.getName() + " guessed the password " + guess);
+                System.exit(0);
+            }
+        }
+    }
+}
+```
+
+- 금고를 털려는 Thread를 잡을 경찰 thread도 만든다.
+```java
+private static class PoliceThread extends Thread {
+    @Override
+    public void run() {
+        for (int i = 10; i > 0; i--) {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+            }
+            System.out.println(i);
+        }
+
+        System.out.println("Game over for you hackers");
+        System.exit(0);
+    }
+}
+```
+- 마지막으로 main class는 아래와 같다.
+- Random class로 금고의 암호를 만든다.
+- 금고를 풀려는 도둑과 경찰 thread를 start시킨다.
+```java
+public static final int MAX_PASSWORD = 9999;
 
     public static void main(String[] args) {
         Random random = new Random();
@@ -62,261 +158,184 @@ public class Main {
             thread.start();
         }
     }
-
-    private static class Vault {
-        private int password;
-
-        public Vault(int password) {
-            this.password = password;
-        }
-
-        public boolean isCorrectPassword(int guess) {
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-            }
-            return this.password == guess;
-        }
-    }
-
-    private static abstract class HackerThread extends Thread {
-        protected Vault vault;
-
-        public HackerThread(Vault vault) {
-            this.vault = vault;
-            this.setName(this.getClass().getSimpleName());
-            this.setPriority(Thread.MAX_PRIORITY);
-        }
-
-        @Override
-        public void start() {
-            System.out.println("Starting thread " + this.getName());
-            super.start();
-        }
-    }
-
-    private static class AscendingHackerThread extends HackerThread {
-
-        public AscendingHackerThread(Vault vault) {
-            super(vault);
-        }
-
-        @Override
-        public void run() {
-            for (int guess = 0; guess < MAX_PASSWORD; guess++) {
-                if (vault.isCorrectPassword(guess)) {
-                    System.out.println(this.getName() + " guessed the password " + guess);
-                    System.exit(0);
-                }
-            }
-        }
-    }
-
-    private static class DescendingHackerThread extends HackerThread {
-
-        public DescendingHackerThread(Vault vault) {
-            super(vault);
-        }
-
-        @Override
-        public void run() {
-            for (int guess = MAX_PASSWORD; guess >= 0; guess--) {
-                if (vault.isCorrectPassword(guess)) {
-                    System.out.println(this.getName() + " guessed the password " + guess);
-                    System.exit(0);
-                }
-            }
-        }
-    }
-
-    private static class PoliceThread extends Thread {
-        @Override
-        public void run() {
-            for (int i = 10; i > 0; i--) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                }
-                System.out.println(i);
-            }
-
-            System.out.println("Game over for you hackers");
-            System.exit(0);
-        }
-    }
-}
 ```
 
+
+## <span style="color:#802548">_process 정상 종료를 위한 thread interrupt와 daemon Thread_</span>
+
+- thread는 아무것도 안해도 커널과 메모리의 자원을 잡아먹는다. 
+- 안 쓰는 스레드는 제거해야 한다.
+- thread가 하나만 살아있어도 process가 죽지 않는다. 
+  - 따라서 application을 죽이기 전에 모든 thread를 종료시켜야 한다.
+  - 거기에 쓰이는 method가 interrupt()다.
+    - interrupt는 무한하게 도는 thread에서 interrupt를 감지시켜 thread를 loop에서 빠져나오게 해 thread를 종료시킨다.
+    - interrupt 만으로 이미 돌아가던 logic이 멈추진 않는다.
+    -Thread.currentThread().isInterrupted() 아니면 setDaemon(true)로 만들어야 한다.
+- BlockingTask의 경우, 잠들었기 때문에 interrupt()가 호출되면 InterruptedException을 catch하여 run이 종료되고 스레드가 종료된다.
 ```java
-public class MultiExecutor {
+private static class BlockingTask implements Runnable {
     
-    private final List<Runnable> tasks;
- 
-    /*
-     * @param tasks to executed concurrently
-     */
-    public MultiExecutor(List<Runnable> tasks) {
-        this.tasks = tasks;
-    }
- 
-    /**
-     * Executes all the tasks concurrently
-     */
-    public void executeAll() {
-        List<Thread> threads = new ArrayList<>(tasks.size());
-        
-        for (Runnable task : tasks) {
-            Thread thread = new Thread(task);
-            threads.add(thread);
-        }
-        
-        for(Thread thread : threads) {
-            thread.start();
+    @Override
+    public void run() {
+        try {
+            Thread.sleep(50000);
+        } catch(InterruptedException e) {
+            System.out.println("Exiting blocking thread");
         }
     }
 }
 ```
 
+- LongComputationTask의 경우, 실행중인 로직이다. 
+- Daemon Thread로 만들지 않았기에, interrupt()의 호출을 감지하려면 Thread.isInterrupted()가 필요하다.
+- Thread.isInterrupted()로 감지했다고 끝이 아니다. 거기서 loop를 끝낼 로직을 직접 만들어줘야 한다.
+  - 여기서는 return BigInteger.ZERO가 그 역할을 했다.
 ```java
+private static class LongComputationTask implements Runnable {
+    private BigInteger base;
+    private BigInteger power;
 
-	//thread는 아무것도 안해도 커널과 메모리의 자원을 잡아먹는다. 안 쓰는 스레드는 제거해야 한다.
-	//thread가 하나만 살아있어도 process가 죽지 않는다. 따라서 application을 죽이기 전에 모든 thread를 종료시켜야 한다.
-	//거기에 쓰이는 method가 interrupt()다.
-	public static void main(String[] args) throws Exception {
-		Thread thread = new Thread(new BlockingTask());
-		thread.start();
-		thread.interrupt();
-		//System.out.println("thread is over"); 이렇게 써도 start가 먼저시작되지 않으면 이놈이 먼저 뜸.
-
-		Thread thread1 = new Thread(new LongComputationTask(new BigInteger("20000"),new BigInteger("100000")));
-		thread1.start();
-		thread1.interrupt(); //이것만으로는 부족. 해당 thread의 run method에서 실제 오래 걸리는 작업에 flag를 붙여줘야 함.
-		//따라서 아래 pow()의 for문 안에 if문으로 flag를 줌. 그럼 interrupted가 된 것을 알고 thread 정지  
-		
-		
-		Thread thread2 = new Thread(new LongComputationTask1(new BigInteger("2000"),new BigInteger("10000")));
-		thread2.setDaemon(true); //만약 if문으로 어떤 처리를 따로 할 필요가 없다고 생각한다면 간단하게 이렇게 처리 가능. 그럼 interrupt됨.
-		thread2.start();
-		thread2.interrupt();
-	}
-	
-	private static class BlockingTask implements Runnable {
-		
-		@Override
-		public void run() {
-			try {
-				Thread.sleep(50000);
-			} catch(InterruptedException e) {
-				System.out.println("Exiting blocking thread");
-			}
-		}
-	}
-	
-	private static class LongComputationTask implements Runnable {
-        private BigInteger base;
-        private BigInteger power;
-
-        public LongComputationTask(BigInteger base, BigInteger power) {
-            this.base = base;
-            this.power = power;
-        }
-
-        @Override
-        public void run() {
-            System.out.println(base + "^" + power + " = " + pow(base, power));
-        }
-
-        private BigInteger pow(BigInteger base, BigInteger power) {
-            BigInteger result = BigInteger.ONE;
-
-            for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
-                if (Thread.currentThread().isInterrupted()) {
-                    System.out.println("Prematurely interrupted computation");
-                    return BigInteger.ZERO;
-                }
-                result = result.multiply(base);
-            }
-
-            return result;
-        }
+    public LongComputationTask(BigInteger base, BigInteger power) {
+        this.base = base;
+        this.power = power;
     }
-	
-	private static class LongComputationTask1 implements Runnable {
-        private BigInteger base;
-        private BigInteger power;
 
-        public LongComputationTask1(BigInteger base, BigInteger power) {
-            this.base = base;
-            this.power = power;
-        }
-
-        @Override
-        public void run() {
-            System.out.println(base + "^" + power + " = " + pow(base, power));
-        }
-
-        private BigInteger pow(BigInteger base, BigInteger power) {
-            BigInteger result = BigInteger.ONE;
-
-            for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
-                result = result.multiply(base);
-            }
-
-            return result;
-        }
+    @Override
+    public void run() {
+        System.out.println(base + "^" + power + " = " + pow(base, power));
     }
+
+    private BigInteger pow(BigInteger base, BigInteger power) {
+        BigInteger result = BigInteger.ONE;
+
+        for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
+            if (Thread.isInterrupted()) {
+                System.out.println("Prematurely interrupted computation");
+                return BigInteger.ZERO;
+            }
+            result = result.multiply(base);
+        }
+
+        return result;
+    }
+}
 ```
 
+- LongComputationTask의 경우, 실행중인 로직이다. 
+- interrupt()의 호출을 감지하려면 Thread.isInterrupted()가 필요하다.
+- 하지만 해당 로직이 없다. 이 경우 thread 생성시 daemon thread로 만든다.
 ```java
-//맞습니다. 애플리케이션을 프로그램적으로 중단할 수 있는 유일한 방법은 스레드를 데몬으로 만드는 것입니다. 안타깝게도 System.in.read()는 Thread.interrupt();에 응답하지 않습니다.
- public static void main(String [] args) {
-        Thread thread = new Thread(new WaitingForUserInput());
-        thread.setName("InputWaitingThread");
-		//thread.setDaemon(true);
-        thread.start();
-		//thread.interrupt();
+private static class LongComputationTask1 implements Runnable {
+    private BigInteger base;
+    private BigInteger power;
 
+    public LongComputationTask1(BigInteger base, BigInteger power) {
+        this.base = base;
+        this.power = power;
     }
- 
-    private static class WaitingForUserInput implements Runnable {
-        @Override
-        public void run() {
-            try {
-                while (true) {
-                    char input = (char) System.in.read();
-                    if(input == 'q') {
-                        return;
-                    }
-                }
-            } catch (IOException e) {
-                System.out.println("An exception was caught " + e);
-            };
+
+    @Override
+    public void run() {
+        System.out.println(base + "^" + power + " = " + pow(base, power));
+    }
+
+    private BigInteger pow(BigInteger base, BigInteger power) {
+        BigInteger result = BigInteger.ONE;
+
+        for (BigInteger i = BigInteger.ZERO; i.compareTo(power) != 0; i = i.add(BigInteger.ONE)) {
+            result = result.multiply(base);
         }
+
+        return result;
     }
+}
 ```
 
+- main method에서 아래와 같이 start()와 interrupt를 해준다.
+- interrupt()되면 실행중인 로직이 취소되므로 thread1의 return은 0이 된다.
+- daemon thread는 non-daemon thread가 종료되면 같이 종료된다.
+- 따라서 Thread가 끝나고, Thread1이 끝나고 main Thread가 끝나면, Thread2도 더이상 발동되지 않는다.
+- 
 ```java
-    public static void main(String [] args) {
-        Thread thread = new Thread(new SleepingThread());
-        thread.start();
-        thread.interrupt();
-				// thread.interrupt()는 다른 스레드에게 중단하라는 신호를 보내는 방법일 뿐입니다. 중단이 가능한 경우, 중단을 하는 건 사용자의 몫입니다.
-				// 아래 catch문에 return을 추가할 필요가 있습니다.
-    }
- 
-    private static class SleepingThread implements Runnable {
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    Thread.sleep(1000000);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-    }
+public static void main(String[] args) throws Exception {
+    Thread thread = new Thread(new BlockingTask());
+    thread.start();
+    thread.interrupt();
+
+    Thread thread1 = new Thread(new LongComputationTask(new BigInteger("20000"),new BigInteger("100000")));
+    thread1.start();
+    thread1.interrupt();
+    
+    Thread thread2 = new Thread(new LongComputationTask1(new BigInteger("2000"),new BigInteger("10000")));
+    thread2.setDaemon(true); 
+    thread2.start();
+    thread2.interrupt();
+}
 ```
 
+```
+Exiting blocking thread             - BlockingThread
+0                                   - LongComputationTask1
+Prematurely interrupted computation - LongComputationTask
+20000^100000 = 0                    - LongComputationTask
+1                                   - LongComputationTask1...
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+```
+
+
+
+## <span style="color:#802548">_반응성을 개선하는 thread join_</span>
+
+
+- 오래걸리는 computation logic을 만든다.
+- 여기선 factorial이란 재귀함수가 그런 logic이다.
+```java
+ public static class FactorialThread extends Thread {
+    private long inputNumber;
+    private BigInteger result = BigInteger.ZERO;
+    private boolean isFinished = false;
+
+    public FactorialThread(long inputNumber) {
+        this.inputNumber = inputNumber;
+    }
+
+    @Override
+    public void run() {
+        this.result = factorial(inputNumber);
+        this.isFinished = true;
+    }
+
+    public BigInteger factorial(long n) {
+        BigInteger tempResult = BigInteger.ONE;
+
+        for (long i = n; i > 0; i--) {
+            tempResult = tempResult.multiply(new BigInteger((Long.toString(i))));
+        }
+        return tempResult;
+    }
+
+    public BigInteger getResult() {
+        return result;
+    }
+
+    public boolean isFinished() {
+        return isFinished;
+    }
+}
+```
+
+- long taking logic의 값을 가져오려고 아래와 같이 main method를 만들었다.
+- thread가 질질 늘어지게 되어버린다. 거기다 long taking logic이라 연산이 완료되지 않아 해당 시점에는 0으로 떠버린다.
+  - 그나마 연산이 가장 빠르게 완료되는 23의 경우에만 값이 출력되었다.
 ```java
 public class Main {
     public static void main(String[] args) throws InterruptedException {
@@ -329,18 +348,47 @@ public class Main {
         }
 
         for (Thread thread : threads) {
-            thread.setDaemon(true); //join으로 기다리지 않고 결과를 받아오게 하면, 계속 running임. 따라서 죽일 수 있게 설정.
-                                    //아니면 interrupt 설정을 해줘야 함.
             thread.start();
         }
 
-        //join이 없이는 race condition이 되어 매우 비효율적으로 cpu 자원을 소모.
-        //이걸 해야 main thread가 계승 thread가 끝날 때까지 기다리게 함.
-        //그러나 thread가 너무 시간이 오래 걸릴 수도 있음. 큰 수를 계산할 때 그러함. 그럴 때 기다리는 시간을 줌.
-        //thread.join(2000);이 그 예시
-        // for (Thread thread : threads) {
-        //     thread.join(2000);
-        // }
+
+        for (int i = 0; i < inputNumbers.size(); i++) {
+            FactorialThread factorialThread = threads.get(i);
+            System.out.println(factorialThread.getResult()); 
+        }
+    }
+}
+```
+
+```
+0
+0
+0
+0
+0
+25852016738884976640000
+0
+```
+
+
+- 너무 오래걸리는 thread는 그냥 종료시키려면 interrupt를 활용할 수 있다. 하지만 interupt로는 정확한 시간만큼 기다리는 것은 불가능하다.
+- 그렇게 된다면 2초 정도를 기다리면 계산이 완료되는데도 main thread가 가져오는 값은 없을 수 있다.
+```java
+public class Main {
+    public static void main(String[] args) throws InterruptedException {
+        List<Long> inputNumbers = Arrays.asList(100000000L, 3435L, 35435L, 2324L, 4656L, 23L, 5556L);
+
+        List<FactorialThread> threads = new ArrayList<>();
+
+        for (long inputNumber : inputNumbers) {
+            threads.add(new FactorialThread(inputNumber));
+        }
+
+        for (Thread thread : threads) {
+            thread.setDaemon(true);
+            thread.start();
+        }
+
 
         for (int i = 0; i < inputNumbers.size(); i++) {
             FactorialThread factorialThread = threads.get(i);
@@ -351,42 +399,72 @@ public class Main {
             }
         }
     }
+}
+```
 
-    public static class FactorialThread extends Thread {
-        private long inputNumber;
-        private BigInteger result = BigInteger.ZERO;
-        private boolean isFinished = false;
+```
+The calculation for 100000000 is still in progress
+The calculation for 3435 is still in progress
+The calculation for 35435 is still in progress
+The calculation for 2324 is still in progress
+The calculation for 4656 is still in progress
+Factorial of 23 is 25852016738884976640000
+The calculation for 5556 is still in progress
+```
 
-        public FactorialThread(long inputNumber) {
-            this.inputNumber = inputNumber;
-        }
+- 이를 join을 활용하면 정확히 2초 정도의 시간을 기다리게끔 만들어줄 수 있다.
+- 그럼 계산이 완료된 logic들의 경우 값을 가져올 수 있게 된다.
+```java
+public static void main(String[] args) throws InterruptedException {
+    List<Long> inputNumbers = Arrays.asList(100000000L, 3435L, 35435L, 2324L, 4656L, 23L, 5556L);
 
-        @Override
-        public void run() {
-            this.result = factorial(inputNumber);
-            this.isFinished = true;
-        }
+    List<FactorialThread> threads = new ArrayList<>();
 
-        public BigInteger factorial(long n) {
-            BigInteger tempResult = BigInteger.ONE;
+    for (long inputNumber : inputNumbers) {
+        threads.add(new FactorialThread(inputNumber));
+    }
 
-            for (long i = n; i > 0; i--) {
-                tempResult = tempResult.multiply(new BigInteger((Long.toString(i))));
-            }
-            return tempResult;
-        }
+    for (Thread thread : threads) {
+        thread.setDaemon(true);
+        thread.start();
+    }
 
-        public BigInteger getResult() {
-            return result;
-        }
+    for (Thread thread : threads) {
+        thread.join(2000);
+    }
 
-        public boolean isFinished() {
-            return isFinished;
+    for (int i = 0; i < inputNumbers.size(); i++) {
+        FactorialThread factorialThread = threads.get(i);
+        if (factorialThread.isFinished()) {
+            System.out.println("Factorial of " + inputNumbers.get(i) + " is " + factorialThread.getResult());
+        } else {
+            System.out.println("The calculation for " + inputNumbers.get(i) + " is still in progress");
         }
     }
 }
 ```
 
+- 여전히 100000000L은 계산중이라 값을 가져올 수 없다.
+```
+The calculation for 100000000 is still in progress
+Factorial of 35435 is 386588992032151251667007583813348702360432931100560868954226257629442643373231427226867559462578302509283089665244215909384571828146597432482783406603858090226007951016972443408362423971173167574438923082698334573145838648096788185680106428957986499780489200968997490302464862469292999028824193670828568407530556434212631480406995268603279354662349037768693011626007099108989845481867838003729114572126627560365220962674456731133207689540784702065638623177113845158608923369304050318505189001248164915371687556472646128582314257947040270714178729837000098190856785622373322497855919537192744678414013755741053302987702456398500223358867939367998167588716676449062888956046405186995355116604966407309359623161874035026325944850251507183143525155082350419315247885305805138501059288920498
+.
+.
+.
+Factorial of 2324 is 82148407165048181056827200552545437572223953583509883674946458054844446908120819016663854631403295507160347782511867449764724613729073475534332618412046688619217115831734898578436991590722684312995775994377705545589415840329990011405456594973089194689831937182701483346122322683280925821345500267154027688945651366235905205525562181337221675915297049723776443122588580469788006052161083899603696111780175296314243496391664161292935638128912133642029824981810811933315833911655981380687746385462882291826575719431499196817362734588961155120404631698165759061357383833947808636323655117870477358408450631859239182150923341090557797970549588013677387299982600745313554083074783731093332248699091062001762719984861007137243510396808991474603117711655147857401869867645724372181888901254023736773223049710680942623520311926483206750263866740286556041721016669871242717985370409365147489199745723321948000416755175606191706079917267031314598610070718563296955173643912934181529012634909247136087104977087287621453711858978753099482263624554531266031384321920330747243261844347089235974522311808597576828190859240725889778033409791300296058521739916945304687582469160856895497855727875432646287648093850151794746418421370687969330855297792345021237836599867482082380740470536695257256758713343392789641375030392198797.
+.
+.
+Factorial of 4656 is 2669269449393821055486755804950239900551819660012792816830778583528312560038271395810866072945947790638821320968540760808049457201882378844211206639875242602358683764249379990637148268819825230693673039553110526203766057557271417282375370453558386818973649457923447741149546925837275389755810201614258068644886935909491601791895623658769460156172871828920333099360353728320706803707965842774198391757162658019677855026008957318857105864181507691362619780232598342066871270108430179141932524874914080485013846117583414994218067689224338817750895459992513600642541951543868519311853455372886118880750747266159462773982702556074910619439953729243930394835136816144529419141089146686889202138633865939913363560776556351684076095311916058913863480184354286044889246441936429866658293966215618342057685603375110949309947308946552246814690363298977308520015132997407374741664932093548563892082273727876142696597241974734318093390289826178092772817252953313691689160062689352859236663685515642402664713589470417962113647789917266044349821102714417541904623936779887477214936074924122737232250187595538853754672244084910086609828869509534998280670795782205294496106355215086654694497807018906719457200635474993835747315698763943428800220662699903007373095390943280679177492440448257407735719555231108556721333436865808093775973909926504325577929379755091462286136397264738211422777792000909011242389174815515831210449777464940318327251130202831279299760088004290901562272916880274136643145045959505131182191825193938643795478743461967094065217872093844179845808996232098667135377918301167445107310705600465331901108505776150629950402395597377285083056070324394026792156529543066538496971577445197745512198514234657207290836264151881847405782570756481748541544937862060850206185991055345874055367660721563479731200521805921827496439856058909773476292187703103584956190689204549431590029073392970457711694268761428440941650093816571543770659836218372095697481187507218932939414333835881661630099344184583444387607173921872981080097008146375782723621759245109224463994452755632899983394312064492186600993405670473645505539372678847803585465834812557376172830991191971990421995135961191267848534712446508759216356664591818981836258735850634821812806226227995799660048022415595588443932558566508848438736991239281975036673581174232657637986845298458203334291014156779519575651010796470453765080702505615848047356799261584815187489250418089027665884360521299451923299272365652256933820740802409576432933735418254976155674063692008655594423497819908684101778376177966202451465226233152524977001536798447695278483156685703125219595582343.
+.
+.
+Factorial of 23 is 25852016738884976640000
+Factorial of 5556 is 1699515964436519756709361069052680097268578402372263360131377466557861020609544297030935865023310828261601267993719610472479951447158200702473126886048427947689288472913128938960327881146341123573408010461704780915685451588386179037342030358372260357745461444920553880455816389768968372028009103467018055283457803464487372799427997682857401234411138774597439082989283785680560378326728861264159795338911584485238686999776031089526118992061573124316665075300133631329939088233454690361408494339300839086278379960818590896338689918450923904138143665029103033642584736460569636444179049255100797339456952738476073537010019579793038392331090112591504347550858622273710477332795317702210233004312236946787736335097831209927952511349354333036000964938266142843186521622203074915567409827187765666096696344793268849757808366458992514687190340789799467037967008336592767193482866553510020345839247246604413674020800830046597667774942830527776011920729472112048288762492808398430902660895772549887736689011707464663681580275240562668549426297769011043752144.
+.
+```
+
+
+
+- join을 활용하게 되면 2초 정도 기다리는 시간안에 logic이 완료될 때까지 시간을 벌 수 있다.
 ```java
 import java.math.BigInteger;
 import java.util.List;
@@ -440,7 +518,6 @@ public class ComplexCalculation {
 ```
 
 ```java
-
 public class ComplexCalculation {
     public BigInteger calculateResult(BigInteger base1, 
                                       BigInteger power1, 
