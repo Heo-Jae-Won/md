@@ -473,8 +473,8 @@ public class Main {
                 }
             });
 
-            reader.setDaemon(true); //Daemon thread로 만드는 이유는 
-            readers.add(reader);
+            reader.setDaemon(true); //Daemon thread로 만드는 이유는 Daemon 스레드는 JVM이 일반 스레드들이 모두 종료되면 자동으로 종료되기 떄문이다.
+            readers.add(reader);    //만약 Daemon으로 만들지 않고 일반 스레드로 만든다면, main 스레드가 종료되어도 reader 스레드들이 계속 실행되며 프로그램이 종료되지 않을 수 있다.
         }
 
         //상품 갯수 read하는 thread
