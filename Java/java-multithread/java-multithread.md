@@ -170,7 +170,7 @@ public static final int MAX_PASSWORD = 9999;
   - 거기에 쓰이는 method가 interrupt()다.
     - interrupt는 무한하게 도는 thread에서 interrupt를 감지시켜 thread를 loop에서 빠져나오게 해 thread를 종료시킨다.
     - interrupt 만으로 이미 돌아가던 logic이 멈추진 않는다.
-    -Thread.currentThread().isInterrupted() 아니면 setDaemon(true)로 만들어야 한다.
+    - Thread.currentThread().isInterrupted() 아니면 setDaemon(true)로 만들어야 한다.
 - BlockingTask의 경우, 잠들었기 때문에 interrupt()가 호출되면 InterruptedException을 catch하여 run이 종료되고 스레드가 종료된다.
 ```java
 private static class BlockingTask implements Runnable {
@@ -255,7 +255,7 @@ private static class LongComputationTask1 implements Runnable {
 - interrupt()되면 실행중인 로직이 취소되므로 thread1의 return은 0이 된다.
 - daemon thread는 non-daemon thread가 종료되면 같이 종료된다.
 - 따라서 Thread가 끝나고, Thread1이 끝나고 main Thread가 끝나면, Thread2도 더이상 발동되지 않는다.
-- 
+
 ```java
 public static void main(String[] args) throws Exception {
     Thread thread = new Thread(new BlockingTask());
@@ -294,7 +294,6 @@ Prematurely interrupted computation - LongComputationTask
 
 
 ## <span style="color:#802548">_반응성을 개선하는 thread join_</span>
-
 
 - 오래걸리는 computation logic을 만든다.
 - 여기선 factorial이란 재귀함수가 그런 logic이다.
@@ -371,7 +370,8 @@ public class Main {
 ```
 
 
-- 너무 오래걸리는 thread는 그냥 종료시키려면 interrupt를 활용할 수 있다. 하지만 interupt로는 정확한 시간만큼 기다리는 것은 불가능하다.
+- 너무 오래걸리는 thread는 그냥 종료시키려면 interrupt를 활용할 수 있다. 
+- 하지만 interupt로는 정확한 시간만큼 기다리는 것은 불가능하다. daemon thread도 마찬가지다.
 - 그렇게 된다면 2초 정도를 기다리면 계산이 완료되는데도 main thread가 가져오는 값은 없을 수 있다.
 ```java
 public class Main {
@@ -413,6 +413,8 @@ The calculation for 5556 is still in progress
 ```
 
 - 이를 join을 활용하면 정확히 2초 정도의 시간을 기다리게끔 만들어줄 수 있다.
+- join은 현재 실행중인 쓰레드(main thread)가 다른 쓰레드의 작업이 끝날때까지 기다리게 한다.
+  - 현재 thread는 대기상태에 돌입하고, 그동안 다른 thread가 연산을 진행하여 2초가 지난 뒤에 연산된 값을 가져온다.
 - 그럼 계산이 완료된 logic들의 경우 값을 가져올 수 있게 된다.
 ```java
 public static void main(String[] args) throws InterruptedException {
@@ -445,6 +447,7 @@ public static void main(String[] args) throws InterruptedException {
 ```
 
 - 여전히 100000000L은 계산중이라 값을 가져올 수 없다.
+- eclipse에서는 이유는 모르겠는데 100000000L, 3435L은 콘솔에서 지워지고 그 이후부터 출력된다.
 ```
 The calculation for 100000000 is still in progress
 Factorial of 35435 is 386588992032151251667007583813348702360432931100560868954226257629442643373231427226867559462578302509283089665244215909384571828146597432482783406603858090226007951016972443408362423971173167574438923082698334573145838648096788185680106428957986499780489200968997490302464862469292999028824193670828568407530556434212631480406995268603279354662349037768693011626007099108989845481867838003729114572126627560365220962674456731133207689540784702065638623177113845158608923369304050318505189001248164915371687556472646128582314257947040270714178729837000098190856785622373322497855919537192744678414013755741053302987702456398500223358867939367998167588716676449062888956046405186995355116604966407309359623161874035026325944850251507183143525155082350419315247885305805138501059288920498
@@ -517,6 +520,9 @@ public class ComplexCalculation {
 }
 ```
 
+
+- thread를 복수개를 만들어 join을 활용하게 되면 어떻게 될까?
+- 
 ```java
 public class ComplexCalculation {
     public BigInteger calculateResult(BigInteger base1, 
