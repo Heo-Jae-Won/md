@@ -299,7 +299,7 @@ HashAggregate (rows=10)             //select
             Filter: (sex = '2')     //no index filtering
 ```
 
-- 처음에는 실수로 아래와 같이 바꿀수도 있다. 그러나, case문은 ELSE와 END를 모두 써주어야 한다.
+- 처음에는 실수로 아래와 같이 바꿀수도 있다. 그러나, case문은 END까지는 써주어야 한다. ELSE 쓰는 건 옵션이다.
 ```sql
 select prefecture, case when sex = '1' then sum(pop_men) as pop_men
 			, case when sex = '2' then sum(pop_women) as pop_women
@@ -374,8 +374,18 @@ Id              Operation                   Name
 11                    TABLE ACCESS FULL     EMPLOYEES
 ```
 
-- 매우 심각하게 부담이 가는 실행 계획이다. 
-- table full scan을 3번이나 한다. 줄여놓자.
+- 매우 심각하게 부담이 가는 실행 계획이다. table full scan을 3번이나 한다. 줄여놓자.
+- 아래와 같이 바꿔보자.  안타깝게도 이건 불가능하다. 
+- emp_name으로 group을 나누지 않으면 relation인 Employees의 모든 row를 count하기 때문이다.
+```sql
+SELECT case when count(emp_name) = 1 then team
+		when count(emp_name) = 2 then '2개를 겸무'
+		when count(emp_name) >= 3 then '3개를 겸무' END AS team
+FROM Employees  
+```
+
+
+- 아래와 같이 GROUP BY를 써줘야 한다. 그리고 GROUP By에 안 썼는데, select에 쓰려면 MAX와 같은 집약함수를 써야만 한다.
 ```sql
 SELECT 직원이름,   
         CASE 
@@ -389,6 +399,8 @@ GROUP BY 직원이름;
 
 
 - 그러면 table full scan 한번만 때리게 바뀐다!
+- 이런 case when의 활용은 where 조건문이 index를 타지 않는 다는 것을 가정한다.
+- 만약 index를 적절하게 타게 구성했다면 case when이 아닌 union을 통한 index range scan이 더 낫다.
 ```
 Id              Operation                   NAME
 0               SELECT STATEMENT
@@ -573,6 +585,7 @@ Ken |   78      |   5       |   178     |   346     |   85      |   33
 - HASH GROUP BY를 사용하면 HASH 연산을 하게 되는데, 그 경우 워킹 메모리를 사용한다.
 - 즉 워킹 메모리가 부족하면 디스크 I/O가 일어나 느려지게 된다.
 - 레코드 수가 적을 땐 워킹 메모리가 부족하지 않겠지만, 많을 때는 속도가 문제가 될 수 있다.
+- 물론 group 수가 적으면 레코드 수가 아무리 많아도 문제가 되지는 않는다. 
 - 혹시라도 워킹 메모리 부족에 대비해 지정한 TEMP 영역도 다 써버리면 SQL 구문이 비정상 종료되어 다운된다.
 ```
 Id          |           Operation       |       Name
@@ -596,6 +609,9 @@ product_id      low_age     high_age        price
 ```
 
 - 아래와 같이 하면 하단 0부터 상단 100까지의 가격 범위가 모두 있는 제품만 선택할 수 있다.
+- WHERE조건절이 relation, 즉 table에 대해 걸리는 filtering 조건이라면, HAVING은 GROUP에 대해서 걸리는 조건이다.
+  - 따라서 HAVING 조건을 만족하는 group만이 select resultSet으로 fetch된다.
+  - group별 record에서 (high_age -low_age +1)하여 sum을 한 결과가 101을 만족하는 group만 출력된다는 의미다.
 ```sql
 SELECT product_id
 FROM PriceByAge
@@ -832,6 +848,9 @@ Id          |           Operation                       |       Name
 ```      
 
 - 아래는 window function을 쓴 예시다.
+- 왜 MAX를 사용해야 할까? 사실 sql의 resultSet에 영향을 미치는 것은 없다.
+- 그저 MAX 같은 집약, 랭킹 등의 함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
+  - 그러한 함수로는 count, max, min, avg, sum, rank, row_number, lag, lead 등이 있다.
 ```sql
 SELECT company,
         year,
@@ -841,6 +860,22 @@ SELECT company,
                                     ORDER BY year
                                     ROWS BETWEEN 1 PRECEDING
                                             AND 1 PRECEDING))
+            WHEN 0 THEN '='
+            WHEN 1 THEN '+'
+            WHEN -1 THEN '-'
+            ELSE NULL END AS var
+FROM Sales;
+```
+
+- 위의 함수는 lag를 사용하면 아래와 같이 간단하게 바뀐다.
+```sql
+SELECT company,
+        year,
+        sale,
+        CASE SIGN(sale - lag(sale)
+                            OVER (PARTITION BY company
+                                    ORDER BY year
+                                    ))
             WHEN 0 THEN '='
             WHEN 1 THEN '+'
             WHEN -1 THEN '-'
@@ -885,6 +920,7 @@ FROM Sales S1;
 
 - window function을 사용하면 아래와 같이 단순하게 바꿀 수 있다.
 - 왜 MAX를 사용해야 할까? MAX같은 집약함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
+  - 그러한 함수로는 count, max, min, avg, sum, rank, row_number, lag, lead 등이 있다.
 ```sql
 SELECT company,
         year,
@@ -1439,6 +1475,14 @@ emp_id          |emp_name           |dept_id            |dept_name
 006             |주아               |12                 |개발
 ```
 
+- 다만 Employees table은 full scan되기 때문에 index가 되는 컬럼을 좌변으로 옮기는게 이해하기 더 쉽다.
+```sql
+SELECT E.emp_id, E.emp_name, E.dept_id, D.dept_name
+FROM Employees E
+INNER JOIN Departments D
+on D.dept_id = E.dept_id 
+```
+
 - 서브쿼리를 쓰면, 아래와 같은 상관서브쿼리로 join을 대체할 수 있다.
 - 다만 select에서 서브쿼리를 쓰는 것은 join보다 비용이 꽤나 높은 일이다.
 - record 수만큼 상관 서브쿼리를 실행해야 하기 때문이다.
@@ -1512,20 +1556,13 @@ ID      |Operation                      |Name
 4       |    INDEX UNIQUE SCAN          |PK_DEP     
 ```
 
-- INDEX RANGE SCAN이 INDEX UNIQUE SCAN보다 안 좋은 이유는, 더 반복을 많이 하기 때문이다.
-- INDEX UNIQUE SCAN은 하나의 RECORD만 걸리기 때문에 늘 최적의 경우의 수가 된다.
-  - 즉, driving table Record X 2가 반복의 횟수다.
-- 반면에 INDEX RANGE SCAN은 하나가 아니라 multiple row가 걸리게 된다.
-  - 즉, driving table Record X2 < 반복의 횟수 <  R(A) X R(B) Record가 된다.
-- 따라서 결합key로 쓸 column의 cardinality가 굉장히 중요하다.
-- 데이터가 고르게 분포되어 있을수록 성능에 좋은 영향을 미친다.
 ## <span style="color:#802548">_driving table의 역설_</span>
 - driving table을 작게 만드는 게 통상적으로 좋다.
-- 하지만, on절로 driven table을 조회하려 할때, 많은 record가 걸리게 된다면?
+- 하지만, on절로 driven table을 조회하려 할때, join record가 많다면?
   - 그 떄는 역설적으로 driving table을 큰 테이블로 선택하는 게 나을 수 있다.
   - 따라서 선택률에 따라 driving table을 큰 테이블로 선택하는 게 나을 수도 있다.
 
-- 두 번째 해결법은 Hash다.
+- 두 번째 해결법은 Hash join이다. 다만 OLTP인 웹 환경에서는 권장할만한 해법이 아니다.
 - 해시결합은 작은 테이블을 스캔하고, 결합 키에 해시 함수를 적용해 해시값으로 반환한다.
 - 이어서 큰 테이블을 스캔하고, 결합 키가 해시값에 존재하는 지 확인하여 결합한다.
 - 작은 테이블에서 해시 테이블을 만드는 이유는 해시 테이블은 워킹 메모리에 저장되므로 크면 디스크 I/O로 넘어가버리기 떄문이다.
@@ -1675,11 +1712,13 @@ SELECT R1.cust_id, R1.seq, R1.price
         ON R1.cust_id = R2.cust_id
     AND R1.seq = R2.min_seq;
 ```
+
 ```
 1	PRIMARY	<derived2>		ALL					5	100.00	Using where
 1	PRIMARY	R1		eq_ref	PRIMARY	PRIMARY	606	R2.cust_id,R2.min_seq	1	100.00	Using index
 2	DERIVED	구매		range	PRIMARY	PRIMARY	602		5	100.00	Using index for group-by
 ```
+
 - 상관서브쿼리를 쓴다면 아래와 같이 쓸 수 있다.
 - 해당 서브쿼리가 좋지 않은 이유는, SELECT를 구매 table에서 진행했지만, 서브쿼리를 만나서 한번 더 구매 table을 SCAN해야하기 때문이다.
 - 똑같은 TABLE을 두 번 scan하게 되는 것이다.
@@ -1695,6 +1734,7 @@ select cust_id, seq, price
 1	PRIMARY	R1		ALL					16	100.00	Using where
 2	DEPENDENT SUBQUERY	R2		ref	PRIMARY	PRIMARY	602	practice.R1.cust_id	4	100.00	Using index
 ```
+
 - 따라서 상관서브쿼리가 아닌, window function을 쓰는 서브쿼리로 바꿔준다.
 - 실행계획도 안정적으로 바꾸고, table scan을 1회로 줄일 수 있다.
 ```sql
@@ -1848,6 +1888,7 @@ cd_cd(회사코드)         |district(지역)
 003                     |C
 004                     |D
 ```
+
 ```
 종업원
 cd_cd              |shop_id          |emp_nbr            |main_flg
@@ -1862,6 +1903,7 @@ cd_cd              |shop_id          |emp_nbr            |main_flg
 003                |4                |200                |Y
 004                |1                |999                |Y
 ```
+
 - 주요사업소의 종업원 합계를 회사별로 보고 싶다고 해보자.
 ```
 cd_cd           |district           |sum_emp
