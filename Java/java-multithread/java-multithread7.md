@@ -133,62 +133,7 @@ public class SimpleCountDownLatch {
   - 결국 이는 non-atomic 연산으로 인해 벌어진 일이다.
   - Java에서는 count++는 하드웨어 수준에서는 3개의 명령어기에 non-atomic이다.
     - Java에서는 그를 위해 volatile keyword와 atomic package가 있다.
-    - atomic package를 이용해 lock-free 구조를 만들 수 있다.
-
-- 그 중에서 atomicInteger를 살펴보자.
-- atomicInteger는 아래와 같이 만든다.
-
-```java
-int initialValue = 0;
-AtomicInteger atomicInteger = new AtomicInteger(initialValue);
-
-initialValue++;
-atomicInteger.incrementAndGet(); //1
-
-initialValue--;
-atomicInteger.decrementAndGet(); //-1
-
-int delta = 5;
-initialValue = initialValue  + 5;
-atomicInteger.addAndGet(delta); //10
-```
-
-- atomic이기에 무조건 원자적일거 같지만, method를 섞어 쓰면 원자성이 깨진다.
-- 아래에서 incrementAndGet하고 addAndGet을 같이 썼기에 각자는 원자적이나 method 단위로는 실제로는 비원자적 연산이 된다.
-  - 하나의 변수는 읽고 쓰는 걸 한 method 안에서 하면 안된다.
-  - 이는 두개의 변수도 마찬가지다. 한 method 안에서 읽거나 쓰는 것은 하면 안된다.
-```java
-int initialValue = 0;
-AtomicInteger atomicInteger = new AtomicInteger(initialValue);
-
-atomicInteger.incrementAndGet();
-atomicInteger.addAndGet(-5);
-```
-
-- 두 개 변수인 count와 sum을 하나의 method에서 읽고 수정하면 각각은 원자적이다.
-- 그러나 두개를 같이 연산하게 되는 CPU의 입장에서는 원자적인 연산이 아니게 된다.
-```java
-public class Metric {
-    private AtomicLong count = new AtomicLong(0);
-    private AtomicLong sum = new AtomicLong(0);
-
-    public void addSample(long sample) {
-        sum.addAndGet(sample);
-        count.incrementAndGet();
-    }
-
-    public double getAverage() {
-        double average = (double)sum.get()/count.get();
-        reset();
-        return average;
-    }
-
-    private void reset() {
-        count.set(0);
-        sum.set(0);
-    }
-}
-```
+    - 이 중 atomic package를 이용해 lock-free 구조를 만들 수 있다.
 
 - 이전에 했던 Inventory 예제를 생각해보면, synchronized method를 사용했었다.
 ```java
@@ -278,12 +223,51 @@ private static class InventoryCounter {
 }
 ```
 
-- 원시형만이 아니라 참조에도 사용할 수 있다.
-- 특히 compareAndSet이 매우 자주 활용된다.
+- atomic이기에 무조건 원자적일거 같지만, method를 섞어 쓰면 원자성이 깨진다.
+- 아래에서 incrementAndGet하고 addAndGet을 같이 썼기에 각자는 원자적이나 method 단위로는 실제로는 비원자적 연산이 된다.
+  - 하나의 변수는 읽고 쓰는 걸 한 method 안에서 하면 안된다.
+  - 이는 두개의 변수도 마찬가지다. 한 method 안에서 읽거나 쓰는 것은 하면 안된다.
+```java
+int initialValue = 0;
+AtomicInteger atomicInteger = new AtomicInteger(initialValue);
+
+atomicInteger.incrementAndGet();
+atomicInteger.addAndGet(-5);
+```
+
+- 두 개 변수인 count와 sum을 하나의 method에서 읽고 수정하면 각각은 원자적이다.
+- 그러나 두개를 같이 연산하게 되는 CPU의 입장에서는 원자적인 연산이 아니게 된다.
+- 그 말인 즉슨 addSample 함수는 atomic하지 않다는 의미이며, 다른 방식이 필요하다는 의미다.
+- 그 방식은 AtomicLong이 아닌 AtomicReference의 CAS 함수다.
+```java
+public class Metric {
+    private AtomicLong count = new AtomicLong(0);
+    private AtomicLong sum = new AtomicLong(0);
+
+    public void addSample(long sample) {
+        sum.addAndGet(sample);
+        count.incrementAndGet();
+    }
+
+    public double getAverage() {
+        double average = (double)sum.get()/count.get();
+        reset();
+        return average;
+    }
+
+    private void reset() {
+        count.set(0);
+        sum.set(0);
+    }
+}
+```
+
+- compareAndSet은 all or nothing을 보장하여 원자적 연산으로 이뤄지게 해준다.
 - 그러나 기억해야 할 점은 multi-threading이 늘 그렇듯, 성능이 반드시 좋아진다는 보장은 없다.
 - 그래도 보통은 LockFree가 더 빠른 편이다. 실제로 구현해보자.
-  - 다른 thread에 의해 바뀌지 않았다면 push()안의 while() 안의 if 조건이 true가 되어 멈춘다.
-  - 반면에 다른 thread에 의해 바뀌었다면 compareAndSet이 false를 반환하고 else문에서 1ms간 대기했다가 다시 while문을 읽어나간다.
+  - 다른 thread에 의해 바뀌지 않았다면 if 조건이 true가 되어 break된다.
+  - 반면에 다른 thread에 의해 바뀌었다면 compareAndSet이 false를 반환한다.
+  - 그 후 else문에서 1ms간 대기했다가 다시 while문을 읽어나간다.
 ```java
 public static class LockFreeStack<T> {
     private AtomicReference<StackNode<T>> head = new AtomicReference<>();
@@ -295,6 +279,8 @@ public static class LockFreeStack<T> {
         while (true) {
             StackNode<T> currentHeadNode = head.get();
             newHeadNode.next = currentHeadNode;
+
+            //CAS 발동
             if (head.compareAndSet(currentHeadNode, newHeadNode)) {
                 break;
             } else {
@@ -310,6 +296,8 @@ public static class LockFreeStack<T> {
 
         while (currentHeadNode != null) {
             newHeadNode = currentHeadNode.next;
+
+            //CAS 발동
             if (head.compareAndSet(currentHeadNode, newHeadNode)) {
                 break;
             } else {

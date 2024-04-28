@@ -12,7 +12,7 @@
   - memeber variable of classes
 
 
-- allNames는 reference로서 stack에 저장되지만, 이 reference가 가리키는 ArrayList<String> 유형의 객체는 heap에 할당된다.
+- allNames는 reference로서 stack에 저장되지만, 이 reference가 가리키는 ArrayList-String 유형의 객체는 heap에 할당된다.
 ```java
   public List<String> getAllNames() {
            int count = idToNameMap.size();
@@ -97,7 +97,6 @@ public class Main {
 - 하지만 start시켜놓고 join을 몰아서 하면 예상하지 않은 결과가 도출된다.
   - static class이므로 inventoryCounter가 thread 간 공유되는 Heap에 저장되며, items도 static class의 멤버변수이므로 동일하다.
   - items에 관한 연산인 items++, items--가 atomic operation이 아니다. all or nothing이 이뤄지지 않은 것이다.
-  - 
 ```java
 public static void main(String[] args) 
         throws InterruptedException {
@@ -148,6 +147,8 @@ void aggregateFunction() {
     operation3();
     exit critical section
 }
+```
+
 
 - 필요한 부분에만 lock을 거는 것이다.
   - 그 중 첫번째가 method 전체에 synchronized를 거는 것이다. 이건 전체 transaction에 lock을 거는 것과 같다. 
@@ -171,6 +172,7 @@ private static class InventoryCounter {
 ```
 
 - items는 원래 0이 아니었는데, 0이 되게 된다.
+
 ```java
 public static void main(String[] args) 
         throws InterruptedException {

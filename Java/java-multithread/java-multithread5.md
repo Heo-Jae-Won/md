@@ -66,24 +66,7 @@ public class Main {
 
 - 아래는 compiler나 cpu가 data race가 있다고 해도, 똑같은 로직이기 때문에 똑같은 method라고 판단하게 된다.
 - 문제는 single thread일 때는 몰라도, multihtread일 때 문제가 된다는 점이다. 
-```java
- public static class SharedClass {
-        private int x = 0;
-        private int y = 0;
-
-        public void increment1() {
-           x++;
-           y++;
-        }
-
-        public void increment2() {
-            y++;
-            x++;
-        }
-    }
-```
-
-- 다른 콩에서 실행되는 스레드를 인지하지 못하고, 동일 변수를 읽고 특정 처리 순서에 의존한다는 점이다. 그래서 예상치 못한 잘못된 결과를 낳게 된다.
+- 다른 스레드의 변경을 인지하지 못하고, 동일 변수를 읽고 특정 처리 순서에 의존하면 예상치 못한 잘못된 결과를 낳게 된다.
 - Java에서는 이러한 현상을 방지하기 위해서 synchroinized를 활용했다.
 - 또는 volatile을 활용했다. volatile이 synchronized보다 나은 점은 잠금 오버헤드가 줄어드는 이득이 있다는 점이다. 
   - 아래에선 long이나 int의 경우지만, 그 외의 경우에도 data race인 상황에선 volatile이 공유변수에 lock을 걸어주게 된다. 
@@ -385,11 +368,14 @@ public class Metrics {
             return average;
         }
     }
+```
+
 
 - 그래서 단계별로 lock을 걸면 deadlock에 빠지게 된다.
   - reset method가 maxLock을 쥐고 있고 countLock을 기다린다.
   - addSample method가 countLock을 쥐고 있고 maxLock을 기다린다.  
 - 따라서 아래와 같이도 안 된다.
+
 ```java
 public class Metrics {
         private long count;
@@ -443,43 +429,11 @@ public class Metrics {
     }
 ```
 
-- 그렇다고 아래와 같이 synchronized를 없애면 멀티스레딩에서 data race와 race condition에 의해 예상하지 않은 결과를 얻게 된다.
-```java
-  public class Metrics {
-        private long count;
-        private double average;
-        private long max;
- 
-        public synchronized void addSample(long sample) {
-            average = (average * count + sample) / (++count);
-            max = Math.max(max, sample);
-        }
- 
-        public synchronized void reset() {
-            count = 0;
-            max = Integer.MIN_VALUE;
-            average = 0.0;
-        }
- 
-        public long getCount() {
-            return count;
-        }
- 
-        public long getMax() {
-            return max;
-        }
- 
-        public double getAverage() {
-            return average;
-        }
-    }
-```
-
-
 - 아래와 같은 방식이 가장 바람직하다.
-  - getter setter에는 synchronized를 붙이지 않는다.
-  - 비원자적 연산인 addSample에는 synchronized가 필요하다. 
-  - reset은 사실상 setter기 때문에 synchronized를 붙일 필요가 없다. 원자적 연산이다.
+  - getter 함수는 synchronized를 붙이지 않는다.
+    - 비원자적 연산인 addSample에는 synchronized가 필요하다. 
+  - reset 함수는 참조할당을 하지만, 3개를 연달아 하면 비원자적 연산이다.
+    - 따라서 synchronized를 붙여주어야 한다.
 ```java
 public class Metrics {
     private volatile long count;

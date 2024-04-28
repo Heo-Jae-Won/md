@@ -369,7 +369,7 @@ AnimationTimer animationTimer = new AnimationTimer() {
     - 하지만 여러 thread가 쓰기에 관해서는 상호 배타라서 접근을 막는다.
     - writerLock이 걸린 경우에도 readLock이 접근할 수 없다.
 
-
+<br/>
 
 - 실제 사례를 살펴보자.
 - DB에서 가져오겠지만, 여기서는 DB call을 하지 않으니 유사하게 만든 것이다.

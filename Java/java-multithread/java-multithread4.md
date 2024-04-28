@@ -1,10 +1,12 @@
 - 안타깝게도 대부분의 연산은 non-atomic하다.
     - 모든 참조에 대한 할당은 atomic하다.
-    - 따라서 setter연산이나 getter연산은 synchronized가 필요없다.
+    - 따라서 getter연산은 synchronized가 필요없다.
+    - setter의 경우는 참조에 대한 할당처럼 작동할 때만, 즉 연산이 없을 때만 atomic하다.
     - 또한 long과 double을 제외한 원시형의 할당 또한 atomic하다.
       - long과 double이 예외인 것은 64 bit라 Java가 32 bit로 둘을 나눠 연산할 가능성이 놓기 때문이다.
       - 대신 double이나 long을 volatile을 달아주면 무조건 atomic해진다.
 
+<br/>
 
 - 실제 아래와 같은 setter, getter는 synchronized를 안 달아도 원자적 연산이다.
 ```java
@@ -22,15 +24,16 @@ public class SharedClass {
 ```
 
 
-- long이나 double은 다르다.
-- method에 synchronized를 달지 않고, double 에 volatile을 달아주면 된다.
+- long이나 double은 다른 원시형과 다르게 volatile을 달아주어야만 atomic하다.
+- 32bit로 나눠서 처리되기 때문에 그러한 것이다.
+- 또한 연산이 들어가는 경우 반드시 synchronized 를 달아줘야 한다.
 ```java
 public class Main {
     public static class Metrics {
         private long count = 0;
         private volatile double average = 0.0;
 
-        public void addSample(long sample) {
+        public synchronized void addSample(long sample) {
             double currentSum = average * count;
             count++;
             average = (currentSum + sample) / count;
@@ -73,78 +76,6 @@ public class Main {
             }
         }
     }
-
-
-    public static class Metrics {
-        private long count = 0;
-        private volatile double average = 0.0;
-
-        public void addSample(long sample) {
-            double currentSum = average * count;
-            count++;
-            average = (currentSum + sample) / count;
-        }
-
-        public double getAverage() {
-            return average;
-        }
-    }
-}
-```
-
-- 그리고 나서 business logic의 평균 시간을 계산하는 class를 만든다.
-- MetricsPrinter class다.
-- getAverage method는 synchronized되지 않아서 business logic은 병렬로 실행될 것이다.
-- 그럼에도 volitile을 사용했고, getter에 지나지 않기 때문에 원자적 연산이다. 만약 volitile을 사용하지 않았다면 원자적이라 볼 수 없었을 것이다.
-```java
-public class Main {
-
-    public static class MetricsPrinter extends Thread {
-        private Metrics metrics;
-
-        public MetricsPrinter(Metrics metrics) {
-            this.metrics = metrics;
-        }
-
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                }
-
-                double currentAverage = metrics.getAverage();
-
-                System.out.println("Current Average is " + currentAverage);
-            }
-        }
-    }
-
-    public static class BusinessLogic extends Thread {
-        private Metrics metrics;
-        private Random random = new Random();
-
-        public businessLogic(Metrics metircs) {
-            this.metrics = metrics;
-        }
-
-        @Override
-        public void run() {
-
-            while(true) {
-                long start = System.currentTimeMillis();
-                try {
-                    Thread.sleep(random.nextInt(10));
-                } catch (InterruptedException e) {
-                }
-
-                long end = System.currentTimeMillis();
-                metrics.addSample(end - start);
-            }
-        }
-    }
-
 
     public static class Metrics {
         private long count = 0;
@@ -230,15 +161,12 @@ public class Main {
 	            }
 	        }
 	    }
-	    
-	    
-
 
 	    public static class Metrics {
 	        private long count = 0;
 	        private volatile double average = 0.0;
 
-	        public void addSample(long sample) {
+	        public synchronized void addSample(long sample) {
 	            double currentSum = average * count;
 	            count++;
 	            average = (currentSum + sample) / count;
@@ -255,7 +183,6 @@ public class Main {
 - getter와 setter를 이용하여 새로운 값이 올 때 최대, 최솟값을 계속 바꿔가는 예시는 아래와 같다.
 - long에 volatile을 달아준다. 이를 통해 getter에는 synchronized keyword를 쓰지 않을 수 있다.
 - 그 다음엔 필요한 부분에만 synchronized 키워드를 달아준다.
-- synchorinzed에서 성능을 최대한으로 하는 aop를 만드려면 volatile 변수(혹은 원시형)와 getter, setter를 활용하면 된다.
 
 ```java
 public class MinMaxMetrics {
