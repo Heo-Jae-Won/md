@@ -1,8 +1,9 @@
 - 자바는 Thread를 통해 동시성을 달성한다.
-- synchronized
-- Reentrant Lock
-- Atomic package
-- condition
+- Threading을 지원하는 도구로 아래와 같은 것들이 있다. atomic package는 예외다.
+  - synchronized
+  - Reentrant Lock
+  - condition
+  - Atomic package
 
 
 
@@ -10,21 +11,45 @@
 - 병행성은 parallelism인데, task 한 개를 subtask로 나눈다 (fork)
 - 그 뒤 subtask의 결과를 모은다 (join)
 - concurrency와 parallelism 모두 결과를 빠르게 얻어오는 방법이지만, 방식이 다르다.
-- Stream api에서는 parallelStream()가 그를 담당한다.
+- Stream api에서는 parallelStream()가 멀티스레딩과 비슷한 기능을 담당한다.
 
 
 <img src="/image/parallelism.jpg" />
 
+- parallelStream을 쓰는 간단한 예시는 아래와 같다.
 ```java
 List<String> namesList = List.of("Bob", "Jamie","Jill","Rick");
 
-List<String> namesListUpperCase = namesList.parallelStream().map(String::toUpperCase).collect(Collectors.toList());
+List<String> namesListUpperCase = namesList.parallelStream()
+                                            .map(String::toUpperCase)
+                                            .collect(Collectors.toList());
 ```
 
-- productService를 실행하면 1초가 걸린다.
+- productInfoService를 실행하면 1초가 걸린다.
 - ReviewService 또한 실행하면 1초가 걸린다.
-- 이를 Blocking I/O를 하게 되면 2초가 걸리게 된다.
+- 현재 ProductService는 parallel이 아니므로 Blocking I/O로 인해 2초가 걸리게 된다.
 ```java
+public class ReviewService {
+    public Review retrieveReviews(String productId) {
+        delay(1000);
+        LoggerUtil.log("retrieveReviews after Delay");
+        return new Review(200, 4.5);
+    }
+}
+
+public class ProductInfoService {
+
+    public ProductInfo retrieveProductInfo(String productId) {
+        delay(1000);
+        List<ProductOption> productOptions = List.of(new ProductOption(1, "64GB", "Black", 699.99),
+                new ProductOption(2, "128GB", "Black", 749.99));
+        LoggerUtil.log("retrieveProductInfo after Delay");
+        return ProductInfo.builder().productId(productId)
+                .productOptions(productOptions)
+                .build();
+    }
+}
+
 public class ProductService {
     private ProductInfoService productInfoService;
     private ReviewService reviewService;
@@ -47,23 +72,13 @@ public class ProductService {
 }
 
 
-public class ReviewService {
-    public Review retrieveReviews(String productId) {
-        delay(1000);
-        LoggerUtil.log("retrieveReviews after Delay");
-        return new Review(200, 4.5);
-    }
-}
-
 public static void main(String[] args) {
-
     ProductInfoService productInfoService = new ProductInfoService();
     ReviewService reviewService = new ReviewService();
     ProductService productService = new ProductService(productInfoService, reviewService);
     String productId = "ABC123";
     Product product = productService.retrieveProductDetails(productId);
     log("Product is " + product);
-
 }
 ```
 
@@ -84,39 +99,7 @@ public class ProductServiceUsingThread {
         this.reviewService = reviewService;
     }
 
-    public Product retrieveProductDetails(String productId) throws InterruptedException {
-        stopWatch.start();
-        ProductInfoRunnable productInfoRunnable = new ProductInfoRunnable(productId);
-        Thread productInfoThread = new Thread(productInfoRunnable);
-
-        ReviewRunable reviewRunnable = new ReviewRunable(productId);
-        Thread reviewThread = new Thread(reviewRunnable);
-
-        productInfoThread.start();
-        reviewThread.start();
-
-        productInfoThread.join();                                       
-        reviewThread.join();
- 
-        ProductInfo productInfo = productInfoRunnable.getProductInfo(); //Thread가 start됐으므로 runnable에서 productInfo를 가져올 수 있다. join을 해놨으니 가져오는 것. join없으면 아무값도 못가져옴..
-        Review review = reviewRunnable.getReview();                     //Thread가 start됐으므로 runnable에서 productInfo를 가져올 수 있다. join을 해놨으니 가져오는 것. join없으면 아무값도 못가져옴..
-
-        stopWatch.stop();
-        log("Total Time Taken : " + stopWatch.getTime());
-        return new Product(productId, productInfo, review);
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-
-        ProductInfoService productInfoService = new ProductInfoService();
-        ReviewService reviewService = new ReviewService();
-        ProductServiceUsingThread productService = new ProductServiceUsingThread(productInfoService, reviewService);
-        String productId = "ABC123";
-        Product product = productService.retrieveProductDetails(productId);
-        log("Product is " + product);
-
-    }
-
+    
     private class ProductInfoRunnable implements Runnable {
         private ProductInfo productInfo;
         private String productId;
@@ -154,11 +137,44 @@ public class ProductServiceUsingThread {
             review = reviewService.retrieveReviews(productId);
         }
     }
+
+    public Product retrieveProductDetails(String productId) throws InterruptedException {
+        stopWatch.start();
+        ProductInfoRunnable productInfoRunnable = new ProductInfoRunnable(productId);
+        Thread productInfoThread = new Thread(productInfoRunnable);
+
+        ReviewRunable reviewRunnable = new ReviewRunable(productId);
+        Thread reviewThread = new Thread(reviewRunnable);
+
+        productInfoThread.start();
+        reviewThread.start();
+
+        productInfoThread.join();                                       
+        reviewThread.join();
+ 
+        ProductInfo productInfo = productInfoRunnable.getProductInfo(); //Thread가 start됐으므로 runnable에서 productInfo를 가져올 수 있다. join을 해놨으니 가져오는 것. join없으면 아무값도 못가져옴..
+        Review review = reviewRunnable.getReview();                     //Thread가 start됐으므로 runnable에서 productInfo를 가져올 수 있다. join을 해놨으니 가져오는 것. join없으면 아무값도 못가져옴..
+
+        stopWatch.stop();
+        log("Total Time Taken : " + stopWatch.getTime());
+        return new Product(productId, productInfo, review);
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+
+        ProductInfoService productInfoService = new ProductInfoService();
+        ReviewService reviewService = new ReviewService();
+        ProductServiceUsingThread productService = new ProductServiceUsingThread(productInfoService, reviewService);
+        String productId = "ABC123";
+        Product product = productService.retrieveProductDetails(productId);
+        log("Product is " + product);
+
+    }
 }
 ```
 
 
-- 그래서 1.5에서 ThreadPool과 ExecutorService가 탄생했다.
+- 그래서 JDK 1.5에서 ThreadPool과 ExecutorService가 탄생했다.
 - ThreadPool이 있으면 코드에서 start join을 전부 쓸 필요가 없다.
 - ExecutorService를 쓰려면 3가지 요소가 필요하다.
   - ThreadPool이 필요하다.
@@ -187,7 +203,7 @@ public class ProductServiceUsingExecutor {
 
         //ProductInfo productInfo = productInfoFuture.get();
         ProductInfo productInfo = productInfoFuture.get(2, TimeUnit.SECONDS); //끝날때까지 2초간 기다려준다.무한하게 기다리지 않는다. 만약 대기시간을 넘어서면 TimeoutException이 터진다.
-        Review  review = reviewFuture.get();
+        Review  review = reviewFuture.get();                                  //끝날떄까지 무한하게 기다려준다.
 
         stopWatch.stop();
         log("Total Time Taken : "+ stopWatch.getTime());

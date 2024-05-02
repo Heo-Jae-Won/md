@@ -40,7 +40,7 @@ class ParallelismExampleTest {
         //then
         assertEquals(4, stringList.size());
         stringList.forEach((name) -> {
-            assertTrue(name.contains("-")); //*를 넣으면 exception이 난다.
+            assertTrue(name.contains("-")); //*를 넣으면 exception이 난다. *가 아니라 -를 넣었기 때문..
         });
     }
 }
@@ -76,6 +76,19 @@ public List<String> stringTransform(List<String> namesList){
 - boolean에 false나 ture를 주고, @ValueSource를 준다.
 - 그리고 사용할 변수명을 parameter로 지정한다.
 ```java
+public List<String> stringTransform_1(List<String> namesList, boolean isParallel) {
+
+    Stream<String> nameStream = namesList.stream();
+
+    if(isParallel)
+        nameStream.parallel();
+
+    return nameStream
+            .map(this::transform)
+            .collect(Collectors.toList());
+}
+
+
 @ParameterizedTest
 @ValueSource(booleans = {false, true})
 void stringTransform_1(boolean isParallel) {

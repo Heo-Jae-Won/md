@@ -16,7 +16,6 @@
 <img src="/image/blocking4.jpg" />
 
 
-- blocking I/O를 만드는 요청을 
 - 1000개까지 스레드가 늘어난다. 그러나 스레드를 무한정으로 늘리진 못한다. 
 - 태스크를 10_000으로 늘려서 스레드를 10_000개를 할당하려고 하면 memory 관련 error가 난다. 따라서 newFixedThreadPool(1000)으로 고정해준다.
 ```java
@@ -57,7 +56,7 @@ public class IoBoundApplication {
 - blocking call을 1000ms가 아니라 10ms로 만들어 더 자주 blocking I/O(여기선 Thread.sleep)를 호출하면 이러한 문제가 명확하게 드러난다.
   - 원래 10초면 끝나던게 이제 23초가 걸린다.
     - blocking I/O가 발생하면 OS는 해당 스레드의 스케쥴링을 취소하고 진행가능한 thread를 찾아 context switching을 하게 된다. thread를 CPU에 넣었다 뺐다 하는 것이다. 
-    - 이렇게 CPU가 시스템을 관리하는 것 때문에 CPU 자원을 소모하는 것을     threashing이라고 하며 피해야 한다.
+    - 이렇게 CPU가 시스템을 관리하는 것 때문에 CPU 자원을 소모하는 것을 threashing이라고 하며 피해야 한다.
 ```java
 private static void blockingIoOperation() {
         System.out.println("Executing a blocking task from thread: " + Thread.currentThread());
@@ -89,13 +88,15 @@ private void startHttpServer() throws IOException {
 private void handleHttpRequest(HttpExchange httpExchange) {
     try {
         int numberOfProducts = parseRequest(httpExchange);
-        URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts);
+        URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts));
  
-        HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder()
-                        .GET()
-                        .uri(requestURI)
-                        .build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(
+                                                        HttpRequest.newBuilder()
+                                                            .GET()
+                                                            .uri(requestURI)
+                                                            .build(),
+                                                        HttpResponse.BodyHandlers.ofString()
+                                                    );
  
         sendWebpageToUser(httpExchange, response);
     } catch (Exception e) {
@@ -105,12 +106,9 @@ private void handleHttpRequest(HttpExchange httpExchange) {
 ```
 
 - 해당 문제를 완화하려고 thread를 많이 발급할 수도 있다.
-- 요청이 오는 만큼 동적으로 thread를 발급하게 설정했다.
+- 요청이 오는 만큼 동적으로 thread를 발급하게 Executor를 사용하여 설정했다.
 - 그러나 여전히 thread 고갈 문제는 피해갈 수 없다.
 ```java
-/** Starts an HTTP Server listening on port 8080.
-    Delegates the handling of the requests to the handleHttpRequest method
- **/
 private void startHttpServer() throws IOException {
     HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
     HttpContext context = server.createContext("/");
@@ -126,13 +124,15 @@ private void startHttpServer() throws IOException {
 private void handleHttpRequest(HttpExchange httpExchange) {
     try {
         int numberOfProducts = parseRequest(httpExchange);
-        URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts);
+        URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts));
  
-        HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder()
-                        .GET()
-                        .uri(requestURI)
-                        .build(),
-                HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(
+                                                        HttpRequest.newBuilder()
+                                                                    .GET()
+                                                                    .uri(requestURI)
+                                                                    .build(),
+                                                         HttpResponse.BodyHandlers.ofString()
+                                                    );
  
         sendWebpageToUser(httpExchange, response);
     } catch (Exception e) {
@@ -145,7 +145,7 @@ private void handleHttpRequest(HttpExchange httpExchange) {
   - non-blocking I/O는 result가 준비되면 실행되는 callback을 사용한다.
   - 의사코드로는 아래와 같다.
 ```java
-//thread per task model
+//blocking I/O model
 public void handleRequest(HttpExchange exchange) { 
     Request request = parseUserRequest(exchange);
     Data data = readFromDatabase(request);
@@ -200,12 +200,13 @@ private void handleHttpRequest(HttpExchange httpExchange) {
     int numberOfProducts = parseRequest(httpExchange);
     URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts));
  
-    CompletableFuture<HttpResponse<String>> responseFuture = 
-            httpClient.sendAsync(HttpRequest.newBuilder()
-                    .GET()
-                    .uri(requestURI)
-                    .build(),
-            HttpResponse.BodyHandlers.ofString());
+    CompletableFuture<HttpResponse<String>> responseFuture =  httpClient.sendAsync(
+                                                                                    HttpRequest.newBuilder()
+                                                                                        .GET()
+                                                                                        .uri(requestURI)
+                                                                                        .build(),
+                                                                                    HttpResponse.BodyHandlers.ofString()
+                                                                                );
  
     responseFuture.thenAccept( response -> {
         sendWebpageToUser(httpExchange, response);
