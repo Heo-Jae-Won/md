@@ -32,6 +32,7 @@ public class EventProductService {
 
 
 - eventItem에 할인율을 더해주는 service다.
+- calculateFinalPrice나 calculateFinalPrice_reduce나 결과는 똑같다.
 ```java
 public class DiscountService {
 
