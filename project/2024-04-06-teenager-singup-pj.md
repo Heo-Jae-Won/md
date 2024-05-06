@@ -2434,3 +2434,115 @@ function init() {
     }
 }
 ``` 
+
+## <span style="color:#802548">_jquery siblings는 find로 못가져온다_</span>
+- Jquery에서 인접 element를 가져오고자 했다.
+- 그래서 ChatGPT 문의한 결과 아래와 같이 가져오려 했다.
+```html
+<div class="card_number">
+    <div class="input">
+        <ul>
+            <li class=""><span>cardNumber</span></li>
+        </ul>
+    </div>
+    <input type="hidden" name="card_number"/>
+    <input type="hidden" name="card_code"/>
+    <input type="hidden" name="card_owner"/>
+</div>
+
+<script>
+const cardNumber = $(".input").siblings().find('input[name="card_number"]');
+```    
+
+- 그러나 가져와지지 않았다.
+- 그래서 40분 헤매다가 stackoverFlow에 문의결과 아래와 같이 가져오라고 한다.
+- 그랬더니 잘 된다.. siblings안에다가 넣어야 되는 것으로 보인다.
+- find로 가져오려면 특정 element가 아니라 처음 input으로 가져올 수 있는 모든 list를 다 받아온다.
+```js
+const cardNumber = $(".input").siblings('input[name="card_number"]');
+```
+
+
+
+## <span style="color:#802548">_Java에서 jsonArray를 stringify한 것을 js에서 parsing하기_</span>
+- 특정 회원 등급의 경우, 계정계에 데이터를 안 쌓아버려서(???) api 호출시 에러가 나버린다.
+- 따라서 특정 api를 호출하기 전에 검사를 하는 로직이 필요했다.
+```java
+if (!customerNo.matches("[0-9]+")) {
+    throw new NotAllowedDbCallException("일반회원입니다.");
+}
+```
+
+- 하지만 문제는 jsp였기 때문에 화면은 반드시 return해야 하는데 아래와 같이 특정 변수를 jsp에 보낸다.
+- 문제는 판별로직은 순서상 그보다 위에 있어 해당 변수를 보내지 않아버리게 되는 점이다.
+```java
+if (!customerNo.matches("[0-9]+")) {
+    throw new NotAllowedDbCallException("일반회원입니다.");
+}
+
+outputMap = retrieveChargingMeanList(customerNo);
+List<HashMap<String,Object>> NHaccountListMap = (List<HashMap<String, Object>>) outputMap.get("US_BRK_LIST");
+outputMap.put("accountList", JSONArray.toJSONString(NHaccountListMap));
+```
+
+- Java의 JSONArray를 stringify하면 아래와 같은 모습이 된다.
+```
+'[
+    {"key1": "value1"},
+    {"key2": "value2"},
+    {"key3": "value3"},
+    {"key4": "value4"},
+]'
+```
+
+- 그러면 js에서는 아래와 같이 받으면 exception이 터지고, try ~ catch로 잡질 않아서 그 뒤에 js enginge이 parsing을 멈춘다.
+```js
+var nhAccountList = ${accountList};
+//만약 exception이 터져서 US_BRK_LIST가 안오면 var nhAccountList = ;가 되어 error가 나서 그 이후부턴 js가 읽히지 못한다.
+```
+
+- 물론 js가 안읽혀도 작동은 안하기에 상관은 없었다.
+- 어차피 해당 페이지는 일반고객은 들어가면 안되는 페이지였다.
+- 그러나 그와는 별개로 js의 정상 진행은 당연한 것이었고, js가 정상 진행되면서 들어와서 더이상 page 진행이 안되게 처리해야 했다.
+- 따라서 처음엔 아래와 같이 문자열로 감쌌다. 사실 jsp에서 template 변수를 받을 땐 보통 이런 이유때문에 문자열로 만드는 편이다.
+```js
+var accountList = "${accountList}";
+```
+
+- 그러나 문제는 그러자 end of input 에러가 발생했다.
+- 이유를 몰랐는데 혹시 JSON이 ""인데 내가 또 ""로 묶어서 이런 에러가 났나? 생각을 하여 홑따옴표로 바꿨다.
+- 그랬더니 잘 인식되었다. 이제 js의 문자열은 ""가 아닌 ''로 쓰는것으로 고정하려고 한다..
+```js
+var accountList = '${accountList}';
+```
+
+- 이제 해당 값을 json parsing해줄 차례였다.
+- 그랬더니 값이 비어있는 상태로 왔을 때는 parsing할 수 있는 값이 없어 오류가 났다.
+```js
+var accountList = JSON.parse('${accountList}');
+```
+
+
+- 그러한 이유로 기본값이 하나 필요했다.
+- 아래와 같이 그냥 빈 배열을 넣으려고 했다.
+- 그런데 parsing 에러가 났다. JSON.parse는 문자열을 대상으로 진행할 수 있던 것이다.
+```js
+var originalList = '${accountList}' ? '${accountList}'  : [];
+var accountList = JSON.parse(originalList);
+```
+
+
+- 따라서 아래와 같이 바꿨다.
+- 배열도 ''로 묶어 json문자열로 변환해주었다.
+```js
+var originalList = '${accountList}' ? '${accountList}'  : '[]';
+var accountList = JSON.parse(originalList);
+
+if(accountList.length > 0 ) {
+    html.push('~~~~~~');
+    html.push('~~~~~~');
+    html.push('~~~~~~');
+}
+html.join('\n');
+```
+
