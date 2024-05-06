@@ -223,7 +223,7 @@ private static class LongComputationTask implements Runnable {
 
 - LongComputationTask의 경우, 실행중인 로직이다. 
 - interrupt()의 호출을 감지하려면 Thread.isInterrupted()가 필요하다.
-- 하지만 해당 로직이 없다. 이 경우 thread 생성시 daemon thread로 만든다.
+- 하지만 아래의 경우는 Thread.isInterrupted()가 없다. 이 경우 thread 생성시 daemon thread로 만들어야 한다.
 ```java
 private static class LongComputationTask1 implements Runnable {
     private BigInteger base;
@@ -370,9 +370,8 @@ public class Main {
 ```
 
 
-- 너무 오래걸리는 thread는 그냥 종료시키려면 interrupt를 활용할 수 있다. 
-- 하지만 interupt로는 정확한 시간만큼 기다리는 것은 불가능하다. daemon thread도 마찬가지다.
-- 그렇게 된다면 2초 정도를 기다리면 계산이 완료되는데도 main thread가 가져오는 값은 없을 수 있다.
+- 결과를 얻어올 때는 interrupt를 활용할 수가 없다.
+- interrupt는 잠든 프로세스를 깨우는 용도다.
 ```java
 public class Main {
     public static void main(String[] args) throws InterruptedException {
@@ -389,6 +388,10 @@ public class Main {
             thread.start();
         }
 
+        for (Thread thread : threads) {
+            thread.interrupt();
+        }
+
 
         for (int i = 0; i < inputNumbers.size(); i++) {
             FactorialThread factorialThread = threads.get(i);
@@ -402,6 +405,7 @@ public class Main {
 }
 ```
 
+- interrupt()를 추가해도 원래되던 23L을 제외하면 process가 진행중이라는 말만 뜬다.
 ```
 The calculation for 100000000 is still in progress
 The calculation for 3435 is still in progress
@@ -467,7 +471,7 @@ Factorial of 5556 is 16995159644365197567093610690526800972685784023722633601313
 
 
 
-- join을 활용하게 되면 2초 정도 기다리는 시간안에 logic이 완료될 때까지 시간을 벌 수 있다.
+- join을 활용해 값을 가져오는 또 하나의 예시다.
 ```java
 import java.math.BigInteger;
 import java.util.List;
@@ -519,59 +523,4 @@ public class ComplexCalculation {
     }
 }
 ```
-
-
-- thread를 복수개를 만들어 join을 활용하게 되면 어떻게 될까?
-- 
-```java
-public class ComplexCalculation {
-    public BigInteger calculateResult(BigInteger base1, 
-                                      BigInteger power1, 
-                                      BigInteger base2, 
-                                      BigInteger power2) {
-        BigInteger result;
-        PowerCalculatingThread thread1 = new PowerCalculatingThread(base1, power1);
-        PowerCalculatingThread thread2 = new PowerCalculatingThread(base2, power2);
- 
-        thread1.start();
-        thread2.start();
- 
-        try {
-            thread1.join();
-            thread2.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
- 
-        result = thread1.getResult().add(thread2.getResult());
-        return result;
-    }
- 
-    private static class PowerCalculatingThread extends Thread {
-        private BigInteger result = BigInteger.ONE;
-        private BigInteger base;
-        private BigInteger power;
- 
-        public PowerCalculatingThread(BigInteger base, BigInteger power) {
-            this.base = base;
-            this.power = power;
-        }
- 
-        @Override
-        public void run() {
-            for(BigInteger i = BigInteger.ZERO;
-                i.compareTo(power) !=0;
-                i = i.add(BigInteger.ONE)) {
-                result = result.multiply(base);
-            }
-        }
- 
-        public BigInteger getResult() {
-            return result;
-        }
-    }
-}
-```
-
-
 

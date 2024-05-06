@@ -1,3 +1,4 @@
+## <span style="color:#802548">_Thread와 Process_</span>
 - Process는 Context와 동일하다.
 - Process는 Main Thread와 하위 thread를 가진다.
 - 그 외에 process는 Heap와 Code도 가진다.
@@ -14,14 +15,14 @@
 
 - allNames는 reference로서 stack에 저장되지만, 이 reference가 가리키는 ArrayList-String 유형의 객체는 heap에 할당된다.
 ```java
-  public List<String> getAllNames() {
-           int count = idToNameMap.size();
-           List<String> allNames = new ArrayList<>();
-            
-            allNames.addAll(idToNameMap.values());
-           
-           return allNames;
-       }
+public List<String> getAllNames() {
+    int count = idToNameMap.size();
+    List<String> allNames = new ArrayList<>();
+    
+    allNames.addAll(idToNameMap.values());
+    
+    return allNames;
+}
 ```
 
 - 아래와 같이 start()와 join()을 순서대로 thread마다 실행하면 0이 나온다. 
@@ -93,7 +94,7 @@ public class Main {
 
 ```
 
-
+## <span style="color:#802548">_race condition_</span>
 - 하지만 start시켜놓고 join을 몰아서 하면 예상하지 않은 결과가 도출된다.
   - static class이므로 inventoryCounter가 thread 간 공유되는 Heap에 저장되며, items도 static class의 멤버변수이므로 동일하다.
   - items에 관한 연산인 items++, items--가 atomic operation이 아니다. all or nothing이 이뤄지지 않은 것이다.
@@ -135,10 +136,10 @@ public static void main(String[] args)
   - (3) DecrementingThread에서 새로운 items 값은 -1이기 때문에 -1로 저장된다.
   - (7) heap에서 items는 1이었다가 -1로 바뀌게 된다.
 
-
-<br />
-
-- critical section을 만들면 method의 특정 연산 영역을 묶어 lock을 걸수 있다.
+## <span style="color:#802548">_lock걸기- synchronized_</span>
+- 위와 같은 현상을 race condition이라고 하며, heap, file system, DB 등 공유자원을 어느 떄나 접근할 수 있게 만들어서 생긴 현상이다.
+- 이를 막기 위해선 critical section을 만들어줘야 한다. critical section을 만들면 method의 특정 연산 영역을 묶어 lock을 걸수 있다.
+- 그 방법 중 하나가 바로 synchronized다. 다른 thread가 접근하지 못하게 막는 기능을 한다.
 ```java
 void aggregateFunction() {
     entry 임계점 (critical Section)
@@ -150,9 +151,8 @@ void aggregateFunction() {
 ```
 
 
-- 필요한 부분에만 lock을 거는 것이다.
-  - 그 중 첫번째가 method 전체에 synchronized를 거는 것이다. 이건 전체 transaction에 lock을 거는 것과 같다. 
-  - 아래와 같이 synchronized를 걸면, items의 result가 중구난방으로 나오는 현상이 해결된다.
+- 필요한 method에만 걸어주면 된다.
+- 아래와 같이 synchronized를 걸면, items의 result가 중구난방으로 나오는 현상이 해결된다.
 ```java
 private static class InventoryCounter {
         private int items = 0;
@@ -165,13 +165,14 @@ private static class InventoryCounter {
             items--;
         }
 
-        public synchronized int getItems() {
+        public int getItems() {
             return items;
         }
     }
 ```
 
-- items는 원래 0이 아니었는데, 0이 되게 된다.
+
+- start, start, join, join임에도 items는 의도한대로 0으로 나오는 것을 볼 수 있다.
 
 ```java
 public static void main(String[] args) 
@@ -190,10 +191,9 @@ public static void main(String[] args)
 }
 ```
 
-- 두번째는 method의 일부에만 synchorinzed를 거는 것이다.
+- method의 일부에만 synchorinzed를 거는 것도 가능하다.
 - 필요한 영역만 lock을 걸게 되어 좀 더 반응성이 높아진다.
-  - 현재는 사실상 method 자체에 lock을 거는 것과 동일하다.
-  - 그러나 logic이 있다면 해당부분까지는 동시실행이 가능해 실행시간 상에서 이득이 있다.
+- method와 무관한 logic이 있다면 해당부분까지는 동시실행이 가능해 실행시간 상에서 이득이 있다.
 ```java
 private static class InventoryCounter {
         private int items = 0;
@@ -212,7 +212,7 @@ private static class InventoryCounter {
             }
         }
 
-        public synchronized int getItems() {
+        public int getItems() {
             synchronized(this.lock) {
                return items;
             }

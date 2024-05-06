@@ -35,7 +35,7 @@ authenticateUser();
 - 그 덕에 UI thread는 lock을 얻었다. 그래서 UI에 값을 채운다.
 - 그리고 값이 없어 sleep에 빠진 DB 접근 thread를 깨운다. (signal)
 - DB 접근 thread가 일어나도 UI thread가 lock을 unlock해야 DB 접근 thread의 lock.lock() 이후의 임계영역 코드가 진행된다.
-- unlock되어 진행되게 되면 값이 있다면 while문을 빠져나와 doStuff()가 진행된다.
+- unlock되어 진행되게 되면 값이 있다면 while문을 빠져나와 authenticateUser()가 진행된다.
 ```java
 lock.lock();
 try {
@@ -48,10 +48,13 @@ try {
 ```
 
 
+
+
 ## <span style="color:#802548">_thread를 대기시켰다가 꺠우는 wait와 notify_</span>
 - wait가 호출되면 CPU를 반환하며 대기상태가 된다.
-- notify()를 호출하면 대기중인 모든 thread 중 하나만 선택하여 실행 중 상태로 변경한다.
-- notifyAll()을 호출하면 대기중인 모든 thread를 실행중 상태로 변경한다.
+- notify()를 호출하면 대기중인 모든 thread 중 하나만 선택하여 lock을 쥐어준다. 즉, 한 thread는 실행 중 상태로 변경된다는 것이다.
+- notifyAll()을 호출하면 대기중인 모든 thread를 실행중 상태로 변경한다. 그러나 notify()와 같이 lock을 쥐어주는 thread는 한 개다.
+  - 그래서 lock을 못 얻게 되면 다시 또 잠들게 된다. 깨우는 의미가 없는 행위가 되어버릴 수도 있다.
 - thread1이 start되었을 때, isCompleted가 false이므로 wait()가 발동해 대기상태에 들어간다.
 - 이를 다시 꺠우려면 thread2가 flag 변수를 true로 만들고 notify()를 호출하여 대기중인 thread를 실행 중 상태로 변경해주면 된다.
 ```java
@@ -77,6 +80,8 @@ public class SomeClass {
 
 
 - 조건 변수 대신 wait()와 notify()를 사용한 예제가 아래와 같이 또 있다.
+- count가 0보다 크면 대기시키고, 0이 되면 모든 thread에게 신호를 준다.
+- 다만 문제는 어떤 Thread가 lock을 얻을 지는 모른다는 점이다.
 ```java
 public class SimpleCountDownLatch {
     private int count;
@@ -121,6 +126,207 @@ public class SimpleCountDownLatch {
     */
     public int getCount() {
         return this.count;
+    }
+}
+```
+
+
+## <span style="color:#802548">_wait와 notify- example_</span>
+- 실제 예시는 아래와 같다.
+- 행렬을 파일로 만드는 예시다.
+- 우선 dto class를 만들어준다.
+```java
+private static class MatricesPair {
+    public float[][] matrix1;
+    public float[][] matrix2;
+}
+```
+
+- 행렬을 담아줄 queue를 만든다.
+- queue는 thread - safe하게 만들어야 한다.
+- 해당 로직을 wait()와 notify()로 구현한 것이다.
+  - add()와 remove()를 보면 알 수 있다.
+  - add 시에 최대용량에 다다랐다면 wait시키고, 용량이 있다면 remove를 깨운다.
+  - remove 시에 size가 0에 다다랐다면 wait시키고, 용량이 차면 다시 add를 깨운다.
+```java
+private static class ThreadSafeQueue {
+    private Queue<MatricesPair> queue = new LinkedList<>();
+    private boolean isEmpty = true;
+    private boolean isTerminate = false;
+    private static final int CAPACITY = 5;
+
+    public synchronized void add(MatricesPair matricesPair) {
+        while (queue.size() == CAPACITY) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+            }
+        }
+        queue.add(matricesPair);
+        isEmpty = false;
+        notify();
+    }
+
+    public synchronized MatricesPair remove() {
+        MatricesPair matricesPair = null;
+        while (isEmpty && !isTerminate) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+            }
+        }
+
+        if (queue.size() == 1) {
+            isEmpty = true;
+        }
+
+        if (queue.size() == 0 && isTerminate) {
+            return null;
+        }
+
+        System.out.println("queue size " + queue.size());
+
+        matricesPair = queue.remove();
+        if (queue.size() == CAPACITY - 1) {
+            notifyAll();
+        }
+        return matricesPair;
+    }
+
+    public synchronized void terminate() {
+        isTerminate = true;
+        notifyAll();
+    }
+}
+```
+
+- queue에 담긴 행렬을 파일에 쓰면서 queue의 요소를 삭제한다.
+```java
+private static class MatricesMultiplierConsumer extends Thread {
+    private ThreadSafeQueue queue;
+    private FileWriter fileWriter;
+
+    public MatricesMultiplierConsumer(FileWriter fileWriter, ThreadSafeQueue queue) {
+        this.fileWriter = fileWriter;
+        this.queue = queue;
+    }
+
+    private static void saveMatrixToFile(FileWriter fileWriter, float[][] matrix) throws IOException {
+        for (int r = 0; r < N; r++) {
+            StringJoiner stringJoiner = new StringJoiner(", ");
+            for (int c = 0; c < N; c++) {
+                stringJoiner.add(String.format("%.2f", matrix[r][c]));
+            }
+            fileWriter.write(stringJoiner.toString());
+            fileWriter.write('\n');
+        }
+        fileWriter.write('\n');
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            MatricesPair matricesPair = queue.remove();
+            if (matricesPair == null) {
+                System.out.println("No more matrices to read from the queue, consumer is terminating");
+                break;
+            }
+
+            float[][] result = multiplyMatrices(matricesPair.matrix1, matricesPair.matrix2);
+
+            try {
+                saveMatrixToFile(fileWriter, result);
+            } catch (IOException e) {
+            }
+        }
+
+        try {
+            fileWriter.flush();
+            fileWriter.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private float[][] multiplyMatrices(float[][] m1, float[][] m2) {
+        float[][] result = new float[N][N];
+        for (int r = 0; r < N; r++) {
+            for (int c = 0; c < N; c++) {
+                for (int k = 0; k < N; k++) {
+                    result[r][c] += m1[r][k] * m2[k][c];
+                }
+            }
+        }
+        return result;
+    }
+}
+```
+
+- 행렬을 읽어온다. 행렬은 유저가 콘솔창에서 직접 기입하는 것이다.
+```java
+ private static class MatricesReaderProducer extends Thread {
+    private Scanner scanner;
+    private ThreadSafeQueue queue;
+
+    public MatricesReaderProducer(FileReader reader, ThreadSafeQueue queue) {
+        this.scanner = new Scanner(reader);
+        this.queue = queue;
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            float[][] matrix1 = readMatrix();
+            float[][] matrix2 = readMatrix();
+            if (matrix1 == null || matrix2 == null) {
+                queue.terminate();
+                System.out.println("No more matrices to read. Producer Thread is terminating");
+                return;
+            }
+
+            MatricesPair matricesPair = new MatricesPair();
+            matricesPair.matrix1 = matrix1;
+            matricesPair.matrix2 = matrix2;
+
+            queue.add(matricesPair);
+        }
+    }
+
+    private float[][] readMatrix() {
+        float[][] matrix = new float[N][N];
+        for (int r = 0; r < N; r++) {
+            if (!scanner.hasNext()) {
+                return null;
+            }
+            String[] line = scanner.nextLine().split(",");
+            for (int c = 0; c < N; c++) {
+                matrix[r][c] = Float.valueOf(line[c]);
+            }
+        }
+        scanner.nextLine();
+        return matrix;
+    }
+}
+```
+
+- main은 아래와 같이 thread만 호출하면 된다.
+- 그럼 queue의 크기가 5에서 유지되는 것을 확인할 수 있다.
+```java
+public class MainApplication {
+    private static final String INPUT_FILE = "./out/matrices";
+    private static final String OUTPUT_FILE = "./out/matrices_results.txt";
+    private static final int N = 10;
+
+    public static void main(String[] args) throws IOException {
+        ThreadSafeQueue threadSafeQueue = new ThreadSafeQueue();
+        File inputFile = new File(INPUT_FILE);
+        File outputFile = new File(OUTPUT_FILE);
+
+        MatricesReaderProducer matricesReader = new MatricesReaderProducer(new FileReader(inputFile), threadSafeQueue);
+        MatricesMultiplierConsumer matricesConsumer = new MatricesMultiplierConsumer(new FileWriter(outputFile), threadSafeQueue);
+
+        matricesConsumer.start();
+        matricesReader.start();
     }
 }
 ```

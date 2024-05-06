@@ -1,9 +1,10 @@
+## <span style="color:#802548">_data race_</span>
 - 아래와 같이 한 thread는 increment를 하고, 다른 thread는 data race를 기록한다.
 - 그럼 우리의 예상과는 다르게 불변성이 유지되지 않는 것이 보인다.
 - 이것이 바로 data race 현상이다.
-- data race는 CPU의 비순차적 명령어 처리에서 기인한다.
-- compiler와 CPU가 효율성이 높게 데이터를 처리하기 위한 최적화의 과정이다.
-- 다만 논리결과를 어기지 않을 때만 일어난다.
+  - data race는 CPU의 비순차적 명령어 처리에서 기인한다.
+  - compiler와 CPU가 효율성이 높게 데이터를 처리하기 위한 최적화의 과정이다.
+  - 다만 논리결과를 어기지 않을 때만 일어난다.
 ```java
 public class Main {
     public static void main(String[] args) {
@@ -67,9 +68,9 @@ public class Main {
 - 아래는 compiler나 cpu가 data race가 있다고 해도, 똑같은 로직이기 때문에 똑같은 method라고 판단하게 된다.
 - 문제는 single thread일 때는 몰라도, multihtread일 때 문제가 된다는 점이다. 
 - 다른 스레드의 변경을 인지하지 못하고, 동일 변수를 읽고 특정 처리 순서에 의존하면 예상치 못한 잘못된 결과를 낳게 된다.
-- Java에서는 이러한 현상을 방지하기 위해서 synchroinized를 활용했다.
-- 또는 volatile을 활용했다. volatile이 synchronized보다 나은 점은 잠금 오버헤드가 줄어드는 이득이 있다는 점이다. 
-  - 아래에선 long이나 int의 경우지만, 그 외의 경우에도 data race인 상황에선 volatile이 공유변수에 lock을 걸어주게 된다. 
+  - Java에서는 이러한 현상을 방지하기 위해서 synchroinized를 활용했다.
+  - 또는 volatile을 활용했다. volatile이 synchronized보다 나은 점은 잠금 오버헤드가 줄어드는 이득이 있다는 점이다. 
+    - race condition만 생각하면 int에는 volatile을 쓰지 않아도 되지만, data race를 생각하면 volatile을 걸어주는 게 좋다.
 ```java
 public class Main {
     public static void main(String[] args) {
@@ -109,7 +110,7 @@ public class Main {
 }
 ```
 
-
+## <span style="color:#802548">_CPU명령어 재배열 시나리오_</span>
 - CPU의 명령어 재배열로 인해 다양한 시나리오가 만들어진다.
 - 예시를 살펴보자.
 - 아래의 경우에서, 지역변수인 local1과 local2가 2와 1이 되는 경우의 수가 있다.
@@ -157,10 +158,7 @@ Thread 1: a = 2
 Thread 2: local1 = a (2)
 ```
 
-
-- locking 기법을 택할 때는 촘촘 vs 느슨 방법이 있다.
-- 느슨하게 하면 병렬성이 낮아지는 느려진다.
-- 촘촘하게 하면 병렬성이 높아져 빠른 대신 deadlock이 일어난다.
+## <span style="color:#802548">_deadlock_</span>
 - deadlock은 아래와 같은 상황이다.
   - Thread 1은 Thread 2의 B lock이 풀리길 기다린다.
   - Thread 2는 Thread 1의 A lock이 풀리길 기다린다.
@@ -279,6 +277,7 @@ Road B is locked by thread Thread-1
 Road A is locked by thread Thread-0
 ```
 
+## <span style="color:#802548">_deadlock resolve_</span>
 - deadlock을 발생하는 경우는 아래와 같다.
   - (1). 상호 배제
   - (2). Hold and wait
@@ -334,8 +333,7 @@ public static class Intersection {
 ```
 
 - lock이 적을 때는 아래와 같이 lock 순서를 유지해주는 게 최고다.
-- 그러나 만약 lock이 많다면 tryLock, thread interrupt 같은 기술을 사용해야 한다. 다만 tryLock이나 thread interrupt는 synchronized와 같이 사용될 수 없다.
-- thread interrupt는 interrupt()와 다른 것이다.
+- 그러나 만약 lock이 많다면 tryLock 같은 기법을 사용해야 한다.
 
 
 - 아래와 같은 방식으로 모든 method에 synchronized를 걸게 되면 suspend가 흔하게 걸리게 된다.
@@ -355,18 +353,6 @@ public class Metrics {
             max = Integer.MIN_VALUE;
             average = 0.0;
         }
- 
-        public synchronized long getCount() {
-            return count;
-        }
- 
-        public synchronized long getMax() {
-            return max;
-        }
- 
-        public synchronized double getAverage() {
-            return average;
-        }
     }
 ```
 
@@ -374,62 +360,43 @@ public class Metrics {
 - 그래서 단계별로 lock을 걸면 deadlock에 빠지게 된다.
   - reset method가 maxLock을 쥐고 있고 countLock을 기다린다.
   - addSample method가 countLock을 쥐고 있고 maxLock을 기다린다.  
-- 따라서 아래와 같이도 안 된다.
-
+  - 답없는 출구인 deadlock에 빠져버렸다.
 ```java
 public class Metrics {
-        private long count;
-        private double average;
-        private long max;
- 
-        private Object countLock = new Object();
-        private Object averageLock = new Object();
-        private Object maxLock = new Object();
- 
-        public void addSample(long sample) {
-            synchronized (countLock) {
-                synchronized (averageLock) {
-                    synchronized (maxLock) {
-                        average = (average * count + sample)/(++count);
-                        max = Math.max(max, sample);
-                    }
-                }
-            }
-        }
-        
-        public void reset() {
-            synchronized (maxLock) {
-                synchronized (averageLock) {
-                    synchronized (countLock) {
-                        count = 0;
-                        max = Integer.MIN_VALUE;
-                        average = 0.0;
-                    }
-                }
-            }
-        }
- 
-        public long getCount() {
-            synchronized (countLock) {
-                return count;
-            }
-        }
- 
-        public long getMax() {
-            synchronized (maxLock) {
-                return max;
-            }
-        }
- 
-        public double getAverage() {
+    private long count;
+    private double average;
+    private long max;
+
+    private Object countLock = new Object();
+    private Object averageLock = new Object();
+    private Object maxLock = new Object();
+
+    public void addSample(long sample) {
+        synchronized (countLock) {
             synchronized (averageLock) {
-                return average;
+                synchronized (maxLock) {
+                    average = (average * count + sample)/(++count);
+                    max = Math.max(max, sample);
+                }
             }
         }
     }
+    
+    public void reset() {
+        synchronized (maxLock) {
+            synchronized (averageLock) {
+                synchronized (countLock) {
+                    count = 0;
+                    max = Integer.MIN_VALUE;
+                    average = 0.0;
+                }
+            }
+        }
+    }
+}
 ```
 
-- 아래와 같은 방식이 가장 바람직하다.
+- 따라서 굳이 필요하지 않다면 lock을 여러개 걸지 않는 게 바람직하다.
   - getter 함수는 synchronized를 붙이지 않는다.
     - 비원자적 연산인 addSample에는 synchronized가 필요하다. 
   - reset 함수는 참조할당을 하지만, 3개를 연달아 하면 비원자적 연산이다.
@@ -449,18 +416,6 @@ public class Metrics {
         count = 0;
         max = Integer.MIN_VALUE;
         average = 0.0;
-    }
-
-    public long getCount() {
-        return count;
-    }
-
-    public long getMax() {
-        return max;
-    }
-
-    public double getAverage() {
-        return average;
     }
 }
 ```

@@ -1,3 +1,4 @@
+## <span style="color:#802548">_ReentrantLock_</span>
 - reentrantLock은 synchronized keyword와 비슷하다. 
 - 다만 lock()을 걸고, unlock()을 거는 method가 다르다.
 - 또한 thread 별로 공평하게 lock에 접근할 기회를 제공한다.
@@ -358,7 +359,7 @@ AnimationTimer animationTimer = new AnimationTimer() {
             }
         };
 ```
-
+## <span style="color:#802548">_ReentrantReaderWriterLock- example1_</span>
 - 그 외에 ReentrantReadWriterLock도 있다.
 - 읽기와 쓰기 lock을 합친 것이다.
 - race condition에 관해 다시 살펴보자.
@@ -431,7 +432,7 @@ public class Main {
 }
 ```
 
-- 상품 갯수를 select/update thread를 만들자.
+- 상품 갯수를 select/update하는 thread를 만들자.
 - writer는 update고, reader는 select다.
 ```java
  public static void main(String[] args) throws InterruptedException {
@@ -569,8 +570,7 @@ public static class InventoryDatabase {
 }
 ```
 
-- 그럼 아래와 같이 될 것이다.
-- readLock.lock()이 아니라 if(readLock.tryLock())으로 변환하면 된다.
+- tryLock()까지 넣는다면 아래와 같이 될 것이다.
 ```java
 public static class InventoryDatabase {
     private TreeMap<Integer, Integer> priceToCountMap = new TreeMap<>();
@@ -644,7 +644,7 @@ public static class InventoryDatabase {
 }
 ```
 
-
+## <span style="color:#802548">_ReentrantReaderWriterLock- example2_</span>
 - 다른 예시를 들면 아래와 같다.
 - 굉장히 길지만 핵심은 readLock과 writerLock을 분리하는 것이다.
   - 멤버변수로 lock을 미리 만들어 둔다.
@@ -652,10 +652,6 @@ public static class InventoryDatabase {
   - read용도에는 readLock을 건다.
   - writer용도에는 writeLock을 건다.
 ```java
-import java.util.*;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 public class ProductReviewsService {
     private final HashMap<Integer, List<String>> productIdToReviews;
     
@@ -663,14 +659,40 @@ public class ProductReviewsService {
     private ReentrantReadWriteLock reentrantReadWriteLock = new ReentrantReadWriteLock();
     private Lock readLock = reentrantReadWriteLock.readLock();
     private Lock writeLock = reentrantReadWriteLock.writeLock();
-    
 
-/********* DO NOT MODIFY THIS SECTION **************/
-    
     public ProductReviewsService() {
         this.productIdToReviews = new HashMap<>();
     }
 
+    Lock getLockForAddProduct() {
+        return writeLock;
+    }
+
+    Lock getLockForRemoveProduct() {
+        return writeLock;
+    }
+
+    Lock getLockForAddProductReview() {
+        return writeLock;
+    }
+
+    Lock getLockForGetAllProductReviews() {
+        return readLock;
+    }
+
+    Lock getLockForGetLatestReview() {
+       return readLock;
+    }
+    
+    Lock getLockForGetAllProductIdsWithReviews() {
+        return readLock;
+    }
+```
+
+
+- 이제 lock을 다 만들어 놨으니 아래와 같이 lock을 활용해 쓰기만 하면 된다.
+- 반응성을 높이고 싶다면 tryLock()도 추가해주면 더 좋다.
+```java
     /**
      * Adds a product ID if not present
      */
@@ -784,33 +806,6 @@ public class ProductReviewsService {
         } finally {
             lock.unlock();
         }
-    }
-
-/********* END OF UNMODIFIABLE SECTION **************/
-
-
-    Lock getLockForAddProduct() {
-        return writeLock;
-    }
-
-    Lock getLockForRemoveProduct() {
-        return writeLock;
-    }
-
-    Lock getLockForAddProductReview() {
-        return writeLock;
-    }
-
-    Lock getLockForGetAllProductReviews() {
-        return readLock;
-    }
-
-    Lock getLockForGetLatestReview() {
-       return readLock;
-    }
-    
-    Lock getLockForGetAllProductIdsWithReviews() {
-        return readLock;
     }
 }
 ```

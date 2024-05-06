@@ -1,3 +1,4 @@
+## <span style="color:#802548">_subtask로 나누는 CPU연산용으로도 멀티스레드사용_</span>
 - 중요한 건 latency(지연시간)과 throughput(처리량)이다.
 - web에서는 그게 중요하다.
 - task를 subtask로 줄이고 싶을 떄는, 현재 돌아가는 process의 수와 CPU 코어의 수를 알아야 한다.
@@ -8,7 +9,6 @@
 
  - 아래와 같이 이미지 파일을 나눠서 각자 스레드가 처리하게 병렬처리하면 속도가 향상된다.
 ```java
-
 public static void recolorMultithreaded(BufferedImage originalImage, BufferedImage resultImage, int numberOfThreads) {
     List<Thread> threads = new ArrayList<>();
     int width = originalImage.getWidth();
@@ -145,8 +145,8 @@ public class Main {
 }
 ```
 
-- 별개 Thread를 만들어서 sub-task로 나누는 것은 효율이 좋지 않다.
-- 방금 했던 이미지와 병렬 처리 작업이 그 예시다.
+- 위처럼 별개 Thread를 만들어서 sub-task로 나누는 것은 사실 효율이 좋지 않다.
+- 스레드를 생성하는 게 꽤나 많은 비용이 들기 때문이다.
 ```
 작업을 여러개로 나눈다
 스레드를 생성한다.
@@ -154,6 +154,9 @@ public class Main {
 스케줄링한다
 결과를 하나로 결합한다
 ```
+
+
+## <span style="color:#802548">_기존 Thread api의 단점을 극복하는 Executor_</span>
 - 이 과정이 처리량에 있어 불필요한 작업이라 오버헤드다.
 - 각 작업을 별개 스레드에 스케줄링하는 하는게 좋은 선택이다. 이것을 Thread pool로 달성할 수 있다.
   - 스레드를 생성하고 미래 작업을 위해 다시 스레드를 사용한다.
