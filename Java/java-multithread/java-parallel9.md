@@ -1,5 +1,6 @@
-- webClient를 이용하면 아래와 같이도 쓸 수 있다.
+## <span style="color:#802548">_CompletableFuture with WebClient- element(mono)_</span>
 - retrieveMovie()는 blocking I/O call이다.
+  - webClient에서 get을 해오는 코드가 sequential하게 이뤄지기 때문이다.
 ```java
 public class MoviesClient {
 
@@ -9,14 +10,8 @@ public class MoviesClient {
         this.webClient = webClient;
     }
 
-    public Movie retrieveMovie(Long movieInfoId) {
-        var movieInfo = invokeMovieInfoService(movieInfoId);
-        var reviews = invokeReviewsService(movieInfoId);
-        return new Movie(movieInfo, reviews);
-    }
-
     private List<Review> invokeReviewsService(Long movieInfoId) {
-        String uri = UriComponentsBuilder.fromUriString("/v1/       reviews") 
+        String uri = UriComponentsBuilder.fromUriString("/v1/reviews") 
                 .queryParam("movieInfoId", movieInfoId)
                 .buildAndExpand()
                 .toUriString();
@@ -31,7 +26,7 @@ public class MoviesClient {
     }
 
 
-    public MovieInfo invokeMovieInfoService(Long movieInfoId) {
+    private MovieInfo invokeMovieInfoService(Long movieInfoId) {
 
         var movieInfoUrlPath = "/v1/movie_infos/{movieInfoId}";
 
@@ -43,12 +38,38 @@ public class MoviesClient {
 
         return movieInfo;
     }
+
+    public Movie retrieveMovie(Long movieInfoId) {
+        MovieInfo movieInfo = invokeMovieInfoService(movieInfoId);
+        List<Review> reviews = invokeReviewsService(movieInfoId);
+        return new Movie(movieInfo, reviews);
+    }
+}
+```
+
+- blocking이 아니라 async하게 만들어보자.
+- invokeReviewsService와 invokeMovieInfoService는 바뀌지 않는다.
+- retrieveMovie()만 CompletableFuture를 return하여 사용하게 바뀐다.
+```java
+public class MoviesClient {
+
+    private final WebClient webClient;
+
+    public MoviesClient(WebClient webClient) {
+        this.webClient = webClient;
+    }
+
+    public CompletableFuture<Movie> retrieveMovie_CF(Long movieInfoId) {
+        var movieInfo = CompletableFuture.supplyAsync(() -> invokeMovieInfoService(movieInfoId));
+        var reviews = CompletableFuture.supplyAsync(() -> invokeReviewsService(movieInfoId));
+        return movieInfo.thenCombine(reviews, Movie::new); //review와 movieinfo 두 결과를 합침.
+    }
 }
 ```
 
 
-
-- test case다.
+## <span style="color:#802548">_CompletableFuture with WebClient- Junit test_</span>
+- 아래는 sequential하게 만든 method에 대한 test case다.
 - baseURL을 정하고서 webClient 객체를 만든다.
 - 그 뒤에 retrieveMovie나 Review, MovieInfo 등을 한다.
 ```java
@@ -61,7 +82,7 @@ class MoviesClientTest {
 
     @BeforeEach
     void setUpMoviesClient() {
-        var movieInfoId = 1L;
+        long movieInfoId = 1L;
         moviesClient.retrieveMovie(movieInfoId);
     }
 
@@ -70,12 +91,10 @@ class MoviesClientTest {
     void retrieveMovie() {
         CommonUtil.startTimer();
         //given
-        var movieInfoId = 1L;
+        long movieInfoId = 1L;
 
         //when
-
-        var movie = moviesClient.retrieveMovie(movieInfoId);
-
+        Movie movie = moviesClient.retrieveMovie(movieInfoId);
 
         //then
         assertNotNull(movie);
@@ -87,62 +106,11 @@ class MoviesClientTest {
 }
 ```
 
-
-- blocking이 아니라 async하게 만들어보자.
-- invokeReviewsService와 invokeMovieInfoService는 바뀌지 않는다.
-- retrieveMovie()만 CompletableFuture를 return하고 사용하게 바뀐다.
-```java
-public class MoviesClient {
-
-    private final WebClient webClient;
-
-    public MoviesClient(WebClient webClient) {
-        this.webClient = webClient;
-    }
-
-    public CompletableFuture<Movie> retrieveMovie_CF(Long movieInfoId) {
-
-        var movieInfo = CompletableFuture.supplyAsync(() -> invokeMovieInfoService(movieInfoId));
-        var reviews = CompletableFuture.supplyAsync(() -> invokeReviewsService(movieInfoId));
-        return movieInfo.thenCombine(reviews, Movie::new); //review와 movieinfo 두 결과를 합침.
-    }
-
-    private List<Review> invokeReviewsService(Long movieInfoId) {
-        String uri = UriComponentsBuilder.fromUriString("/v1/       reviews") 
-                .queryParam("movieInfoId", movieInfoId)
-                .buildAndExpand()
-                .toUriString();
-
-        List<Review> reviews = webClient.get().uri(uri)
-                .retrieve()
-                .bodyToFlux(Review.class)  //bodyToFlux는 multi value. 따라서 List인 것.
-                .collectList()
-                .block();
-
-        return reviews;
-    }
-
-
-    public MovieInfo invokeMovieInfoService(Long movieInfoId) {
-
-        var movieInfoUrlPath = "/v1/movie_infos/{movieInfoId}";
-
-        var movieInfo = webClient.get()
-                .uri(movieInfoUrlPath, movieInfoId)
-                .retrieve()
-                .bodyToMono(MovieInfo.class)//single은 bodyToMono
-                .block(); //데이터를 가져옴.
-
-        return movieInfo;
-    }
-}
-```
-
-
 - CF를 이용해 만든 webFlux에 대해서도 test case를 만들자.
 - test case의 로직은 거의 바뀌지 않는다. 다만 CF를 이용해서 확인하려는 것은 반응속도다. CF가 시간이 적게 걸린다는 것을 알 수 있다.
-- 한 번으로는 모르니까 @RepeatedTest로 해서 잰다.
-- 처음에는 connection을 맺으니 700ms 정도가 걸리지만 그 이후로는 15ms정도 걸린다.
+  - 한 번으로는 모르니까 @RepeatedTest로 해서 잰다.
+  - 처음에는 connection을 맺으니 700ms 정도가 걸리지만 그 이후로는 15ms정도 걸린다.
+- 위의 case와 다른 것은 retrieveMovie 대신 retrieveMovie_CF를 쓴 것 뿐이다.
 ```java
 @Test
 @RepeatedTest(10)
@@ -163,10 +131,11 @@ void retrieveMovie_CF() {
 }
 ```
 
+## <span style="color:#802548">_CompletableFuture with WebClient- list(flux)_</span>
 - 위는 전부 그냥 Moview를 return했다.
 - 하지만 List(Movie)를 return하는 경우는 어떻게 할까?
-- sequential하게는 stream으로 열고 CF를 이용안한 get method를 가져온다.
-- parallel하게는 parallelStream으로 열고 CF를 이용한 get method를 가져온다.
+  - sequential하게는 stream으로 열고 CF를 이용안한 get method를 가져온다.
+  - parallel하게는 parallelStream으로 열고 CF를 이용한 get method를 가져온다.
 ```java
 public class MoviesClient {
 
@@ -186,12 +155,11 @@ public class MoviesClient {
 
     public List<Movie> retrieveMovieList_CF(List<Long> movieInfoIds) {
 
-        var movieFutures = movieInfoIds
-                .stream()
-                .parallel()
-                .map(this::retrieveMovie_CF)
-                .collect(Collectors.toList());
-
+        CompleatableFuture<Movie> movieFutures = movieInfoIds
+                                                    .stream()
+                                                    .parallel()
+                                                    .map(this::retrieveMovie_CF)
+                                                    .collect(Collectors.toList());
 
         return movieFutures
                 .stream()
@@ -204,7 +172,7 @@ public class MoviesClient {
 
 
 - test case는 아래와 같다.
-- blocking call이 있기 때문에 CF가 더 빠르다.
+- blocking call이 있기 때문에 sequential한 retrieveMovieList보다는  retrieveMovieList_CF가 더 빠르다.
 ```java
 @Test
 @RepeatedTest(10)
@@ -240,7 +208,7 @@ void retrieveMovieList_CF() {
 }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture- allOf_</span>
 - 여기서 더 성능이 좋아질 방법이 있다. 
 - service에서 각 future마다 join하는 것을 한꺼번에 진행하는 것이다.
 - join method가 여전히 쓰이고는 있지만, CompletableFuture.allOf로 인해 thenApply()가 모든 CompletableFuture가 전부 완료되어야 호출되기 때문이다.
@@ -251,15 +219,6 @@ public class MoviesClient {
 
     public MoviesClient(WebClient webClient) {
         this.webClient = webClient;
-    }
-
-    public List<Movie> retrieveMovieList(List<Long> movieInfoIds) {
-
-        return movieInfoIds
-                .stream()
-                .map(this::retrieveMovie)
-                .collect(Collectors.toList());
-
     }
 
     public List<Movie> retrieveMovieList_CF_allOf(List<Long> movieInfoIds) {
@@ -278,10 +237,10 @@ public class MoviesClient {
     }
 }
 ```
-
+## <span style="color:#802548">_CompletableFuture- anyOf_</span>
 - db call은 내부 DB 부르는 거라 빠른데, rest api call은 외부 api(공공api 등)라서 더 느린것으로 가정한다.
 - soap call은 더 느린 것으로 가정한다.
-- allOf와 달리 anyOf는 CF 중에 하나만 되도 담아서 return시킨다.
+- allOf와 달리 anyOf는 CF 중에 가장빨리 완료된 CF 하나만 담아서 return시킨다.
 - 따라서 dbcall의 list만 담기고 restapi call이나 soap api call에서 받아온 값들은 쓰레기 값이 된다.
 ```java
 public String anyOf() {

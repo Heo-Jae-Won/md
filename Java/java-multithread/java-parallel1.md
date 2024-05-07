@@ -1,3 +1,5 @@
+## <span style="color:#802548">_parallelism_</span>
+
 - 자바는 Thread를 통해 동시성을 달성한다.
 - Threading을 지원하는 도구로 아래와 같은 것들이 있다. atomic package는 예외다.
   - synchronized
@@ -82,7 +84,7 @@ public static void main(String[] args) {
 }
 ```
 
-
+## <span style="color:#802548">_limit of conventional multiThread code- Thread_</span>
 - 그러나 multi-Thread를 사용해 반응속도를 개선할 수 있다.
 - Product의 info와 review의 info를 같이 가져오게 만든다.
 - 그럼 2초에서 1초로 줄어든다.
@@ -173,7 +175,7 @@ public class ProductServiceUsingThread {
 }
 ```
 
-
+## <span style="color:#802548">_limit of conventional multiThread code- ThreadPool/ExecutorService/Future_</span>
 - 그래서 JDK 1.5에서 ThreadPool과 ExecutorService가 탄생했다.
 - ThreadPool이 있으면 코드에서 start join을 전부 쓸 필요가 없다.
 - ExecutorService를 쓰려면 3가지 요소가 필요하다.
@@ -224,7 +226,7 @@ public class ProductServiceUsingExecutor {
 }
 ```
 
-
+## <span style="color:#802548">_limit of conventional multiThread code- Fork/join pool_</span>
 - ThreadPool/ExecutorSerivce 이후에는 Fork/Join framework가 1.7에 나왔다.
 - Fork/Join과 ExecutorService의 차이는 Fork/join은 data parallelism이라는 사실이다.
 - ExecutorService는 task base parallelism이다.
@@ -234,6 +236,7 @@ Future<ProductInfo> productInfoFuture = executorService.submit(()->productInfoSe
 
 Future<Review> reviewFuture = executorService.submit(()->reviewService.retrieveReviews(productId));
 ```
+
 
 - 반면에 Fork/Join은 data based parallelism이다.
 - Fokr/join은 3가지 요소로 구성된다.
@@ -375,6 +378,9 @@ public static void main(String[] args) {
     log("Total time taken : " + stopWatch.getTime());
 }
 ```
+
+- fork/join pool의 문제는 러닝 커브가 깊다는 것이다.
+- 처음볼 때 읽어나가는 게 매우 어렵다. 사전지식이 필수로 요구된다.
 
 
 

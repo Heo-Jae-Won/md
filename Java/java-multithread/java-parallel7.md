@@ -1,4 +1,13 @@
-- 이전의 helloWorld Service에서 exception이 났을 때 handling하는 method인 handle()만 추가했다.
+## <span style="color:#802548">_CompletableFuture exception handling- handle_</span>
+- exception을 가능하게 하는 method가 3개가 있다.
+  - handle    
+  - exceptionally
+  - whenComplete
+- 이번엔 handle에 대해 알아보자.
+- handle보단 exceptionally가 좋다.
+- 아래는 handle의 예시다. 
+  - handle의 가장 큰 단점은 성공이든 실패든 finally마냥 무조건 실행된다는 점이다.
+  - 따라서 아래처럼 하면 exception이 없어도 return값이 recover되는 ""로 되어버린다.
 ```java
 public String helloWorld_3_async_calls_handle() {
     startTimer();
@@ -25,7 +34,7 @@ public String helloWorld_3_async_calls_handle() {
 }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture exception handling- handle junit test_</span>
 - test case는 아래와 같다.
 - hello()에만 exception을 던지고, world()는 정상 return시킨다. 그러면 assertEquals는 true다.
 - 또한 Exception이 일어난 지점에서 log를 찍은 게 나온다.
@@ -111,7 +120,7 @@ void helloWorld_3_async_calls_handle_2() {
 ```
 
 - 이번엔 아래와 같이 정상 return만 하게 하자.
-- 당연히 true인 줄 알았는데, false다.
+- handle은 성공/실패 관계없이 무조건 발동되므로 ""로 recover되어 true가 아닌 false가 나온다.
 ```java
 @Test
 void helloWorld_3_async_calls_handle_2() {
@@ -129,7 +138,6 @@ void helloWorld_3_async_calls_handle_2() {
 }
 ```
 
-- handle()은 exception이 있든 없든 무조건 호출되기 때문이다.
 - 따라서 service를 아래와 같이 exception이 null인지 확인하게 바꿔줘야 한다.
 - 그러고 나서 test를 다시 진행하면 true가 된다.
 ```java
@@ -172,7 +180,7 @@ public String helloWorld_3_async_calls_handle() {
     }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture exception handling- exceptionally_</span>
 - handle()을 사용하면 코드가 좀 많이 더러워진다.
 - 그래서 exceptionally()를 사용하는 게 좋다.
 - 코드의 가독성을 더럽히는 exception null check if문을 전부 걷어낼 수 있다.
@@ -208,7 +216,7 @@ public String helloWorld_3_async_calls_exceptionally() {
 }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture exception handling- exceptionally test_</span>
 - 실제로 test를 해보자.
 - 모두 정상인 경우, helloWorld_3_async_calls_exceptionally()의 assert는 true가 되어야 한다.
 - helloWorld_3_async_calls_exceptionally_2()의 assert도 true가 되어야 한다.
@@ -246,12 +254,13 @@ void helloWorld_3_async_calls_exceptionally_2() {
 }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture exception handling- whenComplete_</span>
 - handle()과 exceptionally() 말고 whenComplete()도 있다.
-- handle()과 exceptionally()는 whenComplete()는 exception이 난 경우에 기본값으로 바꿔 return하는 기능은 없다.
-- whenComplete()는 BiConsumer 함수형 인터페이스를 parameter로 받는데, 해당 람다는 값을 return하지 않는다.
+  - handle()과 exceptionally()는 whenComplete()는 exception이 난 경우에 기본값으로 바꿔 return하는 기능은 없다.
+  - whenComplete()는 BiConsumer 함수형 인터페이스를 parameter로 받는데, 해당 람다는 값을 return하지 않는다.
 - 그런 이유로 사실 거의 쓰이지 않는 exception handling method다.
-- whenComplete()도 handle()과 같이 정상 return이든, 아니든 무조건 발동한다. 또한 exception이 한번 발동하면 recover가 불가능하므로 thenCombine()을 찾아가는 게 아니라 그 다음 handle()/exceptionally()/whenComplete()를 찾아간다.
+  - whenComplete()도 handle()과 같이 정상 return이든, 아니든 무조건 발동한다. 
+  - 또한 exception이 한번 발동하면 recover가 불가능하므로 thenCombine()을 찾아가는 게 아니라 그 다음 handle()/exceptionally()/whenComplete()를 찾아간다.
 ```java
 public String helloWorld_3_async_whenComplete() {
         startTimer();
@@ -287,7 +296,8 @@ public String helloWorld_3_async_whenComplete() {
     }
 ```
 
-- whenComplete()의 test case를 쓰면 아래와 같다.
+
+## <span style="color:#802548">_CompletableFuture exception handling- whenComplete test_</span>
 - 처음 정상 return일 때는 true를 return해 test를 통과한다.
 - 그러나 두번째 method에서는 exception을 하나라도 내면, whenCompelte()가 호출되고, 그 뒤부터는 실패경로의 method들(handle, exceptionally, whenComplete)만 호출된다. 
 - 위에서는 whenComplete()만 계속 호출했으므로 exception이 throw되는 것으로 마무리된다.

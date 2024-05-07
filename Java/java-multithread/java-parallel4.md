@@ -1,3 +1,4 @@
+## <span style="color:#802548">_parallelStream- not suitable For LinkedList_</span>
 - Collection framework의 data structure에서 sequential과 parallel도 비교해보자.
 - boolean 변수를 주어 parallel일 때와 아닐 떄를 비교해보자.
 ```java
@@ -55,7 +56,6 @@ class ArrayListSpliteratorExampleTest {
 class ArrayListSpliteratorExampleTest {
     LinkedSpliteratorExample linkedSpliteratorExample = new LinkedSpliteratorExample();
 
-
     //@Test
     @RepeatedTest(5)
     void LinkedSpliteratorExample() {
@@ -72,7 +72,7 @@ class ArrayListSpliteratorExampleTest {
 }
 ```
 
-
+## <span style="color:#802548">_parallelStream- not suitable For Set_</span>
 - data collection에 따라 최종연산의 방식도 달라진다.
 - list를 아래와 같이 parallelstream에 넣어 돌려도 order는 유지된다.
 ```java
@@ -97,19 +97,20 @@ public class ParallelStreamResultOrder {
 - parllelStream의 경우, set은 order 유지를 보장해주지 않는다.
 ```java
 public List<Integer> setOrder(List<Integer> inputList) {
-        inputList.parallelStream()
-                .map(integer -> integer * 2)
-                .collect(Collectors.toSet());
+    inputList.parallelStream()
+            .map(integer -> integer * 2)
+            .collect(Collectors.toSet());
     }
 
 public static void main(String[] args) {
-        Set<Integer> inputLIst = Set.of(1,2,3,4,5,6,7,8);
-        log("inputList: " + inputList); //[1.2.3.4.5.6.7.8]
-        Set<Integer> result = SetOrder(inputList);
-        log("result: " + result);       //[16.2.4.6.8.10.12.14]
+    Set<Integer> inputLIst = Set.of(1,2,3,4,5,6,7,8);
+    log("inputList: " + inputList); //[1.2.3.4.5.6.7.8]
+    Set<Integer> result = SetOrder(inputList);
+    log("result: " + result);       //[16.2.4.6.8.10.12.14]
     }
 ```
 
+## <span style="color:#802548">_stream- collect better_</span>
 - collect와 reduce는 같은 결과를 같게끔 만들 수 있다.
 - 그러나 메모리 관점에서는 collect는 mutable이며, reduce는 immutable이다.
 - reduce는 중간연산도 immutable하기 때문에 전부 쓰레기 데이터로 남는다.
@@ -147,6 +148,10 @@ public class CollectVsReduce {
 ```
 
 - parallelStream은 sort 연산, boxing, unboxing 연산이 진행되도 느려진다. 그 때는 sequential로 쓰는게 낫다.
+- 정리하자면 아래 상황에서는 parallelStream을 쓰지 않는 게 좋다.
+  - sort 연산
+  - boxing/unboxing 연산
+  - Set, LinkedList
 
 
 

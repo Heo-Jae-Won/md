@@ -1,3 +1,22 @@
+## <span style="color:#802548">_Functional Interface_</span>
+- Supplier
+  - 매개변수 X, return type O
+  - () -> "hi";
+  - CompletableFuture supplyAsync()의 parameter type
+- Consumer
+  - 매개변수 O, return type void
+  - (result) -> { log.debug(result);};
+  - CompletableFuture thenAccept()의 parameter type
+- Function
+  - 매개변수 O, return type O
+  - (element) -> { return element.toUpperCase()}
+  - CompletableFuture thenApply()의 parameter type
+- Predicate
+  - 매개변수 O, return type boolean
+  - (todo) -> {return todo.getId() == id;};
+  - Stream filter()의 parameter type
+
+## <span style="color:#802548">_CompletableFuture- supplyAsync, thenAccept_</span>
 - CompletableFuture는 supplyAsync와 thenAccept가 있다.
 - supplyAsync는 parameter로 supplier 람다식을 넣어야 한다.
   - 반환타입은 CompletableFuture(T)
@@ -63,13 +82,13 @@ public static void main(String[] args) {
     }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture- thenApply_</span>
 - thenAccept 외에도 thenApply를 쓰는 것도 가능하다.
 - thenApply를 쓰게 되면 map()에서 data를 변경하듯 변경할 수 있다.
-- 이런 식으로 method chaning을 계속 inovke하며 stream을 진행시키는 것을 pipeline이라고 한다.
+- 이런 식으로 method chaining을 계속 inovke하며 stream을 진행시키는 것을 pipeline이라고 한다.
   - supplyAsync
   - thenApply
-  - thenAccep
+  - thenAccept
 ```java
 public static void main(String[] args) {
         HelloWorldService helloWorldService = new HelloWorldService();
@@ -86,6 +105,10 @@ public static void main(String[] args) {
         log("Done!");
     }
 ```
+
+
+
+## <span style="color:#802548">_CompletableFuture thenAccept Junit Test_</span>
 
 - 이제 CompletableFuture를 Junit으로 test해보자.
 - main method에서 test하는 것은 기업 규모에선 불가능하기 때문이다.
@@ -176,6 +199,7 @@ public CompletableFuture<String> helloWorld_withSize() {
 }
 ```
 
+## <span style="color:#802548">_CompletableFuture thenCombine- parallel_</span>
 - thenCombine()은 별개의 CompletableFuture를 합칠 때 쓴다.
 - service가 2개인 경우, 두 개를 병렬로 호출하여 하나의 서비스가 마무리 된 후에 다른 서비스를 호출하지 않게 된다. 그만큼 빨라진다.
 - hello와 world를 호출하는 서비스를 합쳐보자.
@@ -224,6 +248,7 @@ public class CompletableFutureHelloWorld {
 ```
 
 
+## <span style="color:#802548">_CompletableFuture thenCombine Junit test_</span>
 - test case도 만들어보자.
 - thenAccept()를 쓰지 않고 그냥 assertEquals를 호출하면 된다.
 - 그 이유는 join을 호출해 CompletableFuture(String)이 아닌 String을 return했기 때문이다.
@@ -282,7 +307,7 @@ void helloWorld_3_async_calls() {
 }
 ```
 
-
+## <span style="color:#802548">_CompletableFuture thenCompose- sequential_</span>
 - then combine과 비슷하게 thenCompose도 사용가능하다.
 - 다만 sequential하게 진행된다.
 ```java
@@ -329,7 +354,7 @@ public class CompletableFutureHelloWorld {
     }
 }
 ```
-
+## <span style="color:#802548">_CompletableFuture thenCompose Junit test_</span>
 - thenCompose의 test case는 아래와 같이 작성한다.
 - 여기서 2초가 걸린다는 점을 확인할 수 있다.
 ```java

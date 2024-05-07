@@ -1,3 +1,4 @@
+## <span style="color:#802548">_parallelStream example- 1_</span>
 - product를 확인하여 특별한 할인을 주는 행사를 한다고 해보자.
 - ProductItem은 아래와 같은 field를 가진다.
 ```java
@@ -124,20 +125,23 @@ public void checkout(Cart cart) {
 
         startTimer();
         List<CartItem> priceValidationList = cart.getCartItemList()
-                .stream()
-                //.parallelStream()
-                .map(cartItem -> {
-                    boolean isPriceValid = priceValidatorService.isCartItemInvalid(cartItem);
-                    cartItem.setExpired(isPriceValid);
-                    return cartItem;
-                })
-                .filter(CartItem::isExpired)
-                .collect(toList());
+                                                .stream()
+                                                //.parallelStream()
+                                                .map(cartItem -> {
+                                                    boolean isPriceValid = priceValidatorService.isCartItemInvalid(cartItem);
+                                                    cartItem.setExpired(isPriceValid);
+                                                    return cartItem;
+                                                })
+                                                .filter(CartItem::isExpired)
+                                                .collect(toList());
         timeTaken();
         stopWatchReset();
     }
 ```
 
+
+
+## <span style="color:#802548">_parallelStream note point- physical CPU core count_</span>
 - 아래와 같이 6개에 대해서 parallel하게 수행하면, 0.5초 가량 걸린다.
 - 하지만 element 갯수가 적어서 그런 것일 수 있다. Fork/Join은 어쨌든 물리 CPU 갯수에 의존하기 때문이다.
 ```java

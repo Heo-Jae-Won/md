@@ -1,5 +1,6 @@
+## <span style="color:#802548">_CompletableFuture exception handling- appropriate recover test_</span>
 - exception 처리도 test를 해보자.
-- 이전의 ReviewService와 ProductInfoService, ServiceProductSerivce에 exceptionally() method chaning을 추가한다.
+- 이전의 ReviewService와 ProductInfoService, ServiceProductSerivce에 exceptionally() method chaining을 추가한다.
 ```java
 public Product retrieveProductDetailsWithInventory_approach2(String productId) {
 
@@ -88,8 +89,13 @@ void retrieveProductDetails_reviewServiceError() {
     product.getProductInfo().getProductOptions().forEach(productOption -> {
         assertNotNull(productOption.getInventory());
     });
+
+    //not null 비교로는 안된다. 기본값 복원이 있다.
     assertNotNull(product.getReview());
+
+    //따라서 size를 비교한다.
     assertEquals(0, product.getReview().getNoOfReviews());
+
 
     long count = product.getProductInfo().getProductOptions().stream()
             .count();
@@ -97,6 +103,8 @@ void retrieveProductDetails_reviewServiceError() {
 }
 ```
 
+
+## <span style="color:#802548">_CompletableFuture exception handling- appropriate exception test_</span>
 - error exception이 제대로 던져지는 지도 test가 가능하다.
 - Assertions.assertThrows가 그러한 역할을 한다.
 - 우리는 retrieveProductInfo()를 호출하며 runtimeException을 뱉고, test가 true로 처리된다. 
@@ -119,6 +127,7 @@ void retrieveProductDetails_productInfoServiceError() {
 ```
 
 
+## <span style="color:#802548">_CompletableFuture- based on common Fork/Join Pool_</span>
 - CompletableFuture를 쓸 때는 common fork/join pool을 사용한다.
 - 따라서 아래와 같이 thenCombine, thenApply에 log를 넣고 thread 이름을 확인해보면 ForkJoinPool.commonPool로 명시되어있다.
 ```java
@@ -199,6 +208,8 @@ public String helloWorld_3_async_calls_log() {
     }
 ```
 
+
+## <span style="color:#802548">_CompletableFuture 결합/변환 과정마저도 async로_</span>
 - async하게 결과를 가져오는 것은 supplyAsync(), runAsync()에서 일어나는 작업이지 그 아래 chainingMethod에선 그렇지 않다.
   - supplyAsync는 return type이 있고, runAsync()는 return type이 없다.
 - thenCombine, thenCombine, thenApply 등의 method chaining은 모두 같은 Thread에서 여태까지 일어난다. 그런데 이것도 다른 Thread에서 일으키는 것도 가능하다. 

@@ -1,3 +1,4 @@
+## <span style="color:#802548">_blocking I/O에서 multiThread의 한계- 1_</span>
 - 스레드풀을 유지하여 애플리케이션의 전체 기간 동안 같은 스레드를 재사용할 수 있다.
 - 새 작업이 있을 때마다 스레드를 만들고 시작하고 종료하는 부하를 줄일 수 있다.
 - 스레드 풀의 최적의 크기는 컴퓨터의 코어 수만큼으로 해놓으면 하드웨어 수준에서의 최적화가 동반된다.
@@ -51,7 +52,7 @@ public class IoBoundApplication {
 }
 ```
 
-
+## <span style="color:#802548">_blocking I/O에서 multiThread의 한계- 2_</span>
 - 또한 blocking I/O를 처리하기 위해  thread를 많이 발급하면 context switching이 일어나게 된다. 너무 많은 context switching으로 인해 오히려 전체 blocking I/O 연산보다 더 느려질 수도 있다.
 - blocking call을 1000ms가 아니라 10ms로 만들어 더 자주 blocking I/O(여기선 Thread.sleep)를 호출하면 이러한 문제가 명확하게 드러난다.
   - 원래 10초면 끝나던게 이제 23초가 걸린다.
@@ -91,7 +92,8 @@ private void handleHttpRequest(HttpExchange httpExchange) {
         URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts));
  
         HttpResponse<String> response = httpClient.send(
-                                                        HttpRequest.newBuilder()
+                                                        HttpRequest
+                                                            .newBuilder()
                                                             .GET()
                                                             .uri(requestURI)
                                                             .build(),
@@ -126,12 +128,8 @@ private void handleHttpRequest(HttpExchange httpExchange) {
         int numberOfProducts = parseRequest(httpExchange);
         URI requestURI = URI.create(String.format("best-online-store/products?number-of-products=%d", numberOfProducts));
  
-        HttpResponse<String> response = httpClient.send(
-                                                        HttpRequest.newBuilder()
-                                                                    .GET()
-                                                                    .uri(requestURI)
-                                                                    .build(),
-                                                         HttpResponse.BodyHandlers.ofString()
+        HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder().GET().uri(requestURI).build(),
+                                                        HttpResponse.BodyHandlers.ofString()
                                                     );
  
         sendWebpageToUser(httpExchange, response);
@@ -141,6 +139,8 @@ private void handleHttpRequest(HttpExchange httpExchange) {
 }
 ```
 
+
+## <span style="color:#802548">_non-blocking I/O_</span>
 - 다행히도 blocking I/O가 아닌 Non-blocking I/O를 사용하면 문제가 해결된다.
   - non-blocking I/O는 result가 준비되면 실행되는 callback을 사용한다.
   - 의사코드로는 아래와 같다.
