@@ -202,3 +202,138 @@ CalendarEventListResponse response= new CalendarEventListResponse();
 		response.setCalendarEventList(calendarEventList);
 		response.setHolidayList(holidayList);
 ```
+
+
+
+## <span style="color:#802548">_9. 회사일정과 휴일 달력 parallel 하게 가져오기_</span>
+- 이전에 만든 소스코드는 회사일정과 휴일을 sequential하게 가져왔다. 그래서 느렸다.
+- 따라서 회사일정을 가져오면서 동시에 휴일도 가져오게끔 하려했다.
+- 그래서 아래와 같이 바꿨다. 그러나 이미 구글의 서비스를 호출할 때 execute를 하기 때문에 아래 구조로는 CompletalbeFuture를 활용해도 sequential이었다.
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	// 선택한 날짜의 달을 기준으로 초일(firstDay)부터 말일(lastDay)까지 회사 google calendar 목록을 조회
+	List<CalendarEventRes> list = new ArrayList<>();
+	DateTime firstDay = new DateTime(firstDayOfMonth);
+	DateTime lastDay = new DateTime(lastDayOfMonth);
+	Events events = service.events().list("openobjectnet@gmail.com").setTimeMax(lastDay).setTimeMin(firstDay)
+			.execute();
+
+	Events events1 = service.events().list("ko.south_korea#holiday@group.v.calendar.google.com").setTimeMax(lastDay)
+			.setTimeMin(firstDay).execute();
+
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { return events; });
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { return events1; });
+
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+																						prev.putAll(cur);
+																						return prev;
+																					}).join().getItems();							
+	//events.getItems();
+
+	for (Event event : items) {
+		CalendarEventRes calendarEventDto = new CalendarEventRes();
+		calendarEventDto.setSummary(event.getSummary());
+		calendarEventDto.setDescription(event.getDescription());
+		calendarEventDto.setStartDateTime(event.getStart());
+		calendarEventDto.setEndDateTime(event.getEnd());
+		calendarEventDto.setEventId(event.getId());
+
+		list.add(calendarEventDto);
+	}
+	return list;
+
+}
+```
+
+- 그런 이유로 아래와 같이 execute를 CompletableFuture에서 실행하게 변경했다.
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	// 선택한 날짜의 달을 기준으로 초일(firstDay)부터 말일(lastDay)까지 회사 google calendar 목록을 조회
+	List<CalendarEventRes> list = new ArrayList<>();
+	DateTime firstDay = new DateTime(firstDayOfMonth);
+	DateTime lastDay = new DateTime(lastDayOfMonth);
+
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { return service.events().list("openobjectnet@gmail.com").setTimeMax(lastDay).setTimeMin(firstDay)
+			.execute(); });
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com").setTimeMax(lastDay)
+			.setTimeMin(firstDay).execute(); });
+
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> 
+																					{
+																						cur.putAll(prev);
+																						return cur;
+																					}
+													).join().getItems();							
+
+	for (Event event : items) {
+		CalendarEventRes calendarEventDto = new CalendarEventRes();
+		calendarEventDto.setSummary(event.getSummary());
+		calendarEventDto.setDescription(event.getDescription());
+		calendarEventDto.setStartDateTime(event.getStart());
+		calendarEventDto.setEndDateTime(event.getEnd());
+		calendarEventDto.setEventId(event.getId());
+
+		list.add(calendarEventDto);
+	}
+	return list;
+
+}
+```
+
+- 안타깝게도 매 service 실행마다 authtoken이 날라가야 할까? 날라가야 하면 아래처럼....
+- 따라서 auth 인증 서비스도 각 completableFuture마다 들어가줘야 한다.
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	// 선택한 날짜의 달을 기준으로 초일(firstDay)부터 말일(lastDay)까지 회사 google calendar 목록을 parallel하게 조회 
+	
+	List<CalendarEventRes> list = new ArrayList<>();
+	DateTime firstDay = new DateTime(firstDayOfMonth);
+	DateTime lastDay = new DateTime(lastDayOfMonth);
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> 
+																					{ 
+																						Calendar service = getServiceAuth();
+																						return service.events().list("openobjectnet@gmail.com").setTimeMax(lastDay).setTimeMin(firstDay)
+																																									.execute(); 
+																					}
+																			);
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> 
+																					{ 
+																						Calendar service = getServiceAuth();
+																						return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com").setTimeMax(lastDay)
+																																											.setTimeMin(firstDay).execute(); 
+																					}
+																			);
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> 
+																					{
+																						cur.putAll(prev);
+																						return cur;
+																					}
+													).join().getItems();							
+
+	for (Event event : items) {
+		CalendarEventRes calendarEventDto = new CalendarEventRes();
+		calendarEventDto.setSummary(event.getSummary());
+		calendarEventDto.setDescription(event.getDescription());
+		calendarEventDto.setStartDateTime(event.getStart());
+		calendarEventDto.setEndDateTime(event.getEnd());
+		calendarEventDto.setEventId(event.getId());
+
+		list.add(calendarEventDto);
+	}
+
+
+	return list;
+
+}
+```
