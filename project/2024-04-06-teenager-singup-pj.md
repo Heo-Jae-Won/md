@@ -2439,16 +2439,21 @@ function init() {
 - Jquery에서 인접 element를 가져오고자 했다.
 - 그래서 ChatGPT 문의한 결과 아래와 같이 가져오려 했다.
 ```html
+<div>
+    <input type="radio" />
+</div>
+<label>checkbox</label>
 <div class="card_number">
     <div class="input">
-        <ul>
-            <li class=""><span>cardNumber</span></li>
-        </ul>
+        <span class="red">
+            도난
+        </span>
+        <span>cardNumber</span>
     </div>
-    <input type="hidden" name="card_number"/>
-    <input type="hidden" name="card_code"/>
-    <input type="hidden" name="card_owner"/>
 </div>
+<input type="hidden" name="card_number"/>
+<input type="hidden" name="card_code"/>
+<input type="hidden" name="card_owner"/>
 
 <script>
 const cardNumber = $(".input").siblings().find('input[name="card_number"]');
@@ -2543,6 +2548,311 @@ if(accountList.length > 0 ) {
     html.push('~~~~~~');
     html.push('~~~~~~');
 }
-html.join('\n');
+
+$("#list").append(html.join('\n'));
 ```
 
+
+
+## <span style="color:#802548">_function naming 고민_</span>
+- jsp에 특정 조건 하에서 재발급 페이지 진입을 차단하고 팝업을 띄우는 함수가 있다.
+- 그런데 이름을 어떻게 할지가 고민이었다.
+  - showPageEntryPopup
+    - 알아보니 show는 숨겨진 요소를 드러내는 것이었다. 내 popup은 숨겨진 건 아니었기에 탈락시켰다.
+  - blockPageEntry
+    - 해당 함수는 어떤 방식으로 page Entry를 막는지 맥락을 제공하지 않았다.
+    - 나는 ajax를 튕겨내는 게 아니라 진입 시에 popup으로 막는것이어서 오해를 주지않기 위해 탈락시켰다.
+  - displayPageEntryBlockPopup
+    - 최종 선택했는데, popup을 노출시킨다는 의미에서도 적절했고, popup으로 페이지 차단을 막는다는 사실도 알려줄 수 있었다.
+```js
+function displayPageEntryBlockPopup
+```
+
+- 그 다음 고민은 validationResult를 가지고 오는 함수명이었다.
+- 일단은 애매하게 compute로 해놨는데, 
+- computedValidationResult --> determineValidationResult
+- 아니면
+evaluateValidationResult
+
+preventPageEntry()
+
+vs 
+
+showPageEntryBlockPopup()
+
+
+showErrorPopup --> showEntryBlockPopup
+
+
+## <span style="color:#802548">_운영 에러로그 만드는 법_</span>
+- 아래와 같이 쓰는 게 농좆의 방식인데, 정상인 경우에는 괜찮다.
+```java
+public class Main {
+	public static void main(String[] args) throws InterruptedException {
+		char[] chars = {'a','b','c','d'};
+		try {
+			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
+		} catch (Exception e) {
+			StackTraceElement[] stackTrace = e.getStackTrace();
+			StackTraceElement element = stackTrace[0];
+			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage());
+		}
+		
+		
+	}
+	
+	static void calculate(char[] a, int k , Predicate<int[]> decider) {
+		int n = a.length;
+		if (k <1 || k > n) {
+			throw new IllegalArgumentException("Forbidden"); //23 line
+		}
+		
+		int[]	 indexes = new int[n];
+		int total = (int) Math.pow(n,  k);
+		
+		while (total-- > 0) {
+			for (int i = 0; i < n - (n-k); i++) {
+				System.out.println(a[indexes[i]]);
+			}
+			System.out.println();
+			
+			if (decider.test(indexes)) {
+				System.out.println("gotya");
+				//break;
+			}
+			
+			for (int i = 0; i < n; i++) {
+				if (indexes[i] >= n-1) {
+					indexes[i] = 0;
+				} else {
+					indexes[i]++;
+					break;
+				}
+			}
+		}
+	}
+}
+```
+
+- [0]으로 exception line을 가져오면 현재는 error를 던진 곳이 line이 찍히고 있다.
+- 정상 출력되고 있는 셈이다. error를 명시적으로 throw할 때는 아무 문제가 없다.
+```
+java.lang.IllegalArgumentException
+	at com.example.Main.calculate(Main.java:23)
+	at com.example.Main.main(Main.java:9)
+lineNumber: 23
+```
+
+
+- 이번에는 명시적인 throw를 하지 않았는데, java api 활용에서 실수를 냈다.
+- substring을 할 때 indexoutofboundsexception이 났다.
+- try catch를 넣으면 아까와는 사뭇 양상이 다르다.
+```java
+public class Main {
+	public static void main(String[] args) throws Exception {
+		char[] chars = {'a','b','c','d'};
+		calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//8 line
+	}
+	
+	static void calculate(char[] a, int k , Predicate<int[]> decider) {
+		
+		try {
+			int n = a.length;
+			String abc ="fff";
+			abc = abc.substring(0,12); // 16 line
+			
+			int[]	 indexes = new int[n];
+			int total = (int) Math.pow(n,  k);
+			
+			while (total-- > 0) {
+				for (int i = 0; i < n - (n-k); i++) {
+					System.out.println(a[indexes[i]]);
+				}
+				System.out.println();
+				
+				if (decider.test(indexes)) {
+					System.out.println("gotya");
+					//break;
+				}
+				
+				for (int i = 0; i < n; i++) {
+					if (indexes[i] >= n-1) {
+						indexes[i] = 0;
+					} else {
+						indexes[i]++;
+						break;
+					}
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			StackTraceElement[] stackTrace = e.getStackTrace();
+			StackTraceElement element = stackTrace[0];
+			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage()+ "\nclass: " + element.getClassName());
+		}
+		
+	}
+}
+```
+
+- String class가 맨 첫줄에 exception에 찍힌다.
+- 우리가 기대한 것은 calculate의 16 line이었다. 거기서 실제 exception이 났다.
+- 근데 얼탱이없이 String class가 exception line에 찍힌다.
+- 명시적인 throw를 하지 않았기 때문이다.
+```
+java.lang.StringIndexOutOfBoundsException: begin 0, end 12, length 3
+	at java.base/java.lang.String.checkBoundsBeginEnd(String.java:4604)
+	at java.base/java.lang.String.substring(String.java:2707)
+	at com.example.Main.calculate(Main.java:16)
+	at com.example.Main.main(Main.java:8)
+lineNumber: 4604
+message: begin 0, end 12, length 3
+class: java.lang.String
+```
+
+
+- error를 throw하고 catch로 잡아서 다시 exception을 던지는 경우에는 어떻게 될까?
+- 사실 이게 찐 농좆 운영 에러 로그 방식이다.
+```java
+public class Main {
+	public static void main(String[] args) throws InterruptedException {
+		char[] chars = {'a','b','c','d'};
+		try {
+			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
+		} catch (Exception e) {
+			e.printStackTrace();
+			StackTraceElement[] stackTrace = e.getStackTrace();
+			StackTraceElement element = stackTrace[0];
+			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage());
+		}
+		
+		
+	}
+	
+	static void calculate(char[] a, int k , Predicate<int[]> decider) throws Exception {
+
+        try {
+            int n = a.length;
+            if (k <1 || k > n) {
+                throw new IllegalArgumentException("Forbidden"); //23 line
+            }
+            
+            int[]	 indexes = new int[n];
+            int total = (int) Math.pow(n,  k);
+            
+            while (total-- > 0) {
+                for (int i = 0; i < n - (n-k); i++) {
+                    System.out.println(a[indexes[i]]);
+                }
+                System.out.println();
+                
+                if (decider.test(indexes)) {
+                    System.out.println("gotya");
+                    //break;
+                }
+                
+                for (int i = 0; i < n; i++) {
+                    if (indexes[i] >= n-1) {
+                        indexes[i] = 0;
+                    } else {
+                        indexes[i]++;
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new Exception("0001"); //52 line
+        }
+	}
+}
+```
+
+- calculate의 23 line에서 exception이 났지만, 잡아서 52 line에서 던지기 때문에 바꿔치기된다.
+- 따라서 어디서 exception이 났는지 도저히 알수가 없게 된다.
+- 명시적으로 throw를 던진다면 catch로 잡아서 다시 던지면 안된다는 의미다.
+```
+java.lang.Exception: 0001
+	at com.example.Main.calculate(Main.java:52)
+	at com.example.Main.main(Main.java:9)
+lineNumber: 52
+message: 0001
+```
+
+- java api 활용에서 오류가 났을 때도 마찬가지다.
+- substring() 활용에서 exception이 났다.
+```java
+public class Main {
+	public static void main(String[] args) throws Exception {
+		char[] chars = {'a','b','c','d'};
+		
+		try {
+			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//10 line
+		} catch(Exception e) {
+			e.printStackTrace();
+			StackTraceElement[] stackTrace = e.getStackTrace();
+			StackTraceElement element = stackTrace[0];
+			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage()+ "\nclass: " + element.getClassName());
+		}
+		
+	}
+	
+	static void calculate(char[] a, int k , Predicate<int[]> decider) throws Exception {
+		
+		try {
+			int n = a.length;
+			String abc ="fff";
+			abc = abc.substring(0,12); // 25 line
+			
+			int[]	 indexes = new int[n];
+			int total = (int) Math.pow(n,  k);
+			
+			while (total-- > 0) {
+				for (int i = 0; i < n - (n-k); i++) {
+					System.out.println(a[indexes[i]]);
+				}
+				System.out.println();
+				
+				if (decider.test(indexes)) {
+					System.out.println("gotya");
+					//break;
+				}
+				
+				for (int i = 0; i < n; i++) {
+					if (indexes[i] >= n-1) {
+						indexes[i] = 0;
+					} else {
+						indexes[i]++;
+						break;
+					}
+				}
+			}
+		} catch (Exception e) {
+			throw new Exception("fffff"); //51 line
+		}
+		
+	}
+}
+```
+
+- error는 실제로 26 line substring()에서 났는데, 해당 에러는 stackTrace에 찍히지도 않았다.
+- api 실수를 잡아서 error를 던진 곳이 stackTrace에 잡히게 된다.
+- 어디서 오류가 났는지 모르게 되는 상황이다. 심지어 printStackTrace를 찍었는데도 말이다.
+- 거기다 error message가 스프링에서 제공해주는 message가 아니라 유저가 넣은 메시지가 되어버린다.
+- 에러 정보를 아예 얻을 수가 없게 되는 것이다. 정말 최악이 아닐수가 없다.
+```
+java.lang.Exception: fffff
+	at com.example.Main.calculate(Main.java:51)
+	at com.example.Main.main(Main.java:10)
+lineNumber: 51
+message: fffff
+class: com.example.Main
+```
+
+
+
+- 위와 같은 방식으로는 exception이 난 line을 파악하는 게 불가능에 가깝다.
+- 기본적으로 StackTrace의 line은 호출스택이 경우에 따라서 달라지기 때문에 exception이 난 line을 아는 것은 어렵다.
+- 따라서 무조건 error log를 java의 stackTrace로 쌓는 곳이라면 line number가 아니라, exception의 message를 아는 것이 중요하다.
+- 정말 중요한 로직이라면 logger.error를 찍어서 확인하는 것이 필요하다.
+- 가장 중요한 것은, catch를 한 뒤에 또 exception을 던지면 안 된다는 점이다. 그런 식으로 하면 stackTrace가 꼬인다.
+- 어느 line에서 error가 났는지를 순전히 모든 코드를 분석해보면서 때려맞춰야 한다.
