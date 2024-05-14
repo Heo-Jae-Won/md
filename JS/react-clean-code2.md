@@ -976,3 +976,293 @@ function DangerouslySetInnerHTMLExample() {
     return <div dangerouslySetInnerHTML={sanitizeContent} />
 }
 ```
+
+
+## <span style="color:#802548">_12.기명함수로 useEffect 사용하기_</span>
+
+- 함수가 익명이라 무엇을 하는 지 알기 어렵다.
+```js
+useEffect( () => {
+  if (isInView(someRef.current)) {
+    //some logic
+  }
+}, [isInView]);
+```
+
+- useEffect로 등록하는 callback 함수 안에도 이름을 주자.
+```js
+useEffect( function onPopState() => {
+  if (isInView(someRef.current)) {
+    //some logic
+  }
+}, [isInView]);
+```
+
+
+- 사실 아래는 만들지 않는 게 좋은 함수지만... 
+- 굳이 쓴다면 함수 이름을 달아주자.
+```js
+useEffect(function onInit() => {
+  if (!isInit) {
+    return;
+  }
+
+  setIsInit(false);
+}, [isInit]);
+```
+
+
+- 여기도 이름이 없다.
+```js
+useEffect( () => {
+  docuent.addEventListner();
+
+  return () => {
+    document.removeEventListerner();
+  }
+},[]);
+```
+
+- 이름을 달아주면 좋은 장점은 뭘까?
+- 로그로 보았을 때 함수에 이름이 달려서 call stack으로 나온다는 사실이다.
+```js
+useEffect( function addEvent() {
+  docuent.addEventListner();
+
+  return function removeEvent() {
+    document.removeEventListerner();
+  }
+},[]);
+```
+
+
+- 보통 useEffect안에서는 data fetch가 자주 이뤄지니 아래 같이 사용할 수도 있다.
+- dom이 unmount되면 request를 보냈어도 response를 handle하지 않는다.
+- response를 handle하지 않으므로 없는 dom에 대한 code가 진행되지 않나 error가 나지 않을 것이다.
+```js
+useEffect( function fetchData() {
+    // set our variable to true
+    let isApiSubscribed = true;
+    axios.get(API).then((response) => {
+        if (isApiSubscribed) {
+            // handle success
+        }
+    });
+    return function cleaup() {
+        // cancel the subscription
+        isApiSubscribed = false;
+    };
+}, []);
+```
+
+- 위를 axios 공식 api를 사용하게 바꾼 것이다.
+```js
+useEffect( function fetchData() {
+  const CancelToken = axios.CancelToken;
+  const source = CancelToken.source();
+  axios
+    .get(API, {
+      cancelToken: source.token
+    })
+    .catch((err) => {
+      if (axios.isCancel(err)) {
+        console.log('successfully aborted');
+      } else {
+        // handle error
+      }
+    });
+  return function cancelRequest() {
+    // cancel the request before component unmounts
+    source.cancel();
+  };
+}, []);
+```
+
+- 위를 fetch api를 사용하게 바꾼 것이다.
+```js
+import React, { useState, useEffect } from "react";
+export default function Post() {
+  const [posts, setPosts] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect( function fetchData() {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    fetch("https://jsonplaceholder.typicode.com/posts", { signal: signal })
+      .then((res) => res.json())
+      .then((res) => setPosts(res))
+      .catch((err) => setError(err));
+  }, []);
+
+  return (
+    <div>
+      {!error ? (
+        posts.map((post) => (
+          <ul key={post.id}>
+            <li>{post.title}</li>
+          </ul>
+        ))
+      ) : (
+        <p>{error}</p>
+      )}
+    </div>
+  );
+}
+```
+
+- xmlHttpRequest를 abort해도 server는 여전히 response를 준다.
+- 다만 abort()를 호출하면 browser에서 해당 response를 무시할 뿐이다.
+
+## <span style="color:#802548">_13.useEffect에는 하나의 역할만_</span>
+- useEffect에 넘기는 함수에 기명함수를 적어보고 그에 맞는 코드인지 확인하자.
+- deps array에 여러 state가 들어가면 하나의 역할인지 확인하자.
+- 
+```js
+function LoginPage({page, newPath}) {
+  useEffect( () => {
+    redirect(newPath);
+
+    const userInfo = setLogin(token);
+    //login business logic
+
+  }, [token, newPath])
+}
+```
+
+- token이 바꼈을 떄, newPath가 바꼈을 때 useEffect를 분리해주자.
+- 둘은 다른 로직이기에 분리가 맞다.
+```js
+function LoginPage({page, newPath}) {
+  useEffect( () => {
+    const userInfo = setLogin(token);
+
+  }, [token])
+
+  useEffect( () => {
+    redirect(newPath);
+  }, [newPath])
+}
+```
+
+## <span style="color:#802548">_14.비구조 할당으로 customHook을 다양하게 써보기_</span>
+- customHook이라고 해서 반드시 tuple을 반환하는 게 아니다.
+- 다양하게 반환이 가능하다.
+  - 튜플
+  - 단일 변수값
+  - 객체
+- 다만 튜플 반환 시 주의점이 있다.
+- 관습에 따라 왼쪽에 getter, 오른쪽에 setter를 넣자.
+```js
+const useSomeHooks = (bool) => {
+  return [state, setState]; //[setState, state] X
+}
+
+function ReturnCustomHooks() {
+  const [setValue, value] = useSomeHooks(true);
+}
+```
+
+- 하나만 return한다면 getter, setter tuple을 쓸 필요가 없다.
+- 그냥 단일한 변수로 return하면 된다.
+```js
+const useSomeHooks = (bool) => {
+  return state; //[state, setState] X
+}
+
+function ReturnCustomHooks() {
+  const value = useSomeHooks(true);
+}
+```
+
+- 배열을 비구조할당해 customHook으로 만드는 건 유지보수에 좋지 않다.
+- 배열의 요소가 늘어나면 대응이 되지 않는다.
+- 안 가져다 쓸 거는 억지로 _ 처럼 뭔가를 넣어야 한다.
+```js
+const useSomeHooks = (bool) => {
+  return [0,1,2,3 state, setState];
+}
+
+function ReturnCustomHooks() {
+  const [firstValue, secondeValue, _, thirdValue, _, _] = useSomeHooks(true);
+}
+```
+
+- 객체를 비구조할당해서 customHook으로 만드는 게 더 유지보수에 좋다.
+```js
+const useSomeHooks = (bool) => {
+  return {
+    first,
+    second, 
+    third,
+    rest
+  }
+}
+
+function ReturnCustomHooks() {
+  const {first: firstValue, second: secondeValue, rest: thirdValue} = useSomeHooks(true);
+}
+```
+
+- 비구조 할당은 여러모로 도움이 된다.
+- ES6 이전의 문법이다.
+```js
+const query =useQuery({ queryKey: ['hello'], queryFn: getHello});
+const query2 =useQuery({ queryKey: ['hello2'], queryFn: getHello});
+
+const data = query.data;
+const refetch = query.refetch;
+const isSuccess = query.isSuccess;
+```
+
+- ES6에서는 비구조할당할 수 있다.
+```js
+const {data, refetch, isSuccess} =useQuery({ queryKey: ['hello'], queryFn: getHello});
+const query2 =useQuery({ queryKey: ['hello2'], queryFn: getHello});
+
+const hello2Data = query.data;
+const hello2Refetch = query.refetch;
+const hello2IsSuccess = query.isSuccess;
+console.log(data);
+console.log(refetch);
+console.log(isSuccess);
+```
+
+- 비구조할당을 하면 변수명도 바꾸는 게 가능하다.
+```js
+const {
+  data: helloData, 
+  refetch: helloRefetch, 
+  isSuccess: helloIsSuccess
+} = useQuery({ queryKey: ['hello'], queryFn: getHello});
+const query2 =useQuery({ queryKey: ['hello2'], queryFn: getHello});
+
+const hello2Data = query.data;
+const hello2Refetch = query.refetch;
+const hello2IsSuccess = query.isSuccess;
+console.log(helloData);
+console.log(helloRefetch);
+console.log(helloIsSuccess);
+```
+
+## <span style="color:#802548">_15.useEffect 내에서 비동기는 쓰지 말자_</span>
+- useEffect보다는 사실 tanStackQuery를 쓰자.
+- useEffect 콜백에는 async를 달 수 없다.
+- useEffect는 promise를 return하지 않고 함수나 undefined만 return해야 한다.
+```js
+useEffect(async () => {
+  //비동기
+  const result = await fetchData();
+}, []);
+```
+
+- 번거로워도 한단계 거치는 방법으로 바꿔야 한다.
+```js
+useEffect( () => {
+  //비동기
+  const fetchData = async () => {
+    const result = await someFetch();
+  }
+  
+  fetchData();
+}, []);
+```
