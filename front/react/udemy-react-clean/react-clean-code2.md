@@ -1266,3 +1266,172 @@ useEffect( () => {
   fetchData();
 }, []);
 ```
+
+## <span style="color:#802548">_16.import React 필요없다_</span>
+- v17 이전엔 import 구문이 필요했다.
+- 아래 jsx가 React.createElement로 transpile 됐기 때문이다.
+```js
+function App() {
+  return <h1>Hello World</h1>;
+}
+
+function App() {
+  return React.createElement('h1',null,'Hello world');
+}
+```
+
+- 하지만 v17 부터는 import 구문이 필요없다.
+- 다만, class형 component는 필요하다.
+```js
+import {Component} from 'react';
+
+class Welcome extends Component {
+  render() {
+    return <h1>Hello</h1>
+  }
+}
+```
+
+
+## <span style="color:#802548">_16.folder structure_</span>
+- 결합도가 높은 component 이름은 굳이 preFix를 다르게 하지 않는다.
+```
+components/
+TodoList.vue
+TodoItem.vue
+TodoButton.vue
+
+components/
+SearchSiderbar.vue
+NavigationForSearchSidebard.vue
+```
+
+- 결합되어있는 component이름을 그대로 prefix로 써준다.
+```
+components/
+TodoList.vue
+TodoListItem.vue
+TodoListButton.vue
+
+components/
+SearchSiderbar.vue
+SearchSiderbarNavigation.vue
+```
+
+- 연관된 component라면 prefix를 앞에 달아주자.
+- 폴더구로조만 depth를 늘리는 것은 바람직하지 않다.
+```
+components/
+ClearSearchButton.vue
+ExcludeFromSearchInput.vue
+LaunchOnStartupCheckbox.vue
+RunSearchButton.vue
+SearchInput.vue
+TermsCheckbox.vue
+```
+
+- 연관된 component면 one depth로 표현하고 component naming을 잘 만들자.
+```
+components/
+SearchButtonClear.vue
+SearchBUttonRun.vue
+SearchButtonQuery.vue
+SearchInputExcludeGlob.vue
+SettingsCheckboxTerms.vue
+SettingsCheckboxLaunchOnStartup.vue
+```
+
+- 굳이 js라 folder 나누고, jsx라 또 나누고, css라 또 나누지 말자.
+- 업무 단위로 폴더를 만들고 거기다가 모두 박아도 된다.
+```
+Componentns
+ ㄴ @shared
+  ㄴ 공통 컴포넌트
+ ㄴ Todo
+  ㄴ Todo.jsx
+  ㄴ Todo.hook.js
+  ㄴ Todo.css
+```
+
+
+- 아니면 hooks나 style이나 components로 나눌 수도 있다.
+```
+Hooks/
+ㄴ useTodo.js
+Style/
+ㄴ Todo.css
+Components/
+ㄴ Todo.jsx
+```
+
+## <span style="color:#802548">_17.새로고침 자제하자_</span>
+- reload를 쓰는 것은 SPA에는 위험한 발상이다.
+```js
+const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+const handleLogin = async () => {
+  try {
+    if (isSuccess === true)  {
+      setIsLoggedIn(true);
+      //SPA 입장에서는 앱을 완전히 종료하고 다시 실행하는 행위다.
+      //reload하면 앱이 온전하지 않은 상태일 수 있다.
+      window.location.reload();
+    }
+    
+  } catch (error) {
+    alert('로그인에 실패했습니다.');    
+  }
+}
+```
+
+- state, rouer 등이 모두 날라간다. SSR이 아니라 CSR이기에 js에서 전부 rendering을 담당하고 있기 때문이다. reload는 쓰면 안 된다.
+```js
+const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+const handleLogin = async () => {
+  try {
+    if (isSuccess === true)  {
+      setIsLoggedIn(true);
+      //SPA 입장에서는 앱을 완전히 종료하고 다시 실행하는 행위다.
+      //reload하면 앱이 온전하지 않은 상태일 수 있다.
+      window.location.reload();
+    }
+    
+  } catch (error) {
+    alert('로그인에 실패했습니다.');    
+  }
+}
+```
+
+## <span style="color:#802548">_18.domain과 무관하게 component naming_</span>
+- 확장성 있게 component를 쓰려면 domain name이 아니라 UI를 묘사하자.
+```
+TodoList
+TodoItem
+```
+
+- radix UI를 보고 만들면 naming하면 좋다.
+```
+CardList
+List
+Item
+AlbutList
+Button
+```
+
+- div, span으로 떡칠하는 건 최소화하자.
+- semantic을 지켜서 HTML을 만들자.
+- 그럴 때 interface와 React에서 제공하는 HTMLAttribute가 도움된다.
+```js
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+
+}
+
+const Button = (props: ButtonProps) => {
+  return (
+    <button {...props}>
+      {children}
+    </button>
+  )
+}
+```
