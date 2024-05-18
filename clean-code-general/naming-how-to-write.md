@@ -53,6 +53,9 @@ public ObjectOutputStream getOos() throws IOException {
 ```
 getOos ㅡㅡㅡ> createOrReturnOos
 ```
+- 맥락을 제거하는 변수명, method명을 쓰지 않는 것은 매우 중요하다.
+  - updateMoneyMember라고 해서 moneyMember의 status만 바꾸는 지 알았지만, 변경일자도 같이 변경된다.
+  - 
 
 - network programming 관련 예시도 들어보자.
 - ServerCanStart()보다는 CanListenOnPort()가 낫다. 
@@ -79,12 +82,23 @@ String result = ""; // result 대신 response도 된다..
 HashMap<String, Object> output = new HashMap<>();
 ```
 
+- method 이름은 자신이 하는 일을 나타내야 한다.
+- 그 하는 일은 추상적인 add 같은 것 따위로 이름지으면 안 된다.
+- 카드번호를 암호화하여 추가하는 method라면 그냥 mnCardAddInfo()로 지으면 안 된다.
+  - encryptCardNoAndAddCardInfo로 지어야 했다.
+- is로 시작되는 것들은 반드시 boolean type을 return해야 한다.
+
+
+<br >
+
 
 - 통일성 또한 중대한 문제다. 
 - DB에서 가져오는 걸 get으로 했으면 get으로 다 통일해서 가져온다.
   - get이 아닌 fetch로 했으면 다 fetch로 통일한다.
   - retrieve로 다 했으면 retrieve로 통일한다.
   - get보단 fetch/retrive/load가 낫겠지만 일관적으로 쓰는 게 더 중요하다.
+
+
 
 
 
