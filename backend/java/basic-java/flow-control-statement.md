@@ -54,8 +54,6 @@ if(num > 0) {
 }
 ```
 
-- If-else로 변환가능한 상반된 조건의 2개 if문은 if-else로 변환하는 것이 좋다. 
-- 그럼 처음 if문을 평가하면 두번째 if문은 평가하지 않아도 되기 때문에 효율적이다. 
 - &&의 경우에는 수학의 비교처럼 보이게 바꿔주자.
 ```java
  if (score >=80 && score <=90) //가독성 나쁨. 
@@ -92,7 +90,9 @@ If(score >=90){
 ```
 
 
-- switch문에는 문자, 숫자, enum만 들어올 수 있다.
+- if문 말고 switch문도 조건문 중에 하나다.
+  - switch문에는 문자, 숫자, enum만 들어올 수 있다.
+//https://velog.io/@leon/TIL5-%EC%9E%90%EB%B0%94-switch%EB%AC%B8-%ED%99%9C%EC%9A%A9%ED%95%98%EA%B8%B0
 - switch문은 같은 결과를 원하는 case라면 case만 적어주면 된다.
 - default를 적어주는 것을 늘 잊지말자.
 - default가 끝이므로 default에는 break;가 필요없다.
@@ -201,6 +201,8 @@ switch(score){
     - for문 안에서 while문을 빠져나가고 싶다면 break outer를 써야한다. 
       - for문 안 if문에서 break는 for문을 빠져나간다. while loop는 그대로다.
       - for문 안 switch문에서 break는 switch문을 빠져나간다. for loop는 그대로다.
+
+
 ```java
 Outer:
 while(true){
@@ -244,5 +246,39 @@ while(true){
 		}
 	}
 }
+```
+
+- 이차원 배열의 for문을 열 때는 조심해야 한다.
+```java
+int[][] score = {
+					{100, 100, 100}
+					,{20, 20, 20}
+					,{30, 30, 30}
+					,{40, 40, 40}
+};
+
+int sum = 0;
+
+for (int i = 0; i < score.length; i++) {
+	for(int j = 0; j < score[i].length; j++) {
+		System.out.printf("score[%d][%d] = %d%n", i, j, score[i][j]);
+	}
+}
+
+/*아래처럼 하면 error. 2차원 배열 score의 각 요소는 1차원 배열.
+for (int i : score) {
+	sum +=i;
+}
+
+*/
+
+//따라서 해당 배열을 flat할 for문을 한 번 더 열어야 한다.
+for (int[] tmp : score) {
+	for( int i : tmp) {
+		sum += i;
+	}
+}
+
+System.out.println("sum=" + sum);
 ```
 
