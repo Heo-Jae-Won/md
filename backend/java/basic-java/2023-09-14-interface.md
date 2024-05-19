@@ -1,5 +1,4 @@
 ## <span style="color:#802548">_재사용이란?_</span>
-
 - 아래와 같이 상속으로 재사용을 하는 경우도 있다.
 ```java
 class Circle extends Shape
