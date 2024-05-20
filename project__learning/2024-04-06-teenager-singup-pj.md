@@ -2542,11 +2542,11 @@ var accountList = JSON.parse(originalList);
 ```js
 var originalList = '${accountList}' ? '${accountList}'  : '[]';
 var accountList = JSON.parse(originalList);
-
+var html = [];
 if(accountList.length > 0 ) {
-    html.push('~~~~~~');
-    html.push('~~~~~~');
-    html.push('~~~~~~');
+    html.push('<div>');
+    html.push('  <input type="text">');
+    html.push('</div>');
 }
 
 $("#list").append(html.join('\n'));

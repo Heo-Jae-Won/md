@@ -1,11 +1,13 @@
 ## <span style="color:#802548">_generics란?_</span>
+
 - 컴파일 시의 타입을 체크하는 기능이다. T, K, V, E 등이 있다.
 - 기호의 종류만 다를 뿐 임의의 참조형 타입을 의미하는 것은 같다.
+
 ```java
 class Box<T>{ //제너릭 클래스. T box라고 읽는다. T는 타입 매개변수, Box는 원시 타입이다.
     T item;
 
-    void setItem(T item){ 
+    void setItem(T item){
         this.item = item;
     }
     T getItem();
@@ -16,7 +18,9 @@ b.setItem(new Object());
 b.setItem("ABC");
 String item = b.getItem; // generics로 Element의 type T를 String으로 정했기 때문에 (String) 형변환 필요 없음.
 ```
+
 - 다시말해 아래 식은 아래와 같은 class를 선언한 것이다.
+
 ```java
 Box<String b = new Box<String>;
 
@@ -66,6 +70,7 @@ class FruitBox<T extends Fruit>{
 ```
 
 - 반면에 T super Fruit이라면, 특정클래스와 그 위 조상 class만 generics의 type으로 선언 가능하다.
+
 ```java
 class FruitBox<T super Fruit>{
     .
@@ -76,7 +81,8 @@ class FruitBox<T super Fruit>{
 ```
 
 - interface를 implements하는 것일지라도 extends라는 용어를 사용해야만 한다.
-- 아래는 &로 묶여서 Fruit과 자손, Eatable과 자손의 교집합의 경우에만 type으로 들어올 수 있음을 의미한다. 
+- 아래는 &로 묶여서 Fruit과 자손, Eatable과 자손의 교집합의 경우에만 type으로 들어올 수 있음을 의미한다.
+
 ```java
 class FruitBox<T extends Fruit & Eatable>{
     .
@@ -87,9 +93,9 @@ class FruitBox<T extends Fruit & Eatable>{
 ```
 
 ## <span style="color:#802548">_generics의 whildcard란?_</span>
+
 - 와일드카드를 사용하면 한층 자유도가 높아진다. 물론 더 어려워지는 것도 맞다.
 - whildcard를 사용한 Collections의 sort()를 살펴보자.
-
 
 ```java
 static void sort(List<T> list, Comparator<? super T> comp)
@@ -115,7 +121,6 @@ static void sort(List<T> list, Comparator<? super T> comp)
 - 그 이유는 유지보수와 재활용성 때문이다.
 - 만약 아래와 같이 와일드카드를 쓰지 않았다고 해보자.
 
-
 ```java
 static void sort(List<T> list, Comparator<T> comp)
 ```
@@ -133,6 +138,7 @@ Collections.sort(appleBox.getList(), new AppleComp());
 ```
 
 - 저기까진 괜찮은데 만약 Grape도 비교해야 한다면 아래와 같은 똑같은 내용의 comp를 또 만들어줘야 한다.
+
 ```java
 class GrapeComp implements Comparator<Grape>{
     public int compare(Grape t1, Grape t2){
@@ -156,7 +162,8 @@ class FruitComp implements Comparator<Fruit>{
 Collections.sort(appleBox.getList(), new FruitComp());
 Collections.sort(grapeBox.getList(), new FruitComp());
 ```
-- 물론 Fruit class로 list를 만들고 FruitComp를 반들 수도 있다. 
+
+- 물론 Fruit class로 list를 만들고 FruitComp를 반들 수도 있다.
 - 하지만 그 경우에는 아래와 같이 Apple만 모으고 싶을 때, Apple만 모으게 compile 시에서부터 강제가 불가능하다.
 - 즉 유지보수에 좋지 않다. 따라서 Comparator class는 generics로 ? super T를 쓰는 것이다.
 - 쓰지 않았다면 Fruit class만 타입 매개변수로 받는 list가 강제되어 apple만 따로, grape만 따로 모을 수가 없다.
@@ -166,7 +173,7 @@ List<Apple> list = new ArrayList<>();
     list.add(new Grape("파란", 0));//Fruit이라서 Grape도 담음. 하지만 error가 아님.
     list.add(new Apple("빨간",1));//Fruit이라서 Apple도 담음. 하지만 error가 아님.
     Collections.sort(list, new FruitComp());
-    for(Fruit f : list) { 
+    for(Fruit f : list) {
         System.out.println(f.toString());
     }
 ```
@@ -190,10 +197,10 @@ static Juice makeJuice(FruitBox<? extends Object> box){
 ```
 
 ## <span style="color:#802548">_generics method란?_</span>
+
 - method의 return type 앞에 붙는 <>generics는 참조변수에 붙는 것과는 완전히 다른 의미다.
 - 이 경우, 매개변수의 type을 지정하는 의미다.
 - 아래 두 식은 동일한 식이다. 매개변수에 다 몰아넣냐, 매개변수의 type에 대한 설명을 앞으로 빼냐의 차이다.
-
 
 ```java
 static Juice makeJuice(FruitBox<? extends Fruit> box)
@@ -211,6 +218,7 @@ sysout(Juicer.<Apple>makeJuice(appleBox));
 ```
 
 - generics의 type에 관한 설명인 <Fruit>은 대부분 생략할 수 있다.
+
 ```java
 sysout(Juicer.makeJuice(fruitBox));
 sysout(Juicer.makeJuice(appleBox));
@@ -228,7 +236,6 @@ public static <T extends Comparable<? super T>> void sort(List<T> list)
 - 아래와 같이 Optional에도 static에 <T>가 붙어있다.
 - 그런데 여기는 parameter가 없기 때문에 parameter generics는 아니다.
 
-
 ```java
 public static<T> Optional<T> empty() {
     @SuppressWarnings("unchecked")
@@ -239,13 +246,11 @@ Optional<String> optVal = Optional.<String>empty();
 Optional<String> optVal = Optional.empty(); //위에서 말했듯 generics의 type에관한 설명인 <String>은 생략 가능.
 ```
 
-
-
-
-
 ## <span style="color:#802548">_enum이란?_</span>
+
 - enum을 쓰면 아래 class를 간단하게 만들어 줄 수 있다.
 - Java의 enum은 type까지 관리하기 때문에 타입에 안전하다.
+
 ```java
 class Card{
     static final int CLOVER = 0;
@@ -377,7 +382,8 @@ System.out.println("airplane fare =  " + Transportation.AIRPLANE.fare(100)); //3
 ```
 
 - 아래와 같이 switch - case문에서도 사용이 가능하다.
-- 
+-
+
 ```java
 switch (Transportation) {
     case BUS: //...
@@ -459,9 +465,9 @@ abstract class MyTransportation extends MyEnum{
     }
 }
 ```
+
 - 아래 ordinal은 enum이 선언된 순서를 나타내며, 사실 개발하면서 쓰면 안된다.
 - ordianl()을 기반으로 하게된다면 상수의 순서를 변경하거나, 중간에 끼워넣기라도 하게 되면 모두 문제가 발생한다. ordinal 값이 바뀌기 떄문이다.
-
 
 ```java
 class EnumEx4{
@@ -482,6 +488,7 @@ System.out.println("t5=%s, %d%n  " + t5.name(), t5.ordinal());
 - 메타 annotation
 - annotation을 위한 annotation이다.
 - annotation의 target, 유지기간을 지정하는 데 사용한다.
+
 ```java
 @Target({FIELD, TYPE, TYPE_USE})
 public @interface MyAnnotation{}
@@ -489,7 +496,7 @@ public @interface MyAnnotation{}
 @MyAnnotation
 class MyClass{} // TYPE_USE
 
-@MyAnnotation 
+@MyAnnotation
 int i; //FIELD
 
 @MyAnnnotation
@@ -499,8 +506,6 @@ MyClass mc; // TYPE
 ```java
 @Documented //javadoc에 포함
 @Retention(RetentionPolicy.RUNTIME) //runtime 시에도 annotation에 대한 정보가 존재
-@Target(ElementType.TYPE) // 
+@Target(ElementType.TYPE) //
 public @interface FunctionalInterface{}
 ```
-
-
