@@ -218,4 +218,68 @@
 
 <br >
 
-- saga pattern
+- saga pattern1
+  - workflow orchestration service를 둔다.
+  - sync한 compensation transaction --> 실패 시 transaction rollback에 준하는 행위가 필요하다.
+
+
+<img src="/image/workflow-orchestration1-undo.jpg" >
+<img src="/image/workflow-orchestration2-undo.jpg" >
+
+- saga pattern2
+  - event driven model
+  - workflow orchestration service를 두지 않는다.
+  - asyn한 ccompensation transaction --> 실패 시 transaction rollback에 준하는 행위가 필요하다.
+
+
+<img src="/image/saga-event-driven1.jpg" >
+<img src="/image/saga-event-driven2.jpg" >
+<img src="/image/saga-event-driven3.jpg" >
+
+
+- CQRS (command and query responsibility segration)
+  - command는 insert, update, delete 등이다.
+    - command는 command 용 database를 갖고 original data를 다룬다.
+    - permission, business logic, input validation은 여기에 놓는다.
+    - 보통 RDB로 만들어진다.
+  - query는 select다.
+    - query는 query 용 database를 갖고, data copy를 다룬다.
+    - command가 바껴도 query는 바뀌지 않고, 따라서 재배포할 필요가 없다.
+    - 보통 NoSql로 만들어진다.
+  - CQRS는 microservice의 SRP 원칙을 지키는  데 적합하다.
+  - 각 type 별로 scale out 하기도 쉽다.
+  - microservice 별로 table을 별도로 갖는 경우보다 join을 하기도 쉽다.
+
+
+<img src="/image/cqrs1.jpg" >
+<img src="/image/cqrs2.jpg" >
+<img src="/image/cqrs3.jpg" >
+<img src="/image/cqrs4.jpg" >
+
+
+
+- 실제 예시로 식당 리뷰 앱을 살펴보자.
+-  리뷰는 자주 바뀐다.
+   -  business logic을 위한 많은 validation도 필요하다.
+-  레스트토랑은 자주 바뀌지 않는다.
+-  고객은 레스토랑과 리뷰를 join한 데이터를 보아야 한다. 
+-  그럴 때 CQRS를 도입 해 read 전용 db를 만든다.
+
+
+<img src="/image/cqrs5.jpg" >
+<img src="/image/cqrs6.jpg" >
+<img src="/image/cqrs7.jpg" >
+
+
+
+- event sourcing pattern
+- history를 통해 최신 정보를 가져온다.
+- account balance를 딸랑 최신 정보만 보여주면 당황스러울 것이다.
+- 그런 경우 history를 보여주면서 최신 정보를 알려주어야 한다.
+  - event를 store하는 것은 database가 있다.
+  - message broker도 있다.
+- 그렇다고 모든 history를 보여줄 수는 없다.
+- 따라서 달마다의 transaction을 보여준다. snapshot 전략이다.
+- CQRS 전략을 쓰기도 한다.
+- event sourcing + CQRS 전략이 가장 인기가 많다.
+- 다만 eventually consistency만 가능하다. 실시간 정보 갱신은 안된다.
