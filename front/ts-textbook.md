@@ -658,3 +658,103 @@ try {
 }
 ```
 
+## <span style="color:#802548">_method 구성 살펴보기_</span>
+
+- forEach를 직접 만들어보자.
+- 겹치면 안되므로 아래와 같이 my를 붙여주자.
+- 그럼 에러가 난다. Array interface에 없기 때문이다.
+
+```js
+[1,2,3].myForEach(()=>{});
+```
+
+- myForEach를 Array interface에 merge해준다.
+- 이번엔 인자가 없다는 에러가 뜨게 된다.
+
+```js
+interface Array<T> {
+    myForEach(): void;
+}
+```
+
+- callback을 받으므로 callback fn을 인자로 넣는다.
+
+```js
+interface Array<T> {
+    myForEach(callback: () => void): void;
+}
+```
+
+- 그럼 이제 실제 테스트를 해보자.
+- myForEach method는 매개변수로 콜백을 받지만, 콜백의 매개변수가 지정되지 않았다.
+- 따라서 에러를 내뱉게 될 수밖에 없다.
+
+```js
+[1,2,3].myForEach(()=>{});
+[1,2,3].myForEach((v,i,a) => {console.log(v, i, a)});   //error
+[1,2,3].myForEach((v,i)=>console.log(v));               //error
+[1,2,3].myForEach((v)=>3);                              //error
+```
+
+- interface type 정보를 다시 수정해주자.
+
+```js
+interface Array<T> {
+    myForEach(callback: (v: number, i: number, a: number[]) => void): void;
+}
+```
+
+
+- number type이 아닌 string type으로 배열으 만들어 foreach를 호출해보자.
+- v를 number로 지정했기에 slice method가 없어 에러가 난다.
+- if문의 경우, v는 무조건 number type이라 string type은 될 수 없어 never로 지정되어 slice가 없어 에러가 난다.
+
+```js
+['1','2','3'].myForEach((v) => {console.log(v.slice(0))}) //error
+
+[true,2,'3'].myForEach((v) => {
+    if (typeof v === 'string') {
+        v.slice(0); //error
+    } else {
+        v.toFixed(); 
+    }
+})
+```
+
+- number로 한정하지 않고 generics type으로 바꾼다.
+- 그럼 모두 error가 나지 않는다.
+
+```js
+interface Array<T> {
+    myForEach(callback: (v: T, i: number, a: T[]) => void): void;
+}
+
+[1,2,3].myForEach(()=>{});
+[1,2,3].myForEach((v,i,a) => {console.log(v, i, a)});   
+[1,2,3].myForEach((v,i)=>console.log(v));               
+[1,2,3].myForEach((v)=>3);   
+['1','2','3'].myForEach((v) => {console.log(v.slice(0))}) //error
+[true,2,'3'].myForEach((v) => {
+    if (typeof v === 'string') {
+        v.slice(0); //error
+    } else {
+        v.toFixed(); 
+    }
+})                           
+```
+
+- 실제 lib.es5.d.ts에서의 구현을 살펴보자.
+- 아까와 거의 비슷한데, thisArg가 추가되어 있다.
+- this 선언문을 사용할 때 값을 바꿀 수 있기 때문에 추가된 것이다.
+- 이마저도 완벽하진 않다. 중요한 것은 100% type check를 보장하는 게 아니라, 쓸만한 게 type을 만드는 것이다.
+
+```js
+interface Array<T> {
+    forEach(callbackFn: (value: T, index: number, array: T[]) => void, thisArg?: any): void;
+}
+```
+
+
+- 우리가 만든 myForEach method는 ts를 type check에서 속일 수 있다.
+- 하지만 실제로 구현한 함수는 없기 때문에 js에서는 발동하지 않는다.
+- 즉 runtime에서는 무의미하다. ts를 속여 type error가 없더라도 늘 실행되진 않는다.
