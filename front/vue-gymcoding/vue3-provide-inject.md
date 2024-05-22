@@ -104,6 +104,8 @@ export default {
 
 
 - 가장 최상위 component인 App.vue를 만드는 main.js에서 주입하면 어느 component든 사용 가능하다.
+- main에서 app 시작 시에 globalProperties에 msg property를 집어넣는다.
+- 아니면 provide()로도 가능하다.
 
 ```js
 //main.js
@@ -121,6 +123,37 @@ app.config.globalProperties.msg = 'hello';
 app.provide('msg', 'hello msg');
 app.mount('#app');
 import 'bootstrap/dist/js/bootstrap.js';
+```
+
+
+- 주입한 속성은 this를 붙여 꺼낼 수 있다.
+- 주입한 this는 dom이 mount된 이후부터 사용할 수 있다.
+
+```js
+<template>
+	<div class="container py-4">
+		<div class="card">
+		</div>
+	</div>
+</template>
+
+<script>
+import { provide, ref } from 'vue';
+import Child from './Child.vue';
+export default {
+	components: {
+		Child,
+	},
+	setup() {
+		console.log('this arg: ', this); //undefined
+
+		onMounted(() => {
+			console.log('this arg: ', this.msg); //'hello'
+		})
+		return {};
+	},
+};
+</script>
 ```
 
 
@@ -237,54 +270,50 @@ const injected = inject(myInjectionKey);
 ```
 
 
-- provide, inject를 이용하지 않고도 주입할 수 있는 기능도 있다.
-- main에서 app 시작 시에 globalProperties에 msg property를 집어넣는다.
-- app.provide()가 더 편해서 보통 그 방식이 많이 채택된다.
+
+- 이전의 예시를 아래처럼 바꾸면 된다.
 
 ```js
-//main.js
-import 'bootstrap/dist/css/bootstrap.min.css';
-import { createApp } from 'vue';
-import App from './App.vue';
+//keys.js
+export const messageProvideKey = Symbol();
 
-const app = createApp(App);
+//Provider(ParentComponent.vue)
+const message = ref('Hello World');
+const updateMessage = () => {
+    message.value = 'world!';
+}
 
-// app.component('AppCard', AppCard);
+provide(messageProvideKey,{ message, updateMessage});
 
-app.provide('app-message', 'app message 입니다');
-//
-app.config.globalProperties.msg = 'hello';
-app.provide('msg', 'hello msg');
-app.mount('#app');
-import 'bootstrap/dist/js/bootstrap.js';
-```
-
-- 주입한 속성은 this를 붙여 꺼낼 수 있다.
-- 주입한 this는 dom이 mount된 이후부터 사용할 수 있다.
-
-```js
+//Injector(child Component)
 <template>
-	<div class="container py-4">
-		<div class="card">
+	<div class="card">
+		<div class="card-header">Deep Child Component</div>
+		<div class="card-body">
+			<p>staticMessage: {{ staticMessage }}</p>
+			<p>message: {{ message }}</p>
+			<p>count: {{ count }}</p>
 		</div>
 	</div>
 </template>
 
 <script>
-import { provide, ref } from 'vue';
-import Child from './Child.vue';
-export default {
-	components: {
-		Child,
-	},
-	setup() {
-		console.log('this arg: ', this); //undefined
+import { inject } from 'vue';
+import { messageProvideKey } from './keys.js'
 
-		onMounted(() => {
-			console.log('this arg: ', this.msg); //'hello'
-		})
-		return {};
+export default {
+	setup() {
+		const staticMessage = inject('static-message', 'default message');
+		const { message, updateMessage } = inject(messageProvideKey);
+		updateMessage('!');
+		//message.value = message.value + '!';
+		const count = inject('count');
+		return { staticMessage, message, count };
 	},
 };
 </script>
+
+<style lang="scss" scoped></style>
 ```
+
+
