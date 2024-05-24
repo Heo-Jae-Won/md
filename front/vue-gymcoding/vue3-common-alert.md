@@ -284,6 +284,7 @@ const styleClass = computed(() => {
 - transition에 이름을 줄 수도 있다.
 - 이름을 주면 그에 맞춰 class 이름도 바꿔준다.
 - 이번엔 위에서 아래로 내려오는 효과도 같이 줬다.
+- Transition component는 v-if나 v-show가 있을 때만 사용가능하다.
 
 ```html
 <template>
