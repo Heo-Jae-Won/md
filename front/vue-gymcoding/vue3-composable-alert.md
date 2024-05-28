@@ -19,7 +19,7 @@ const vAlert = (message, type = 'error') => {
 
 ```js
 // /hooks/alert.js
-improt { ref } from 'vue'
+import { ref } from 'vue'
 
 export function useAlert() {
   const alerts = ref([]);
@@ -57,6 +57,7 @@ const save = () => {
     createPost({
       ...form.value,
       createdAt: Date.now()
+      
     });
 
     vSuccess('등록이 완료되었습니다.');
@@ -77,7 +78,7 @@ const save = () => {
 ```html
 <!--App.vue-->
 <template>
-<TheHeader></TheHeader>
+  <TheHeader></TheHeader>
   <TheView></TheView>
 </template>
 

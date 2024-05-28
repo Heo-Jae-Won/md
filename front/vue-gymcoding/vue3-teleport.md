@@ -305,25 +305,25 @@ defineEmits(['update:title','update:limit']);
 
 ```html
 <AppModal v-model="show" title="게시글">
-		<template #default>
-			<div class="row g-3">
-				<div class="col-3 text-muted">제목</div>
-				<div class="col-9">{{ title }}</div>
-				<div class="col-3 text-muted">내용</div>
-				<div class="col-9">{{ content }}</div>
-				<div class="col-3 text-muted">등록일</div>
-				<div class="col-9">
-					{{ $dayjs(createdAt).format('YYYY. MM. DD HH:mm:ss') }}
-				</div>
+	<template #default>
+		<div class="row g-3">
+			<div class="col-3 text-muted">제목</div>
+			<div class="col-9">{{ title }}</div>
+			<div class="col-3 text-muted">내용</div>
+			<div class="col-9">{{ content }}</div>
+			<div class="col-3 text-muted">등록일</div>
+			<div class="col-9">
+				{{ $dayjs(createdAt).format('YYYY. MM. DD HH:mm:ss') }}
 			</div>
-		</template>
-		<template #actions>
-			<button type="button" class="btn btn-secondary" @click="closeModal">
-				닫기
-			</button>
-		</template>
-	</AppModal>
-  ```
+		</div>
+	</template>
+	<template #actions>
+		<button type="button" class="btn btn-secondary" @click="closeModal">
+			닫기
+		</button>
+	</template>
+</AppModal>
+```
 
 - postModal이라는 이름으로 component를 만들고 감싸준다.
 - 다만 props로 내린 것은 변경 불가능하기 때문에 다시 computed로 감싸준다.

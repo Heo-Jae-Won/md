@@ -108,7 +108,6 @@ export default {
 <template>
     <BaseCard>
         <template #[slotArgs]>제목입니다</template>
-    </template>
 </BaseCard>
 
 <script>

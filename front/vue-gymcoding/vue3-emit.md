@@ -2,7 +2,7 @@
 
 - 부모 component에 자식 component에 전달할 emit 용 함수를 만든다.
 
-```js
+```html
 <script>
 export default {
 	components: {
@@ -22,7 +22,7 @@ export default {
 
 - 부모 component에서 자식 component에 emit 용 함수를 전달한다.
 
-```js
+```html
 <template>
 	<main>
 		<div class="container py-4">
@@ -35,7 +35,7 @@ export default {
 
 - 자식 component가 emit을 받아올 때는 html에 아래같이 직접 넣어줄 수도 있다.
 
-```js
+```html
 <template>
 	<div class="row g-3">
 		<!-- @click="" -->
@@ -48,7 +48,7 @@ export default {
 
 - 보통은 js에서 한번 거치게 된다.
 
-```js
+```html
 <template>
 	<div class="row g-3">
 		<!-- @click="$emit('createPost', 1, 2, 3, '김길동')" -->
@@ -84,8 +84,8 @@ setup(props, { emit }) {
 
 ```js
 export default {
-    emits: {
-        //createPost: null;
+	emits: {
+			//createPost: null;
 		createPost: newPost => {
 			if (!newPost.type) {
 				return false;

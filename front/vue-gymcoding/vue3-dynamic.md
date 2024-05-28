@@ -1,7 +1,8 @@
 - dynamic component용으로 우선 component를 만든다.
 - 우선 사과다.
 
-```js
+```html
+<!--DynamicApple.vue-->
 <template>
 	<AppCard> 사과 </AppCard>
 </template>
@@ -13,7 +14,8 @@ import AppCard from './AppCard.vue';
 
 - 그 다음은 바나나다.
 
-```js
+```html
+<!--DynamicBanana.vue-->
 <template>
 	<AppCard> 바나나 </AppCard>
 </template>
@@ -25,7 +27,7 @@ import AppCard from './AppCard.vue';
 
 - dynamic component를 구성 할 때는 :is를 활용한다.
 
-```js
+```html
 <component :is="currentComp" />
 ```
 
@@ -34,21 +36,25 @@ import AppCard from './AppCard.vue';
 - shallowRef는 값의 일부가 바뀌어도 전체가 바뀌지 않으면 rendering되지 않기 때문이다.
 - dynamic component 용도라고 보면 된다.
 
-```js
+```html
 <div class="container py-4">
-    <button
-        class="btn btn-primary me-2"
-        @click="changeCurrentComp(DynamicApple)"
-    >
-        사과
-    </button>
-    <button class="btn btn-danger" @click="changeCurrentComp(DynamicBanana)">
-        바나나
-    </button>
-    <hr />
-    <component :is="currentComp" />
+	<button
+		class="btn btn-primary me-2"
+		@click="changeCurrentComp(DynamicApple)"
+	>
+	사과
+	</button>
+	<button 
+		class="btn btn-danger" 
+		@click="changeCurrentComp(DynamicBanana)"
+	>
+	바나나
+	</button>
+	<hr />
+	<component :is="currentComp" />
 </div>
 
+<script>
 import DynamicApple from './DynamicApple.vue';
 import DynamicBanana from './DynamicBanana.vue';
 const currentComp = shallowRef(DynamicApple);
@@ -57,7 +63,7 @@ const changeCurrentComp = comp => (currentComp.value = comp);
 
 
 
-```js
+```html
 <template>
 	<div class="container py-4">
 		<button
@@ -94,7 +100,7 @@ const changeCurrentComp = comp => (currentComp.value = comp);
 
 - 이전에 눌렀던 탭의 정보를 유지하려면 아래 같이 keep alive를 선언한다.
 
-```js
+```html
 <keep-alive>
   <component :is="currentComp" />
 </keep-alive>
@@ -103,7 +109,7 @@ const changeCurrentComp = comp => (currentComp.value = comp);
 
 - 만약 특정 탭은 상태 유지에서 제외시키고 싶다면 exclude를 선언한다.
 
-```js
+```html
 <keep-alive exclude="DynamicApple, DynamicBanana">
   <component :is="currentComp" />
 </keep-alive>
@@ -111,7 +117,7 @@ const changeCurrentComp = comp => (currentComp.value = comp);
 
 - 특정 탭들만 상태 유지를 시키고 싶다면 include를 선언한다.
 
-```js
+```html
 <keep-alive :include="['DynamicApple', 'DynamicBanana']">
   <component :is="currentComp" />
 </keep-alive>

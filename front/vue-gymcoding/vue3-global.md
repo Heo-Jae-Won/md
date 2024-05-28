@@ -112,7 +112,6 @@ export default {
 ```
 
 - app에 등록한 전역 state를 꺼내서 쓰기 위해서 inject를 한다.
-- 
 
 ```html
 // HomeView.vue
@@ -133,7 +132,7 @@ export default {
 - 그냥 기존에 하던대로 local registration으로 사용하자.
 
 
-```js
+```html
 //script setup
 <script setup>
 import ComponentA from './ComponentA.vue'
@@ -143,6 +142,7 @@ import ComponentA from './ComponentA.vue'
   <ComponentA />
 </template>
 
+<script>
 //non script setup 
 import ComponentA from './ComponentA.js'
 

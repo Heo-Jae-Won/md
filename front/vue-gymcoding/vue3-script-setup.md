@@ -1,7 +1,7 @@
 
 - script setup의 장점은 번거로운 boilderplate를 쓰지 않아도 된다는 점이다.
 
-```js
+```html
 <template>
     <div class="container py-4"> 
         {{ msg }} 
@@ -29,7 +29,7 @@ import PostItem from '@/components';
 
 - props를 script setup에서 사용하면 defineProps()와 defineEmis()를 사용한다.
 
-```js
+```html
 <template>
   <div class="card">
     <div class="card-body">
@@ -99,7 +99,7 @@ export default {
 
 - script setup을 하면 최상위 level에서 async 없이 await를 호출할 수 있다.
 
-```js
+```html
 <script setup>
 
     const response = await axios(
