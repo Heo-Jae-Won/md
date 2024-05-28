@@ -1,7 +1,7 @@
 
 - AppAlert는 
 
-```js
+```html
 <template>
 	<div v-else>
 		<h2>게시글 수정</h2>
@@ -63,7 +63,7 @@ const vAlert = (message) => {
 
 - vAlert component는 받은 message와 show 여부로 노출/비노출된다.
 
-```js
+```html
 //vAlert.vue
 <template>
   <div v-if="show" class="app-alert alert alert-success" role="alert">
@@ -97,7 +97,7 @@ defineProps({
 - alert 메시지에 type도 넣어서 성공이냐 실패냐를 부모에서 주게끔 한다.
 - class를 주고, :class로 동적으로 주면 :class 영역은 조건에 따라 더해진다.
 
-```js
+```html
 <template>
   <div v-if="show" class="app-alert alert" :classs="styleClass" role="alert">
    {{ message }}
@@ -137,7 +137,7 @@ const styleClass = computed(() => {
 
 - 수정을 눌러 성공하게 되면 type까지 받아서 알아서 alert HTML 색깔을 성공으로 띄운다.
 
-```js
+```html
 <template>
 	<div v-else>
 		<h2>게시글 수정</h2>
