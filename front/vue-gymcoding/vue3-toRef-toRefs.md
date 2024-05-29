@@ -1,5 +1,4 @@
 - 반응형 객체의 속성을 destructuring해오고 parameter로 넘길 때 reactivty를 잃어버릴 수 있다.
-- 그런 경우에, toRef를 활용하
 
 ```js
 //number.js
@@ -19,7 +18,7 @@ export const useNumber = number   => {
 
 ```html
 <template>
-  {{isOdd}}
+  {{ isOdd }}
 </template>
 
 <script seupt>

@@ -2,7 +2,7 @@
 - input.value는 처음 DOM을 그릴 때는 null이다.
 - 따라서 mount가 끝나고 input 값이 생길 때 넣게 v-if를 추가한다.
 
-```js
+```html
 <templte>
     <div class="container py-4">
         <input ref="input" type="text" />
@@ -24,9 +24,8 @@ export default {
 
 - dom에 ref를 박아두고 v - for를 돌리면 mount 이후에 ref 변수에 해당 값들이 들어온다.
 - 따라서 onMounted에 itemsRef를 forEach로 돌리면 해당 내용을 확인해볼 수 있다.
-- 
 
-```js
+```html
 <templte>
     <div class="container py-4">
         <input ref="input" type="text" />

@@ -396,7 +396,6 @@ const closeModal = () => (show.value = false);
 - modal 창은 list 안에 속한 위치가 아니라 별도로 독립적인 위치에서 뜨는 방식이 맞기 때문이다.
 - 그럴 때 Teleport component를 도입해서 css 충돌 현상, UI 버그 등을 해결할 수 있다.
 
-
 ```html
 //PostListView.vue
 
@@ -428,5 +427,4 @@ const closeModal = () => (show.value = false);
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
-
 ```
