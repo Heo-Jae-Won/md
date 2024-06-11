@@ -47,6 +47,12 @@ git branch -d [branch이름] :
 git branch --move [바꿀branch이름] [바뀐branch이름] : 
 ## branch 이름을 바꿀 수 있는 기능이다. 
 ```
+```sh
+## 새로운 branch에서 시작하는 경우
+git fetch  # 내 local은 모르는 원격에서 PM급들이 만들어 놓은 branch를 local에서도 인지하게끔 update
+git branch -r # 원격 branch 뭐있나 보기
+git switch [원격branch의 이름] # 이러면 저절로 remote의 branch와 연결되어 추적가능. 옛날버전은 git checkout --track origin/master. 쓰지말자.
+```
 
 ​
 
