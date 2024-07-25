@@ -599,9 +599,9 @@ return outputMap;
 
 ## <span style="color:#802548">_정규식_</span>
 ```javascript
-const regExp = /[^ㄱ-ㅎ|ㅏ-ㅣ|가-힣|]+$/gi; //허용하는 패턴. 하지만 이는 키보드에서만 작동.
-const regExp = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣|]+$/gi; //허용하지 않는 패턴. 모바일에서 작동 안 함. 모바일에는 가운데 점(middle dot)이라는 특수문자가 있기 떄문.
-const regExp = /[^ㄱ-ㅎ|ㅏ-ㅣ|가-힣|\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi; //모바일에 있는 가운데 점(middle dot)이라는 특수문자도 포함하여 한글을 허용
+const regExp = /[^ㄱ-ㅎㅏ-ㅣ가-힣]+$/gi; //허용하는 패턴. 하지만 이는 키보드에서만 작동.
+const regExp = /[ㄱ-ㅎㅏ-ㅣ가-힣]+$/gi; //허용하지 않는 패턴. 모바일에서 작동 안 함. 모바일에는 가운데 점(middle dot)이라는 특수문자가 있기 떄문.
+const regExp = /[^ㄱ-ㅎㅏ-ㅣ가-힣\u3180\u119E\u11A2\u2022\u2025\u00B7\uFE55]+$/gi; //모바일에 있는 가운데 점(middle dot)이라는 특수문자도 포함하여 한글을 허용
 
 //아래와 같이 해주면 입력 시 한글을 쓰면 저절로 지워짐.
 if(regExp.test(event.target.value)){
@@ -615,7 +615,7 @@ if(regExp.test(event.target.value)){
 }
 
 const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣ0-9\_\-\u318D\u2025a\u00B7\uFE55]+$/gi; // 허용하는 패턴은 한글, _, -, 천지인키보드 미들닷
- const regExp = /(?:[^\w\s\uAC00-\uD7A3\u3131-\u314E\u314F-\u3163\u318D\u119E\u11A2\u2022\u2025a\u00B7\uFE55]|_)+/g; 
+const regExp = /(?:[^\w\s\uAC00-\uD7A3\u3131-\u314E\u314F-\u3163\u318D\u119E\u11A2\u2022\u2025\u00B7\uFE55]|_)+/g; 
  //위와 똑같음. 다만 유니코드로 변경된 것일 뿐임
  /*  uAC00-\uD7A3 : 가-힣 (음계)
    * \u3131-\u314E : ㄱ-ㅎ (자음)
