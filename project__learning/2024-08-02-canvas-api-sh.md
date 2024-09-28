@@ -1,4 +1,4 @@
-# 1. this keyword
+## <span style="color:#802548">_this keyword_</span>
 
 - 화살표 함수를 안 쓰고 function keyword를 쓴 뒤 this를 호출하면 this가 제대로 인식되지 않았다.
 
@@ -146,7 +146,7 @@ const initFont = (else, canvas, foregroundCanvas) => {
 - 이는 3번에서 알아보자.
 
 
-# 2. 생성자 함수에서 new 가 필수인 이유
+## <span style="color:#802548">_생성자 함수에서 new 가 필수인 이유_</span>
 
 - 아래에서 new를 지우면 모든 js가 제대로 출력되지 않는다.
 
@@ -328,7 +328,7 @@ const PhotoEditor = function (canvasId) {
 ```
 
 
-# 3. call, apply
+## <span style="color:#802548">_call, apply_</span> 
 
 - 다만 위의 this.canvas는 전역변수로서 조금 특수한 양식을 보인다.
 - initFont는 
@@ -603,7 +603,7 @@ const initText = function () {
 
 
 
-# 4. import에서 script 파일로의 전환
+## <span style="color:#802548">_import에서 script 파일로의 전환_</span>
 
 - import 문법은 기본적으로 node_modules에서 가져오는 문법이다.
 - node_modules 폴더가 있다면, 즉 한번만 npm install이 진행되었다면 외부망-내부망을 가리지 않는다.
@@ -962,7 +962,7 @@ $(function() {
 */
 ```
 
-# 5. tensorflow model caching하기
+## <span style="color:#802548">_tensorflow model caching하기_</span>
 
 - google cloud model을 사용하는 tensorflow의 경우, 모델을 처음에 가져와야 판독이 가능하다.
 - 따라서 모델을 가져오는 코드를 만들었었다.
@@ -1031,7 +1031,7 @@ const classifyImage = async (imgObj) => {
 
 
 
-# 6. tensorflow model 외부통신 없이 model 사용하기
+## <span style="color:#802548">_tensorflow model 외부통신 없이 model 사용하기_</span>
 
 - 그런데 legacy 내부망 환경에서는 model을 외부와 통신하여 사용하는 것이 불가능했다.
 - 따라서 model을 직접 안으로 들여와서 사용해야 했다.
@@ -1146,7 +1146,7 @@ https://www.kaggle.com/models/google/mobilenet-v2/tfJs
 ```
 
 
-# 7. 뒤로가기 
+## <span style="color:#802548">_뒤로가기_</span>
 
 - 뒤로가기는 이전에 구현되어있었으나, 폰트색깔을 바꾸고 이미지가 같이 바뀌게 되면서 뒤로가기가 좀 더 복잡해졌다
 - 폰트가 바뀌면서 이미지가 바뀌지만 뒤로가기 스택에는 이전의 이미지가 저장되지 않았기 때문이다.
@@ -1210,7 +1210,7 @@ this.foregroundCanvas.on("object:modified", saveState); //foreg
 ```
 
 
-# 8. tab 이동 시 focus된 버튼 하위 요소를 enter했을 때 문제 해
+## <span style="color:#802548">_tab 이동 시 focus된 버튼 하위 요소를 enter했을 때 문제 해결_</span> 
 
 - focus된 버튼의 경우, enter를 누르면 keydown event에서 enter를 감지한다.
 - 그런데 버튼 안에 span 태그에다가 enter를 하는 경우에도 button에서 click event가 일어난다.
@@ -1299,7 +1299,7 @@ accTooltip.addEventListener('click', (e) => {
 ```
 
 
-# 9. json 파일 읽어오기
+## <span style="color:#802548">_json 파일 읽어오기_</span>
 
 - 욕설을 원래는 서버에서 읽어서 처리했지만, front에서 읽어 처리하는 것으로 결정했다.
 - 따라서 json을 front에 두고 처리하기로 했다.
@@ -1359,7 +1359,7 @@ const debouncedCheckProfanity = debounce(async (textBox) => {
 ```
 
 
-# 10. fabric.js 비동기 문제
+## <span style="color:#802548">_fabric.js 비동기 문제_</span>
 
 - fabric.js는 비동기로 실행되는 것들 투성이다.
 - 그런데 legacy 환경에서 만들어서 Promise로 감싸져 있지 않아, async await를 쓸 수 없다.
@@ -1430,7 +1430,7 @@ fabric.Image.fromURL(cardImageUrl, (img) => {
 })
 ```
 
-# 11. 회전에 따른 left, top 미 갱신 문제
+## <span style="color:#802548">_회전에 따른 left, top 미 갱신 문제_</span>
 
 - 회전을 하게 되면, left, top 값이 당연히 회전된 객체에 맞춰 정해지는 거라고 생각했다.
 - 그런데, 전혀 그렇지 않았다. 원래의 left, top값으로 찍힌 좌표가 회전과 같이 이동했다.
@@ -1627,7 +1627,7 @@ function isPointInsidePolygon(imgCoords, cardCoords) {
 
 
 
-# 12. 카드 여백 체크 로직
+## <span style="color:#802548">_카드 여백 체크 로직_</span>
 
 - 원래는 viewWidth로 정한 값을 카드의 left, right, bottom, top 값으로 했다.
 - 그런데 실제 값과 달랐다.
@@ -1658,7 +1658,7 @@ if(
 ```
 
 
-# 13. canvas api의 event는 document의 event와 다르다.
+## <span style="color:#802548">_canvas api의 event는 document의 event와 다르다._</span>
 
 - canvas object에 name 속성을 주는 것은 매우 간단하다.
 - fabric.js를 이용한 예시인데, 아래처럼 name을 property로 주면 된다.
@@ -1710,7 +1710,7 @@ this.canvas.on('text:editing:entered',function() {
 })
 ```
 
-# 14. base64Url을 file객체로 변환하기
+## <span style="color:#802548">_base64Url을 file객체로 변환하기_</span>
 
 - 서버에서 base64String imageFile을 file객체로 변환해서 넘겨달라고 요청받았다.
 - 솔직히 서버에서 알아서 변환하면 되지 않나라는 생각이 들었지만, 네트워크 용량이 큰 건 좋지 않으니 변환을 했다.
@@ -1851,7 +1851,7 @@ const saveTest = (imgUrl) => {
 }
 ```
 
-# multipart/form-data data를 보내기
+## <span style="color:#802548">_multipart/form-data data를 보내기_</span>
 
 - 제이쿼리 ajax에서 contentType을 false로 하면 jquery가 알아서 판단해 보낸다.
 - 아래처럼 contentType이 두개면 나중에 쓴 게 적용된다.
@@ -1915,7 +1915,7 @@ sendRequest(param);
 ```
 
 
-# 15. crop시 image 해상도가 깨졌던 이유
+## <span style="color:#802548">_crop시 image 해상도가 깨졌던 이유_</span>
 
 - image 해상도가 깨졌던 이유는 left 값을 round 처리를 안해준 것에 더해,
 - border size 값을 생각하지 않은 것 때문이었다. 아래 1은 border size다.
@@ -1940,7 +1940,7 @@ fabric.Image.fromURL(activeSelection.origin.src, (myImg)=> {
 ```
 
 
-# 16. fabric에서 js로 발생시킨 event는 인식되지 않는다.
+## <span style="color:#802548">_fabric에서 js로 발생시킨 event는 인식되지 않는다._</span> 
 
 - js로 돌리는 순간, 그냥으로는 event가 발생하지 않는다.
 - 아래같이 암만 달아봐야 인지하지 못한다.
@@ -1977,7 +1977,7 @@ this.canvas.on('object:rotated', function(options) {
   this.canvas.fire("object:rotated", {target: activeSelection});
   ```
 
-# 17. rotate 돌린 상태로 저장하기
+## <span style="color:#802548">_rotate 돌린 상태로 저장하기_</span>
 
 - 차장게이가 왼90도 돌린 상태로 서버에 전송해달라는 말을 했다.
 
@@ -2114,7 +2114,7 @@ xhr.send(encodedData);
 
 
 
-# 18. tomcat의 post 전송 시 body 크기 2MB 제한
+## <span style="color:#802548">_tomcat의 post 전송 시 body 크기 2MB 제한_</span>
 
 - 우선 tomcat은 post로 전송시에, 2mb가 넘으면 그냥 튕겨버린다. 그게 default다.
 - 따라서 controller에는 값이 들어오지 않는다. controller 자체에는 도달한다.
@@ -2126,7 +2126,7 @@ xhr.send(encodedData);
 
 
 
-# 19. js,css,font caching 방지하기
+## <span style="color:#802548">_js,css,font caching 방지하기_</span>
 
 - js script를 갈아끼워도 caching된 것이 남아있으면 caching된 것을 읽는다.
 - 따라서 변화를 로컬 혹은 운영에 반영해도 읽어오지 못하는 경우가 있다.
@@ -2192,7 +2192,7 @@ module.exports = {
 ```
 
 
-# filter와 find의 차이점
+## <span style="color:#802548">_filter와 find의 차이점_</span>
 
 - filter를 쓰면 배열로 취급된다.
 - 따라서 index를 넣어서 가져와야 한다.
@@ -2221,7 +2221,7 @@ leftLengthDisplayingText.text = textBox.text.length;
 leftLengthDisplayingText.text = String(textBox.text.length);
 ```
 
-# typing event가 일어나기 전의 텍스트 저장하기
+## <span style="color:#802548">_typing event가 일어나기 전의 텍스트 저장하기_</span>
 
 - 우선 텍스트에 관한 요건이 매우 복잡했다. 
 - 이전에 입력한 text 언어와 현재 입력한 text 언어의 양식이 다르면 막아달라는 것이었다.
@@ -2369,7 +2369,7 @@ function refrainKorEngMixing(previousText, textBox) {
 refrainKorEngMixing = refrainKorEngMixing.bind(this);
 ```
 
-# object와 원시형의 차이점
+## <span style="color:#802548">_object와 원시형의 차이점_</span>
 
 - slice는 원본을 잘라버린다.
 - slice가 원본을 자르는 특성이 필요할 때가 있다.
@@ -2415,7 +2415,7 @@ function refrainKorEngMixing(previousText, textBox) {
 }
 ```
 
-#  replace, slice/ 대리변수, substring
+## <span style="color:#802548">_replace, slice/ 대리변수, substring_</span>
 
 - 다만 이때 조심해야 할 점이 있는데, 바로 slice와 substring을 사용할 때를 구분하는 것이다.
 - slice는 객체 자체 원본 property를 바꿔버린다. 따라서 원본 값이 바뀌는 걸 원하지 않으면 사용해선 안된다.
@@ -2500,7 +2500,7 @@ const limitLeftTextAmount = (textBox) => {
 ```
 
 
-# text 검사 순서와 정규식
+## <span style="color:#802548">_text 검사 순서와 정규식_</span>
 - text에 관한 복잡한 로직은 이제 거의 정리됐다.
 - 먼저 욕설 검사를 먼저 진행한다.
 - 그리고 canvas자체에 event를 거는 것말곤 도리가 없으므로, event의 name을 보고 분기처리한다.
@@ -2673,7 +2673,7 @@ function filterTextRetrieveValidationResult(regex, textBox) {
 
 
 
-# 폰트사이즈에 맞춰 height 유지시키기
+## <span style="color:#802548">_폰트사이즈에 맞춰 height 유지시키기_</span>
 
 - 폰트사이즈가 커질수록, height도 높아져 원래 높이를 유지하지 못하고 글자가 아래로 내려간다.
 - 이런 현상을 방지하려면 fontSize에 맞춰 top 크기도 조정되어야 한다.
@@ -2746,7 +2746,7 @@ const text = textBox.text;
 ```
 
 
-# 미리보기 배율을 늘리면 여백 검사가 작동하지 않는 문제 해결
+## <span style="color:#802548">_미리보기 배율을 늘리면 여백 검사가 작동하지 않는 문제 해결_</span>
 
 - 미리보기 배율을 늘리면 여백 검사가 작동하지 않는 문제가 있었다.
 - 원인은 viewport를 설정하는 부분에 있었다.
@@ -2855,7 +2855,7 @@ const setViewport = () => {
 ```
 
 
-# api timeout 시 재시도하는 로직 
+## <span style="color:#802548">_api timeout 시 재시도하는 로직_</span>
 
 - model을 load해서 개/고양이 판독 api를 쏘는데, 이 경우 외부망을 통해 나간다.
 - 그런데 구글이 잘못돼서(???) 혹시 개/고양이 판독이 실패한 경우, 내부 모델을 활용해 판독을 하게끔 하는 요건이 있었다.
@@ -2959,7 +2959,7 @@ async function loadAndPredict(imgObj) {
 ```
 
 
-# 캔버스의 크기에 관계없이 background 카드에 맞게 text 띄우기
+## <span style="color:#802548">_캔버스의 크기에 관계없이 background 카드에 맞게 text 띄우기_</span>
 
 - 캔버스는 반응형이라 화면에 따라 캔버스의 크기가 달라진다. 
 - 따라서 직접 하드코딩으로 주는 게 아니라, 관계없이 background 카드에 맞게 text를 띄우려고 한다.
@@ -3120,7 +3120,7 @@ rightTextBox.set('left', rightTextBox.left - ( rightTextBox.width ));
 rightTextBox.set('top', rightTextBox.top - (bottomFontSize + leftText.fontSize + 5 + lineBorderSize + 5.5  + rightTextBox.fontSize));
 ```
 
-# 텍스트 길이를 보여주는 text도 만들기
+## <span style="color:#802548">_텍스트 길이를 보여주는 text도 만들기_</span>
 
 - 텍스트 길이를 보여주는 text도 만들어 달라는 추가요건이 들어왔다.
 - 텍스트 길이는 처음엔 파란색이다가 최대글자 수를 초과하면 빨간색으로 노출시켜달라는 요건이었다.
@@ -3263,7 +3263,7 @@ const limitRightTextAmount = (textBox) => {
 }
 ```
 
-# placeholder 기능 구현하기
+## <span style="color:#802548">_placeholder 기능 구현하기_</span>
 
 - HTML의 경우, input에 placeholder 기능이 property로 존재한다.
 - 따라서 별다른 노력 없이 구현이 가능하다.
@@ -3420,8 +3420,27 @@ this.canvas.on('text:editing:entered', (e) => {
 })
 ```
 
+- enter가 안되게도 구현해야 한다. 줄바꿈을 못하게 해달라고 했다.
+- canvas api의 text object도 DOM이긴하지만, 개발자도구창엔 잡히지 않는 dom이다.
+- 따라서 js로만 포착 가능하다. 거기다 canvas api에는 enter event를 따로 포착하는 게 불가능하다.
+- document로만 포착해야함을 의미한다.
+- 그런데 canvas api로 만든 text도 Dom의 기준에서는 textarea다. 따라서 tagName으로 포착한다.
 
-# canvas에서 필요없는 텍스트 길이, placeholder 지워서 서버에 저장하기
+```js
+document.addEventListener('keydown', function() {
+  if (e.key !=='Enter') {
+    return;
+  }
+
+  if (e.target.tagName === 'TEXTAREA') {
+    e.preventDefault();
+  }
+
+})
+```
+
+
+## <span style="color:#802548">_tempCanvas를 이용해 현재 canvas에서 필요없는 텍스트 길이, placeholder 지워서 서버에 저장하기_</span>
 
 - text length 라던가, placeholder 등은 서버에 저장되는 카드 이미지에서는 지워야 한다.
 - 따라서 현재 canvas가 아닌 tempcanvas를 활용해야 한다.
@@ -3535,15 +3554,7 @@ tempCanvas.loadFromJSON(canvasJsonData, () => {
 })
 ```
 
-
-# Promise 활용법
-
-
-```js
-
-```
-
-# web의 text 생성 토글/ mobile의 text 생성 토글
+## <span style="color:#802548">_web의 text 생성 토글/ mobile의 text 생성 토글_</span>
 
 - web의 구조는 텍스트를 누르면 tool이 헤더에 뜨는 구조다.
 - 따라서 boolean 변수 하나로 전부 통제가 가능했다.
@@ -3572,7 +3583,7 @@ if (!isTextCreated) {
     .
     //텍스트 생성
     isTextCreated = !isTextCreated 
-  } else {
+} else {
     //텍스트 제거
     const textArray = this.canvas.getObjects().find((item) => item.name.includes("text_"));
     for (const element of textArray) {
@@ -3580,12 +3591,741 @@ if (!isTextCreated) {
     }
 
     isTextCreated = !isTextCreated;
-  }
-  ```
+}
+```
 
-  - 그러나 모바일의 UI는 다르다.
-  - text를 눌러도 확정 생성이 아니라, 한번더 확정 여부를 검사한다.
+- 그러나 모바일의 UI는 다르다.
+- text를 눌러도 확정 생성이 아니라, 한번더 확정 여부를 검사한다.
 
-  ```js
+```js
 
-  ```
+```
+
+
+## <span style="color:#802548">_이미지내에서만 cropzone 이동하게 하기_</span>
+
+- 
+
+
+```js
+
+```
+
+
+## <span style="color:#802548">_api 시간지연에 따른 모달창 띄우기_</span>
+- api 시간지연이 15초 이상 지속되면 모달창을 띄우는 기능을 만들어보자.
+- timer로 만들 setTimeout 함수를 만들어준다.
+
+```js
+let loadingTimer;
+
+let objects = this.canvas.getObjects();
+// 이미지 몇장인지 확인
+let count = 0;
+
+objects.forEach((obj) => {
+    if (obj.name && obj.name.startsWith('image_')) {
+        count++;
+    }
+});
+
+// 15초 후에 팝업을 띄우는 타이머 설정
+loadingTimer = setTimeout(() => openModal('modal09'), 15000);
+```
+
+- 응답이 15초 안에 오게끔 하려면 동기적으로 코드가 진행되게 해야 한다.
+- 따라서 api는 async await로 구성한다.
+
+```js
+const removeBg = async() => {
+    let loadingTimer;
+
+    let objects = this.canvas.getObjects();
+    // 이미지 몇장인지 확인
+    let count = 0;
+
+    objects.forEach((obj) => {
+        if (obj.name && obj.name.startsWith('image_')) {
+            count++;
+        }
+    });
+
+    // 15초 후에 팝업을 띄우는 타이머 설정
+    loadingTimer = setTimeout(() => openModal('modal09'), 15000);
+
+    const resImg = await requestBackgroundRemove(imgObj.getSrc()); 
+    clearTimeout(loadingTimer);
+}
+```
+
+- 그런데 api에서 error가 나게 되면 catch를 하지 않으면 후속 코드가 진행되지 않는다.
+- 따라서 실패 응답이 왔는데도 15초 뒤에 시간지연 모달창이 뜨게 된다.
+- 따라서 try ~ catch로 감싸줘야 한다. 
+
+```js
+const removeBg = async() => {
+    let loadingTimer;
+
+    let objects = this.canvas.getObjects();
+    // 이미지 몇장인지 확인
+    let count = 0;
+
+    objects.forEach((obj) => {
+        if (obj.name && obj.name.startsWith('image_')) {
+            count++;
+        }
+    });
+
+    // 15초 후에 팝업을 띄우는 타이머 설정
+    loadingTimer = setTimeout(() => openModal('modal09'), 15000);
+
+    try {
+        const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
+        // 서버로부터 응답은 png형태
+        const resImgSrc = 'data:image/png;base64,' + JSON.parse(resImg.response).img_str;
+
+        imgObj.setSrc(resImgSrc, () => {
+            this.canvas.requestRenderAll();
+            getEl('#loadingBox').style.display = 'none';
+            this.canvas.fire("object:modified", {target : imgObj})
+        });
+    } catch (error) {
+        alert(error);
+    }
+    clearTimeout(loadingTimer);
+}
+```
+
+## <span style="color:#802548">_promise로 감싸서 동기 코드로 만들기_</span>
+
+- 서버에서 배경을 제거하고 blob 객체를 준다.
+- 그런데 api는 await로 처리해놓고, 서버가 준 blob을 base64로 전환하는 function에는 await를 쓰지 않았다.
+- 문제는 reader의 onload, readAsDataURL이 비동기함수라는 점이다.
+- 그럼 서버에서 정상 응답을 줘도 절대로 제대로 이미지가 그려지지 않는다.
+- 비동기라서 resImgSrc가 계산돼서 저장되기 전에 아래 코드가 실행되고, 그럼 undefined가 된다.
+- 따라서 imgObj는 undefined를 setSrc하게 되니 오류가 나는 것이다.
+
+```js
+try {
+    const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
+    // 서버로부터 응답은 png형태
+    const resImgSrc = blobToDataURL(resultBlob);
+    console.log(resImgSrc);
+
+    imgObj.setSrc(resImgSrc, () => {
+        this.canvas.requestRenderAll();
+        getEl('#loadingBox').style.display = 'none';
+
+        // image 배경 제거시 object 수정 이벤트 발생
+        this.canvas.fire("object:modified", {target : this.canvas})
+        $removeAction01.checked = false;
+        $removeAction02.checked = false;
+        changeTool(TOOL.removebg, this.canvas)
+    });
+
+    imgObj.setSrc(resImgSrc, () => {
+        this.canvas.requestRenderAll();
+        getEl('#loadingBox').style.display = 'none';
+        this.canvas.fire("object:modified", {target : imgObj})
+    });
+} catch (error) {
+    alert(error);
+}
+
+function blobToDataURL(blob) {
+    const reader = new FileReader();
+    reader.onload = () => reader.result;
+    reader.onerror = console.log('error');
+    reader.readAsDataURL(blob);
+}
+```
+
+- 이를 피하려면 동기로 만들어줘야 한다. await를 쓸수있게 똑같이 Promise로 감싸주어야 한다는 의미다.
+
+```js
+const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
+// 서버로부터 응답은 png형태
+const resImgSrc = await blobToDataURL(resultBlob);
+
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+}
+```
+
+## <span style="color:#802548">_모바일 웹, 모바일 앱을 모두 고려한 image 가져오기_</span>
+- 모바일 웹은 input type file으로 충분하지만, 모바일 앱은 input type file이 아니라 bridge 함수를 써야한다.
+- 모바일 앱은 갤러리에 접근하기 위해서 앨범 접근 권한 검사등을 수행해야 하기 때문이다.
+- 그런데 bridge함수가 아래처럼 구성되어 있었다. 비동기라는 의미다.
+
+
+```js
+function send(method, parameter, callBack) {
+    if (deviceInfo.name !=='shinhancard') return;
+    .
+    .
+    .
+    setTimeout(() => {
+        WebNativeBridge.callHandler = callBack();
+    }, 10)
+}
+```
+
+- 비동기였기 때문에, 진행 할 코드가 존재한다면 진행할 코드가 모두 진행된 뒤에 진행되는 형태였다.
+- 따라서 send를 아래와 같이 사용하게 되면 file의 값이 채워지기 전에 아래 코드들이 진행된다. 
+- 따라서 app에서 실행되는 경우, file은 undefined로만 값이 나오게 된다.
+
+```js
+const imageUpload = () => {
+    let file = null;
+    // 레이어 개수 10개 초과되면 추가 안되도록 설정
+    if (this.canvas.getObjects().length > 11) {
+        // alert('관리 가능한 레이어 최대 개수는 10개 입니다.');
+        openModal("modal04");
+        return;
+    }
+    if (deviceInfo.name === 'shinhancard') {
+        const param = {
+                        header: 'getPhoto',
+                        from: 'album'
+                    };
+        send('shop_command', param, function(data) {
+            if(data typeof String) {
+                data = String(JSON.parse(data));
+            }
+
+            if (data.resultCode === '0') {
+                data.imageData = data.imageData.replace(/^chekrtttrt==/, '');
+                file = data.imageData;
+            } else if (data.resultCode === '1013') {
+
+            } else if (data.resultCode === '1014') {
+
+            }
+        });
+    } else {
+        file = event.target.files[0]; // 선택한 파일 가져오기
+    }
+    
+
+    /* 앱 실행의 경우 사실상 아래부터 전부 오류 */
+    if (!file) return; // 파일이 없으면 종료
+    
+    // 파일 확장자 제한
+    const fileName = file.name.toLowerCase()
+    const extension = fileName.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'bmp', 'gif'].indexOf(extension) === -1) {
+        openModal("modal05");
+        return;
+    }
+
+    const isMeta = await checkMetaData(file);
+
+    if(fileName.includes('스크린샷') || fileName.includes('screenshot') || !isMeta) {   
+        openModal("modal10")
+        return;
+    }
+
+    $loadingBox.style.display = "block";
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        // 강아지,고양이 판별
+        let imgObj = new Image();
+        imgObj.src = event.target.result;
+
+        imgObj.onload = async () => {
+            const pet = await classifyImage(imgObj);
+            
+            if (undefined !== petType.find((type) => type === pet)) {
+                const imageTextureSize = imgObj.width > imgObj.height ? imgObj.width : imgObj.height;
+
+                if (imageTextureSize > fabric.textureSize) {
+                        fabric.textureSize = imageTextureSize;
+                }
+                // Fabric.js Image 객체 생성
+                const fabricImage = new fabric.Image(imgObj, {
+                    borderOpacityWhenMoving: 1,
+                    name: _.uniqueId("image_"),
+                    // 이미지보정 작업 시 필요한 필터객체 추가
+                    filters: [
+                        new fabric.Image.filters.BaseFilter(),
+                        new fabric.Image.filters.Brightness({brightness:0}),
+                        new fabric.Image.filters.Contrast({contrast:0}),
+                        new fabric.Image.filters.Saturation({saturation:0}),
+                        new fabric.Image.filters.HueRotation({rotation:0}),
+                    ],
+                });
+
+                // 캔버스의 크기
+                const canvasWidth = this.canvas.width;
+                const canvasHeight = this.canvas.height;
+
+                // 이미지의 크기
+                const imgWidth = fabricImage.width;
+                const imgHeight = fabricImage.height;
+
+                // 축소 비율 계산
+                const widthRatio = (canvasWidth - 100) / imgWidth;
+                const heightRatio = (canvasHeight - 100) / imgHeight;
+
+                // 비율 중 작은 값을 선택
+                const scale = Math.min(widthRatio, heightRatio);
+
+                // 이미지가 캔버스를 초과하는 경우에만 축소
+                if (scale < 1) {
+                    fabricImage.scale(scale);
+                }
+
+                fabricImage.origin = imgObj;
+
+                
+                // 이미지가 있을 경우 교체
+                const bfImage = this.canvas.getObjects().find((item) => item.name.includes("image_"));
+                if (bfImage) {
+                    this.canvas.remove(bfImage);
+                    this.canvas.fire("object:remove", {target : bfImage});
+                    this.canvas.requestRenderAll();
+                }
+                
+                // 이미지 중앙 배치
+                this.canvas.centerObject(fabricImage);
+                // Canvas에 이미지 추가
+                this.canvas.add(fabricImage);
+            } else {
+                openModal("modal01")
+                //alert("강아지, 고양이 사진만 가능합니다");
+            }
+            
+            $loadingBox.style.display = "none";
+        };
+    };
+    reader.readAsDataURL(event.target.files[0]);
+}
+
+$fi.onchange = imageUpload;
+```
+
+- 해당 상황을 해결하려면 똑같은 함수를 두 번 호출해야 한다.
+- if문과 else문에서 똑같은 로직을 진행하고, 그 이후 진행하는 코드가 하나도 없으면 된다는 의미다.
+- 하지만 이는 코드 낭비이므로, function으로 빼준다.
+- 맨끝의 event.target.files(0)을 file로 바꿔준다.
+- 또한 this binding을 해준다.
+
+```js
+function addImageOnCanvas(file) {
+    /* 앱 실행의 경우 사실상 아래부터 전부 오류 */
+    if (!file) return; // 파일이 없으면 종료
+    
+    // 파일 확장자 제한
+    const fileName = file.name.toLowerCase()
+    const extension = fileName.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'bmp', 'gif'].indexOf(extension) === -1) {
+        openModal("modal05");
+        return;
+    }
+
+    const isMeta = await checkMetaData(file);
+
+    if(fileName.includes('스크린샷') || fileName.includes('screenshot') || !isMeta) {   
+        openModal("modal10")
+        return;
+    }
+
+    $loadingBox.style.display = "block";
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        // 강아지,고양이 판별
+        let imgObj = new Image();
+        imgObj.src = event.target.result;
+
+        imgObj.onload = async () => {
+            const pet = await classifyImage(imgObj);
+            
+            if (undefined !== petType.find((type) => type === pet)) {
+                const imageTextureSize = imgObj.width > imgObj.height ? imgObj.width : imgObj.height;
+
+                if (imageTextureSize > fabric.textureSize) {
+                        fabric.textureSize = imageTextureSize;
+                }
+                // Fabric.js Image 객체 생성
+                const fabricImage = new fabric.Image(imgObj, {
+                    borderOpacityWhenMoving: 1,
+                    name: _.uniqueId("image_"),
+                    // 이미지보정 작업 시 필요한 필터객체 추가
+                    filters: [
+                        new fabric.Image.filters.BaseFilter(),
+                        new fabric.Image.filters.Brightness({brightness:0}),
+                        new fabric.Image.filters.Contrast({contrast:0}),
+                        new fabric.Image.filters.Saturation({saturation:0}),
+                        new fabric.Image.filters.HueRotation({rotation:0}),
+                    ],
+                });
+
+                // 캔버스의 크기
+                const canvasWidth = this.canvas.width;
+                const canvasHeight = this.canvas.height;
+
+                // 이미지의 크기
+                const imgWidth = fabricImage.width;
+                const imgHeight = fabricImage.height;
+
+                // 축소 비율 계산
+                const widthRatio = (canvasWidth - 100) / imgWidth;
+                const heightRatio = (canvasHeight - 100) / imgHeight;
+
+                // 비율 중 작은 값을 선택
+                const scale = Math.min(widthRatio, heightRatio);
+
+                // 이미지가 캔버스를 초과하는 경우에만 축소
+                if (scale < 1) {
+                    fabricImage.scale(scale);
+                }
+
+                fabricImage.origin = imgObj;
+
+                
+                // 이미지가 있을 경우 교체
+                const bfImage = this.canvas.getObjects().find((item) => item.name.includes("image_"));
+                if (bfImage) {
+                    this.canvas.remove(bfImage);
+                    this.canvas.fire("object:remove", {target : bfImage});
+                    this.canvas.requestRenderAll();
+                }
+                
+                // 이미지 중앙 배치
+                this.canvas.centerObject(fabricImage);
+                // Canvas에 이미지 추가
+                this.canvas.add(fabricImage);
+            } else {
+                openModal("modal01")
+                //alert("강아지, 고양이 사진만 가능합니다");
+            }
+            
+            $loadingBox.style.display = "none";
+        };
+    };
+    reader.readAsDataURL(file);
+}
+addImageOnCanvas = addImageOnCanvas.bind(this);
+```
+
+- 길던 business logic을 전부 빼서 else문 혹은 if문 안에서 함수의 진행이 모두 종료된다.
+- 따라서 setTimeout에 따라 event loop에 들어갔던 send()가 call stack으로 올라온다.
+- call stack으로 올라와서 bridge를 호출하고 sucessCallback에 따라 진행된다.
+- successCallback에서 resultCode가 0, 즉 앨범에서 이미지를 선택했다면 imageData를 가져와서 file을 만들어서 canvas에 띄운다.
+
+```js
+const imageUpload = () => {
+    let file = null;
+    // 레이어 개수 10개 초과되면 추가 안되도록 설정
+    if (this.canvas.getObjects().length > 11) {
+        // alert('관리 가능한 레이어 최대 개수는 10개 입니다.');
+        openModal("modal04");
+        return;
+    }
+    if (deviceInfo.name === 'shinhancard') {
+        const param = {
+                        header: 'getPhoto',
+                        from: 'album'
+                    };
+        send('shop_command', param, function(data) {
+            if(data typeof String) {
+                data = String(JSON.parse(data));
+            }
+
+            if (data.resultCode === '0') {
+                data.imageData = data.imageData.replace(/^chekrtttrt==/, '');
+                // 바이너리 데이터 얻기
+                const binaryData = base64ToBinary(data.imageData);
+                // 바이너리 데이터를 사용하여 Blob 생성
+                const blob = new Blob([binaryData], { type: 'image/png' });
+                // Blob을 사용하여 File 객체 생성
+                const file = new File([blob], 'image.png', { type: 'image/png' });
+                addImageOnCanvas(file);
+            } else if (data.resultCode === '1013') {
+                alert(data.resultMessgae);
+            } else if (data.resultCode === '1014') {
+                alert(data.resultMessgae);
+            }
+        });
+    } else {
+        file = event.target.files[0]; // 선택한 파일 가져오기
+        addImageOnCanvas(file);
+    }
+}
+
+function base64ToBinary(base64) {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+}
+
+$fi.onchange = imageUpload;
+```
+
+- 근데 보통 테스트계는 소스를 올리는 과정이 매우 귀찮으므로 에러를 바로 알수 있게 처리해준다.
+- addImageOnCanvas()에서 일어난 error가 상위 call stack인 imageUpload로 올라와서 처리된다.
+- 따라서 addImageOnCanvas에서 일어난 에러도 alert가 된다. 물론 data를 replace하다 나는 에러도 alert가 뜬다.
+
+```js
+const uploadImage = () => {
+    let file = null;
+    // 레이어 개수 10개 초과되면 추가 안되도록 설정
+    if (this.canvas.getObjects().length > 11) {
+        // alert('관리 가능한 레이어 최대 개수는 10개 입니다.');
+        openModal("modal04");
+        return;
+    }
+    if (deviceInfo.name === 'shinhancard') {
+        const param = {
+                        header: 'getPhoto',
+                        from: 'album'
+                    };
+        send('shop_command', param, function(data) {
+            if(data typeof String) {
+                data = String(JSON.parse(data));
+            }
+
+            if (data.resultCode === '0') {
+
+                try {
+                    data.imageData = data.imageData.replace(/^chekrtttrt==/, '');
+                    // 바이너리 데이터 얻기
+                    const binaryData = base64ToBinary(data.imageData);
+                    // 바이너리 데이터를 사용하여 Blob 생성
+                    const blob = new Blob([binaryData], { type: 'image/png' });
+                    // Blob을 사용하여 File 객체 생성
+                    const file = new File([blob], 'image.png', { type: 'image/png' });
+                    addImageOnCanvas(file);
+                } catch (error) {
+                    alert(error);
+                }
+                
+            } else if (data.resultCode === '1013') {
+                alert(data.resultMessgae);
+            } else if (data.resultCode === '1014') {
+                alert(data.resultMessgae);
+            }
+        });
+    } else {
+        file = event.target.files[0]; // 선택한 파일 가져오기
+        addImageOnCanvas(file);
+    }
+}
+$fi.onchange = imageUpload;
+
+function base64ToBinary(base64) {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+}
+```
+
+## <span style="color:#802548">_image 내에서만 cropzone 움직이게 하기_</span>
+- image와 동일한 크기의 rect를 만들어서 움직이는데, 그게 image zone에서만 움직이게 해달라는 이야기가 있었다.
+- 그걸 구현하지 못해서 도움을 구했다.
+- 핵심 기획은 회전이 된 경우는 
+
+
+```js
+this.canvas.on('object:moving', (e) => {
+    const obj = e.target;
+
+    if (!obj || obj.name !== 'cropZone') {
+        return;
+    }
+
+    const img = getCurImage(this.canvas);
+
+    const imgLeft = img.left;
+    const imgTop = img.top;
+    const imgWidth = img.getScaledWidth();
+    const imgHeight = img.getScaledHeight();
+
+    //cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
+    const {x:rx, y:ry} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, -img.angle);
+    obj.left = rx;
+    obj.top = ry;
+
+    if (obj.left < imgLeft) {
+        obj.left = imgLeft;
+    }
+    if(obj.top < imgTop) {
+        obj.top = imgTop;
+    }
+
+    if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
+        obj.left = imgLeft + imgWidth - obj.getScaledWidth();
+    }
+    if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
+        obj.top = imgTop + imgHeight - obj.getScaledHeight();
+    }
+
+    const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
+    obj.left = x;
+    obj.top = y;
+
+    obj.setCoords();
+})
+
+function rotatePoint(px, py, ox, oy, angle) {    
+    const radians = angle * (Math.PI / 180);
+    const translatedX = px - ox;
+    const translatedY = py - oy;
+
+    const rotatedX = translatedX * Math.cos(radians) - translatedY * Math.sin(radians);
+    const rotatedY = translatedX * Math.sin(radians) + translatedY * Math.cos(radians);
+
+    const finalX = rotatedX + ox;
+    const finalY = rotatedY + oy;
+
+    return { x: finalX, y: finalY}
+}
+```
+
+- 이미지가 scaling된 상태일 수 있기 때문에, width와 height는 scaled된 값을 구해야 한다.
+
+```js
+const img = getCurImage(this.canvas);
+
+const imgLeft = img.left;
+const imgTop = img.top;
+const imgWidth = img.getScaledWidth();
+const imgHeight = img.getScaledHeight();
+```
+
+- cropzone rect left, top 값을 각도에 맞춰 수정해준다.
+- 여기서 -angle로 전환하는 이유는 image를 (0,0)으로 맞춰 계산할 때 돌린 각도만큼 반대로 돌려야 하기 때문이라고 한다.
+
+```js
+//cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
+const {x:rx, y:ry} = rotatePoint(obj.left, obj.top,imgLeft, imgTop, -img.angle);
+obj.left = rx;
+obj.top = ry;
+```
+
+- Math의 cos, sin 함수는 반드시 degree가 아닌 radians 형태의 각도로 넣어야 한다.
+- 따라서 degree를 radians 값으로 변환해야 한다.
+    - 360도가 2 * PI * radians이므로, 1도는 PI * radians /180이다.
+    - angle만큼 곱해주면 angle만큼의 radians 값을 얻을 수 있다.
+- ox, oy는 image 객체의 left, top 값이다.
+- px, py는 rect 객체의 left, top 값이다.
+- rect 객체의 left, top 값에서 image 객체의 값을 빼는 이유는 image 객체의 left, top을 (0,0)이라는 점으로 놓기 위해서다.
+    -  그렇게 하면 rotation 계산이 매우 간결해지기 때문이다. 따라서 image (left, top)이 (0,0) 기준으로 변환된 rect X, Y 좌표값을 얻어낸다.
+    -  거기서부터 회전된 radians 값을 계산해서 다시한번 원점에서의 차이만큼의 좌표를 계산해낸다. 식은 그냥 외우는 게 나을듯 하다.
+    - 그리고 이를 원래 image의 (left, top)에 붙이면 degree만큼 돌아간 rect의 좌표값을 얻어낼 수 있다.
+
+```js
+function rotatePoint(px, py, ox, oy, angle) {    
+    const radiansConvertedFromDegree = angle * (Math.PI / 180);
+    const translatedX = px - ox;
+    const translatedY = py - oy;
+
+    const rotatedX = translatedX * Math.cos(radiansConvertedFromDegree) - translatedY * Math.sin(radiansConvertedFromDegree);
+    const rotatedY = translatedX * Math.sin(radiansConvertedFromDegree) + translatedY * Math.cos(radiansConvertedFromDegree);
+
+    const finalX = rotatedX + ox;
+    const finalY = rotatedY + oy;
+
+    return { x: finalX, y: finalY}
+}
+```
+
+- boundary 안에서만 움직이게끔 하는 코드다.
+- 이미지가 마치 (0,0)인 상황에서 rotate되지 않은 상황으로 만들어서 경계를 넘겼는지 계산하는 것이다.
+
+```js
+ if (obj.left < imgLeft) {
+    obj.left = imgLeft;
+}
+if (obj.top < imgTop) {
+    obj.top = imgTop;
+}
+if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
+    obj.left = imgLeft + imgWidth - obj.getScaledWidth();
+}
+if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
+    obj.top = imgTop + imgHeight - obj.getScaledHeight();
+}
+```
+
+- angle을 -로 돌려서 계산했던 행위를 되돌린다.
+- rect의 left, top 값을 원래대로 되돌리고 실제 좌표계에 반영해준다.
+
+```js
+const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
+obj.left = x;
+obj.top = y;
+
+obj.setCoords();
+```
+
+- scaling의 경우에는 코드가 약간 달라진다.
+- 다만 아직 오류가 있다. 위로 당기면 아래 rect가 커진다.
+
+```js
+this.canvas.on('object:scaling', (e) => {
+    const obj = e.target;
+
+    if (!obj || obj.name !== 'cropZone') {
+        return;
+    }
+
+    const img = getCurImage(this.canvas);
+
+    const imgLeft = img.left;
+    const imgTop = img.top;
+    const imgWidth = img.getScaledWidth();
+    const imgHeight = img.getScaledHeight();
+
+    // Calculate the object's scaled dimensions and position
+    const scaledWidth = obj.getScaledWidth();
+    const scaledHeight = obj.getScaledHeight();
+
+    // Get object's current position
+    const { x: objLeft, y: objTop } = obj.getPointByOrigin('left', 'top');
+
+    // Rotate point to the image's coordinate system
+    let { x: rx, y: ry } = rotatePoint(objLeft, objTop, imgLeft, imgTop, -img.angle);
+
+    // Boundary conditions
+    if (rx < imgLeft) {
+        rx = imgLeft;
+    }
+    if (ry < imgTop) {
+        ry = imgTop;
+    }
+    if (rx + scaledWidth > imgLeft + imgWidth) {
+        obj.scaleX = (imgLeft + imgWidth - rx) / obj.width;
+    }
+    if (ry + scaledHeight > imgTop + imgHeight) {
+        obj.scaleY = (imgTop + imgHeight - ry) / obj.height;
+    }
+
+    // Rotate point back to the canvas coordinate system
+    let { x, y } = rotatePoint(rx, ry, imgLeft, imgTop, img.angle);
+    obj.setPositionByOrigin(new fabric.Point(x, y), 'left', 'top');
+
+    // Force the crop zone to update its coordinates and scaling
+    obj.setCoords();
+});
+```
+
+
+- js
+
+```js
+const { x: objLeft, y: objTop } = obj.getPointByOrigin('left', 'top');
+```
