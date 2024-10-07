@@ -1,0 +1,179 @@
+SELECT
+  e.employee_id,
+  e.job_id,
+  e.manager_id,
+  e.department_id,
+  d.location_id,
+  l.country_id,
+  e.first_name,
+  e.last_name,
+  e.salary,
+  e.commission_pct,
+  d.department_name,
+  j.job_title,
+  l.city,
+  l.state_province,
+  c.country_name,
+  r.region_name
+FROM
+  employees e,
+  departments d,
+  jobs j,
+  locations l,
+  countries c,
+  regions r
+WHERE e.department_id = d.department_id
+  AND d.location_id = l.location_id
+  AND l.country_id = c.country_id
+  AND c.region_id = r.region_id
+  AND j.job_id = e.job_id
+
+
+
+use youdb;
+
+create table p_test(
+	p_id int primary key,
+    p_name varchar(20) unique,
+    age tinyint
+    );
+    
+    insert into p_test values(1, '박준범', 27);
+    insert into p_test values(2, '송지율', 32);
+    insert into p_test values(3, null, 23); # null은 복수개가 있어도 unique key를 위배하지 않는다. null은 값이 아니기 때문이다.
+	insert into p_test values(4, null, 23); # null은 복수개가 있어도 unique key를 위배하지 않는다. null은 값이 아니기 때문이다.
+    insert into p_test values(5, '김윤성', 21);
+    
+    drop table p_test;
+    create table p_test(
+	p_id int primary key,
+    p_name varchar(20) not null unique,
+    age tinyint,
+    
+    check ( 20 <= age and age <=24)
+    );
+    
+        insert into p_test values(1, '박준범', 24);
+    insert into p_test values(2, '송지율', 23);
+    insert into p_test values(3, '오세준', 20); 
+	insert into p_test values(4, '방성원', 22);
+    
+    create table c_test(
+		c_id int primary key auto_increment,
+        c_name varchar(20),
+        
+        
+        constraint you_pk /* 내가 알아보기 쉽게 이름을 준 것. 아니면 시스템이 줘버려서 못알아봄*/ foreign key (c_name) references p_test(p_name)
+    );
+    
+    select * from c_test;
+    
+    truncate c_test;
+    insert into c_test(c_name) values('박준범');
+    insert into c_test(c_name) values('방성원');
+    insert into c_test(c_name) values('오세준'); 
+    insert into c_test(c_name) values('김윤성'); -- 부모에 row가 없으면 여기 insert는 불가능함.
+    
+    
+    
+
+select * from tab;
+
+select  *
+
+from departments de;
+
+select * from locations;
+
+select 
+*
+from locations  lo
+left join  departments de 
+on de.location_id = lo.location_id;
+
+
+select 
+    count(case when de.department_id is null then 1 else null end) as "부서가 없는 도시수",
+    count(distinct case when de.department_id is not null then lo.location_id else null end) as "부서가 있는 도시수"
+from departments de  
+left join locations  lo
+on de.location_id = lo.location_id;  --1. departments로 기준 table을 설정해서 원하는 null 형태를 만들 수 없었다.
+
+select 
+    count(case when de.department_id is null then 1 else null end) as "부서가 없는 도시수",
+    count(case when de.department_id is not null then de.department_id else null end) as "부서가 있는 도시수"
+from locations  lo
+left join  departments de 
+on de.location_id = lo.location_id;  --2. locations을 기준 table을 설정했지만, 부서가 있는 도시수가 계속 전체 row수가 나왔다.
+
+select 
+    count(case when de.department_id is null then 1 else null end) as "부서가 없는 도시수",
+    count(distinct case when de.department_id is not null then de.department_id else null end) as "부서가 있는 도시수"
+from locations  lo
+left join  departments de 
+on de.location_id = lo.location_id;  --3. locations을 기준 table을 설정했고, 전체 row수가 나오는 겹치는 row를 줄여주기 위해 distinct를 넣어주었지만 여전히 전체 row가 보인다. department_id가 PK니까 당연히 distinct가 의미가 없다. 
+
+select 
+    count(distinct case when de.department_id is not null then lo.location_id else null end) as "부서가 있는 도시수(O)",
+    count(case when de.department_id is null then 1 else null end) as "부서가 없는 도시수(X)"
+from locations  lo
+left join  departments de 
+on de.location_id = lo.location_id;  --4. locations을 기준 table을 설정했고, 도시가 겹치는 게 문제이므로 lo.location_id를 distinct로 놓고 계산하면 원하는 결과가 나온다.
+
+
+select 
+    count(distinct case when de.department_id is not null then lo.location_id else null end) as "부서가 있는 도시수(O)",
+    count(case when de.department_id is null then 1 else null end) as "부서가 없는 도시수(X)"
+from locations  lo
+left join  departments de 
+on lo.location_id = de.location_id; --5. lo의 location_id가 index로 작동하는 것이므로 해당 column을 왼쪽으로 두어 index로 작동함을 명시적으로 알려준다.
+
+ create table my_emp(
+	id int primary key auto_increment,
+    name char(20),
+    age tinyint,
+    wid int, # 여기 쉼표 안 주면 안됨. 안주면 check 조건 error 어쩌고저쩌고 뜸.
+    
+    check (20 <= age and age <= 50),
+    constraint fk foreign key(wid) references wspace(wid)
+);
+
+drop table my_emp;
+
+select *
+from wspace ws
+inner join my_emp m
+on m.wid = ws.wid;
+
+create table wspace(
+	wid int primary key,
+    wname char(20) not null,
+    wloc char(10),
+    waddr varchar(30)
+);
+
+insert into wspace(wid, wname, wloc,waddr) values(10, 'scit', '인천','연수구');
+insert into wspace(wid, wname, wloc,waddr) values(20, 'sescit', '서울','광진구');
+insert into wspace(wid, wname, wloc,waddr) values(30, 'buscit', '부산','동구');
+
+insert into my_emp(name, age, wid) values('재원',50,10);
+insert into my_emp(name, age, wid) values('재원1',40,10);
+insert into my_emp(name, age, wid) values('재원2',30,10);
+insert into my_emp(name, age, wid) values('재원3',20,10);
+
+insert into my_emp(name, age, wid) values('jaewon',20,20);
+insert into my_emp(name, age, wid) values('jaewon1',20,20);
+insert into my_emp(name, age, wid) values('jaewon2',20,20);
+insert into my_emp(name, age, wid) values('jaewon3',20,20);
+
+insert into my_emp(name, age, wid) values('won',40,30);
+insert into my_emp(name, age, wid) values('won1',40,30);
+insert into my_emp(name, age, wid) values('won2',40,30);
+insert into my_emp(name, age, wid) values('won3',40,30);
+
+drop table wspace;
+drop table my_emp;
+truncate my_emp;
+truncate my_emp;
+
+    
