@@ -847,3 +847,37 @@ struct commit {
 
 - tree는 blob을 배열로 갖고 있고, commit은 tree를 배열로 갖고 있다.
 - 이와 같이 물고물어지는 계층구조를 갖고 있으며, 주소값도 담고 있기 때문에 branching하기가 매우 쉽다는 장점이 있다.
+
+
+
+## <span style="color:#802548">_git config 안되는 오류_</span> 
+- git을 깔고나서 config를 설정하려 할 때 오류가 나는 경우가 있다.
+
+```
+could not lock config file error
+```
+
+- 그럴 땐 처음에 bash 관리자 권한 실행하고 아래와 같이 주었다.
+
+```
+git config --system --unset credential.helper
+```
+
+- 그랬더니 해당 오류는 일어나지 않았다.
+- 하지만 근본 원인은 HOME 경로였다.
+- git은 시스템 변수를 HOME으로 만들어서 사용하는데, 이미 시스템 변수에 HOME을 JDK 경로로 등록해버려서 생기는 오류였다.
+  - git은 HOME 시스템변수($HOME) 으로 자신의 경로를 설정한다.
+  - 그런데 HOME 시스템변수에 java 경로륾 명시적으로 박았다.
+  - 그러니 git 경로가 git/cmd가 아니라 java 경로가 되어버린 것이다.
+  - 이런 오류 떄문에 HOME이 아닌 JAVA_HOME, MAVEN_HOME 같은 형태로 시스템 변수를 만드는 것이었다.
+- 해당 경로에 gitconfig 파일이 없으니 keygen 혹은 git config 시에 오류가 나게 되는 것이다.
+
+## <span style="color:#802548">_git permission denied 오류_</span> 
+- 그 다음으로 clone은 언제든 되지만, remote에 push가 안되는 경우가 있다.
+- 안된다기보다는 2021년 이후론 credential manager 버전이 사라져서 password 방식을 지원하지 않는다.
+- 따라서 ssh 방식으로 진행해야 하는데, 계속 password authentication으로 작동하는 것이다.
+
+- 처음에는  SSH-ADD 명령어가 안들어서 SSH-ADD 오류인줄 알았다.
+- 하지만 원인은 remote가 HTTPS였던 것이었다. HTTPS는 password authentication 방식 고정이다.
+- SSH 공용키 등을 다 등록하고, remote를 지우고 SSH url로 다시 remote를 설정하고 push를 하면 잘 작동한다.
+

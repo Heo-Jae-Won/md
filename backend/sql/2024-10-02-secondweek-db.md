@@ -382,20 +382,6 @@ group by years; #4
 ```
 
 
-## <span style="color:#802548">_mysql table info select_</span>
-- table info를 select해오는 sql이다.
-
-```sql
-SELECT
-    table_name, table_comment
-FROM
-    information_schema.tables
-WHERE
-    table_schema = 'youdb' AND table_name = 'box_office';
-    
-```
-
-
 ## <span style="color:#802548">_where clause operator priority_</span>
 - where 조건문에서 or와 and를 사용할 때는 and가 우선순위임을 기억해야 한다.
 - 그렇지 않으면 의도하지 않은 결과가 나온다.
@@ -461,3 +447,124 @@ order by year(release_date) asc;
 ```
 
 ![alt text](/image/and-or-parenthesis.png)
+
+
+
+
+## <span style="color:#802548">_window function_</span>
+
+- rank를 주면 partition, order에 따른 rank를 구할 수 있다.
+- partition이 group이고, order는 order다.
+- 동일한 rank의 경우, 동일하게 놓고, 그 다음 rank가 그 수만큼 빠진다.
+    - 3등이 2명이면, 둘 다 3등이고, 그 다음 등수가 5등이 되는 식이다.
+
+```sql
+select 
+	name,
+	rank() over(order by population desc)
+from city
+```
+- order를 부여할 column은 N개 이상으로 설정할 수 있다.
+- 이는 partition도 마찬가지다.
+
+```sql
+select 
+	name,
+	rank() over(partition by population desc, district asc order by population desc, district asc)
+from city
+```
+
+- row_number는 rank와 대부분이 같다.
+- 다른 점은 rank를 매기는 방법이다.
+- row_number는 같은 등수여도 무조건 1씩 증가하는 방법이다.
+    - 누가 위가 될 지는 random이다. 따라서 ranking을 주는 함수로는 적절하지 않다.
+    - ranking 용보다는 row의 갯수를 numbering하는 용도다.
+
+```sql
+select *,
+ROW_NUMBER() OVER(order by District asc, Population desc) as "rank"
+from city ci 
+where ci.countrycode = 'KOR';
+```
+
+- DENSE_RANK는 rank와 대부분이 같다.
+- 다른 점은 rank를 매기는 방법이다.
+- DENSE_RANK 같은 등수면 같은 등수로 처리한다.
+    - 같은 등수 뒤로 오는 등수는 건너뛰지 않고 그 다음 수가 된다.
+    - 3등이 2명이어도 그 다음 오는 사람은 4등이라는 의미다.
+
+
+```sql
+select *,
+DENSE_RANK() OVER(order by District asc, Population desc) as "rank"
+from city ci 
+where ci.countrycode = 'KOR';
+```
+
+
+- rank와 case when을 이용하면 아래처럼 개국년도가 오래된 순서를 뽑을 수 있다.
+- sign은 BC와 AD를 붙여주기 위한 함수다.
+
+```sql
+select 
+	rank() over(order by indepyear asc) as 랭킹,
+    name as 국가명,
+    concat(
+		case sign(indepyear)
+			when -1 then 'BC'
+			when 1 then 'AD'
+		END                         , 
+        ' '                         , 
+        convert(abs(indepyear),char)
+    ) as "개국년도"
+from country
+where indepyear is not null
+limit 10 offset 0;
+```
+
+
+
+## <span style="color:#802548">_mysql limit_</span>
+
+- mysql의 limit의 경우, 0부터 시작이라서 offset을 22로줘야 23번째부터 출력된다.
+
+```sql
+select *,
+ROW_NUMBER() OVER(order by District asc, Population desc) as "rank"
+from city ci 
+where ci.countrycode = 'KOR'
+limit 10 offset 22;  -- offset 23으로 하면 24번째부터 출력된다.
+```
+
+
+## <span style="color:#802548">_mysql concat, replace 함수_</span>
+
+- concat을 쓰면 구분자가 잘 드러나지 않는다는 단점이 있다.
+- 또한 여러 column을 넣을 때 그 때마다 구분자를 계속 추가해줘야 한다.
+
+```sql
+select concat('KOREA:',Name) as "R.O.K"
+from city 
+where CountryCode = 'JPN';
+```
+
+- 그럴 때 upgrade 버전인 word seperator 함수를 쓰면 문제가 해결된다.
+- column을 계속 늘려도 :라는 구분자가 알아서 붙게 된다.
+
+```sql
+select concat_ws(':','KOREA',Name) as "R.O.K"
+from city 
+where CountryCode = 'JPN';
+```
+
+- JPN을 소문자로 쓰면 replace가 안됨. 대문자로 써야되는듯?
+
+```sql
+select replace(concat_ws(':',Countrycode,Name,population), 'JPN', 'KOREA') as "R.O.K"
+from city 
+where CountryCode = 'JPN';  
+```
+
+
+
+

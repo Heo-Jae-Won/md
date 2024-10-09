@@ -386,11 +386,12 @@ select distinct(JOB_ID,LAST_NAME) from employees where DEPARTMENT_ID in (50,100)
 select distinct JOB_ID, LAST_NAME from employees where DEPARTMENT_ID in (50,100);
 ```
 
+## <span style="color:#802548">_where like operator_</span>
 
-## <span style="color:#802548">_SQL- where clause null_</span>
-
-- where clause에서 null을 다룰 때는 위처럼 =를 쓰지 않는다.
-- is와 is not을 쓴다.
+- like는 유사한 문자를 검색하는 operator다.
+- %가 앞에 붙으면 앞쪽을 무시하는 것이다.
+- 이러면 뒤에 IT라는 문자가 있는 row를 검색하게 된다.
+- 앞의 문자가 어떻게 되든 상관쓰지 않는 것이다.
 
 ```sql
 select 
@@ -398,12 +399,40 @@ select
 from 
 	departments 
 where 
-	MANAGER_ID is null and 
-	department_name like 'IT%'
+   department_name like '%IT'
 ```
 
+- 반면에 %가 뒤에 붙으면 뒷쪽을 무시하는 것이다.
+- 이러면 앞에 IT라는 두 글자가 있는 row를 검색하게 된다.
+- 뒤의 문자가 어떻게 되든 상관쓰지 않는다.
 
-## <span style="color:#802548">_SQL- where clause special char escape_</span>
+
+```sql
+select 
+	* 
+from 
+	departments 
+where 
+   department_name like 'IT%'
+```
+
+- n번째 문자를 검색하고 싶다면 _를 넣어서 like로 검색할 수 있다.
+  - _가 4번 반복되면, 앞의 4번째 글자를 무시한다.
+  - 5번째 글자는 j이다.
+  - 뒤 글자는 어떻게 되든 신경쓰지 않는다.
+
+```sql
+select 
+	name,
+    population,
+    countrycode
+from city ci 
+where ci.name like '___j%' or ci.name like '___w%' 
+and population >= 500000; 
+-- _를 한 숫자만큼 앞의 문자열들을 무시함. index가 제대로 scan이 안되니 성능은 구림.
+```
+
+## <span style="color:#802548">_where clause special char escape_</span>
 
 - 특수문자를 where 절에서 쓸 때는? escape가 필요하다.
   - escape 를 써서 예약어로서 기능하지 않게끔 조절할 수 있다.
@@ -434,6 +463,21 @@ from
 	m_emp
 where f_name like '%\%%' escape '\';
 ```
+
+## <span style="color:#802548">_SQL- where clause null_</span>
+
+- where clause에서 null을 다룰 때는 위처럼 =를 쓰지 않는다.
+- is와 is not을 쓴다.
+
+```sql
+select 
+	* 
+from 
+	departments 
+where 
+	MANAGER_ID is null 
+```
+
 
 ## <span style="color:#802548">_SQL- select alias escape_</span>
 
@@ -496,9 +540,9 @@ select
     from
         (
             select rownum as rank, name, sal 
-        from (
-                select first_name as name, salary as sal from employees
-            )
+            from (
+                    select first_name as name, salary as sal from employees
+                )
         )
 where rank between 6 and 17;
 ```
@@ -530,18 +574,18 @@ where rnum >= 148;
 ```sql
 select 
     *
-    from
-        (
-          select a.*, rownum as rnum
-          from (
-                select 
-                    first_name as name, 
-                    salary as sal 
-                from employees
-                order by salary desc
-            ) a
-          where rownum <= 17
-        )
+from
+    (
+      select a.*, rownum as rnum
+      from (
+            select 
+                first_name as name, 
+                salary as sal 
+            from employees
+            order by salary desc
+        ) a
+      where rownum <= 17
+    )
 where rnum >= 6;
 ```
 
@@ -551,18 +595,18 @@ where rnum >= 6;
 ```sql
 select 
     *
-    from
-        (
-          select a.*, rownum as rnum
-          from (
-                select 
-                    first_name as name, 
-                    salary as sal 
-                from employees
-                order by salary, rowid desc
-            ) a
-          where rownum <= 17
-        )
+from
+    (
+      select a.*, rownum as rnum
+      from (
+            select 
+                first_name as name, 
+                salary as sal 
+            from employees
+            order by salary, rowid desc
+        ) a
+      where rownum <= 17
+    )
 where rnum >= 6;
 ```
 
@@ -572,18 +616,18 @@ where rnum >= 6;
 ```sql
 select 
     *
-    from
-        (
-          select a.*, rownum as rnum
-          from (
-                select 
-                    first_name as name, 
-                    salary as sal 
-                from employees
-                order by salary, rowid desc
-            ) a
-          where rownum <= 17
-        )
+from
+    (
+      select a.*, rownum as rnum
+      from (
+            select 
+                first_name as name, 
+                salary as sal 
+            from employees
+            order by salary, rowid desc
+        ) a
+      where rownum <= 17
+    )
 where rnum >= 6;
 order by salary, rowid desc; 
 ```
@@ -648,11 +692,50 @@ select * from sys.tt
 --error. table does not exist
 ```
 
-## <span style="color:#802548">_data formatting_</span>
+## <span style="color:#802548">_oracle data formatting- 숫자에 콧마 부여_</span>
 - to_char로 문자형 변환 시 형식을 줄 수 있다.
+- 세자리수마다 콧마가 찍히게 된다.
+
+```sql
+ to_char(salary / 20 / 8, '$999,999') as hr$,
+```
+
 - L을 준 것은 그 나라 화폐 통화 단위로 적용됨을 의미한다.
+
+```sql
+to_char(salary / 20 / 8 * 1300, 'L999,999') as hrw,
+```
+
 - 자국이 아닌 다른 나라를 적용하고 싶다면?
   - L로 해놓고 3번째 옵션을 주면 된다.
+
+```sql
+to_char(salary / 20 / 8 * 1300, 'L999,999', 'NLS_CURRENCY=￥') as hrw,
+```
+
+## <span style="color:#802548">_mysql data formatting- 숫자에 콧마 부여_</span>
+- to_char로 문자형 변환 시 형식을 줄 수 있다.
+- 세자리수마다 콧마가 찍히게 된다.
+
+```sql
+format(sale_amt,0) from box_office;
+```
+
+- 통화로 바꿔주려면 format이 아닌 concat으로 합쳐줘야 한다.
+- oracle처럼 to_char가 모든 걸 담당하지 않는다.
+
+```sql
+CONCAT('$', format(sale_amt,0) );
+```
+
+
+## <span style="color:#802548">_oracle data formatting- 현재 시간과 row datetime 격차를 years로 나타내기_</span>
+
+- 개월 수도 구해서 내림해버리면서 years를 붙여주면 formatting된다.
+
+```sql
+trunc(months_between(sysdate, hire_date) / 12) || ' years' as num_yy 
+```
 
 ```sql
 select *
@@ -684,18 +767,78 @@ from (
 where rank  between 15 and 25;
 ```
 
+## <span style="color:#802548">_mysql data formatting- 현재 시간과 row datetime 격차를 years로 나타내기_</span>
+
+- months_between 함수는 TIMESTAMPDIFF함수로 대체한다.
+- truncate 함수는 얼만큼 버릴지 parameter로 정해줘야 한다. 여기선 0이다.
+
+```sql
+SELECT CONCAT(
+TRUNCATE(
+	TIMESTAMPDIFF(MONTH, release_date, now()) / 12, 
+    0
+),' years'
+) as 경과시간
+from box_office;
+```
+
+- 달로 나눠서 구하는 게 귀찮다면, TIMESTAMPDIFF 단위를 year로 바꾸면된다.
+- 그럼 TRUCNATE 함수를 쓸 필요가 없다.
+
+```sql
+SELECT 
+	movie_name,
+    CONCAT(
+      TIMESTAMPDIFF(YEAR, release_date, now()), 
+      ' years'
+    ) as 경과시간
+from box_office;
+```
+
+
+## <span style="color:#802548">_oracle data formatting- full name에서 성과 이름 빼내기_</span>
+
 - 이름에서 성과 이름을 자를 때 쓰는 query다.
 - instr이 index다. db는 index가 0이 아닌 1부터 시작이다.
   - 따라서 + 1, -1을 해주는 것이다.
-  - 0부터 시작시켜도 알아서 1로 해석해서 받는다.
 
 ```sql
 select
     fullname as FULL_N,
     SUBSTR(fullname, instr(fullname,' ') + 1) as FAMILY_N,
-    SUBSTR(fullname, 0, instr(fullname,' ') - 1) as GIVEN_N,
-    TO_CHAR(HIRE,'YYYY-MM-DD') as JOIN_DT,
-    TO_CHAR(SAL * 12 ,'$999,999,999') as T_SAL
+    SUBSTR(fullname, 1, instr(fullname,' ') - 1) as GIVEN_N,
 from 
     my_emp;
+```
+
+## <span style="color:#802548">_mysql data formatting- full name에서 성과 이름 빼내기_</span>
+
+- 이름에서 성과 이름을 자를 때 쓰는 query다.
+- instr이 index다. db는 index가 0이 아닌 1부터 시작이다.
+  - 따라서 + 1, -1을 해주는 것이다.
+
+```sql
+select
+    movie_name as FULL_N,
+    SUBSTRING(movie_name, instr(movie_name,' ') + 1) as FAMILY_N,
+    SUBSTRING(movie_name, 1, instr(movie_name,' ') - 1) as GIVEN_N
+from 
+    box_office;
+```
+
+## <span style="color:#802548">_oracle data formatting- 숫자 억 단위로 문자 변환_</span>
+
+- 634,353,666,251 원이라면, 이를 억의 자리까지만 보여주는 기술이다.
+
+```sql
+to_char(round(a.매출)/pow(10,8), '999,999') || '억' as hrw,
+```
+
+
+## <span style="color:#802548">_mysql data formatting- 숫자 억 단위로 문자 변환_</span>
+
+- 634,353,666,251 원이라면, 이를 억의 자리까지만 보여주는 기술이다.
+
+```sql
+ concat(format(round(a.매출)/pow(10,8),0),'억') as 매출,
 ```
