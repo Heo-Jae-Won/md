@@ -595,6 +595,7 @@ private ConnPoll conpoll
 ​
 
 - 생성자의 경우에는 아래와 같은 형식으로 만든다.
+
 ```java
 public class db{
    public db(ConnPoll conpoll){
@@ -602,8 +603,10 @@ public class db{
    }
 }
 ```
+
 - ​lombok을 활용하면 다음과 같이 간소하게 쓸 수 있다.
 - boot에서는 lombok이 자동지원된다.
+
 ```java
 @RequiredArgsConstructor
 public class db{

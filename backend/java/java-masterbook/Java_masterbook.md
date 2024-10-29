@@ -23,6 +23,7 @@ System.out.println(map);
 ```
 - 위와 동일한 식이다.
 - lambda의 method를 활용하면 더 간단하게 쓸 수 있다.
+
 ```java
 List<String> list = new ArrayList<>();
 list.add("David");
@@ -41,6 +42,7 @@ System.out.println(map);
 
 
 - argument로 들어오는 것은 엔간하면 수정하지 않는게 좋다.
+
 ```java
 public static void main(String[] args) throws Exception {
 		Entity entity = new Entity();
@@ -54,7 +56,9 @@ public static void main(String[] args) throws Exception {
 		System.out.println("수신자 : " + entity.value); //2
 	}
 ```
+
 - 하지만 만약에 argument의 값을 바꿀 때, 새로운 객체를 생성하고 그 객체의 값을 바꾸는 것은 원하지 않는 효과를 일으킨다.
+
 ```java
 public static void main(String[] args) throws Exception {
 		Entity entity = new Entity();
@@ -135,6 +139,7 @@ sysout(employees.size()); //2
 ```
 
 - 따라서 hashCode를 override해주자. Eclipise에서 해주는 거로 override해주면 된다.
+
 ```java
 @RequiredArgsConstructor
 public class Employee {
@@ -161,6 +166,7 @@ public class Employee {
 
 - toString을 구현할 때도 eclipse자체에서 해주는 기능으로 해도 된다.
 - 아니면 Apache Commons의 Commons Lang을 써도 된다.
+
 ```java
 @Override
 public String toString() {
@@ -170,6 +176,7 @@ public String toString() {
 
 - public static final은 타입안전이 아니다.
 - 타입안전이란 변수에 타입을 할당함으로써 부정한 동작을 방지한다는 의미다.
+
 ```java
 public static final String COLOR_BLUE = "blue";
 public void processColor(String color) {//상수만 갖고 오고 싶지만.. 상수에 type지정이 불가능.
@@ -205,6 +212,7 @@ private static void call(Color color) {
 - 비교는 Comparator로 수행하는 경우가 많다.
 - business logic을 넣은 것들을 비교하려면 Comparable로는 부족하다.
 - Comparable은 해당 클래스에 정해진 정렬 방식을 따르기 때문이다.
+
 ```java
 public class Student {
 	private String name;
@@ -269,6 +277,7 @@ for (Student student : students) {
 - 컬렉션은 복수의 데이터를 좀 더 다루기 쉬운 구조를 일컫는다.
 - 이러한 컬렉션에 유틸리티까지 포함되면 그것이 컬렉션 프레임워크다.
 - Arrays의 asList로 만든 경우, 요소의 추가, 제거, 수정 등이 불가능하다. 읽기 전용이다. iterator 순회도 불가능하다.
+
 ```java
 List<Integer> integerList = Arrays.asList(1,62,31,1,54,31); //읽기 전용 list.
 integerList.add(4); //java.lang.UnsupportedOperationException
@@ -300,6 +309,7 @@ for(Iterator iteraotr = integerList.iterator(); iteraotr.hasNext();) {
 
 - Set은 value가 중복되지 않는다.
 - List를 Set으로 바꿀 수 있다.
+
 ```java
 List<Integer> integerList = Arrays.asList(1,62,31,1,54,31); //읽기 전용이어도 Set으로 변환 가능
 Set<Intger> integerSet = new HashSet<>(integerList);
@@ -307,6 +317,7 @@ Set<Intger> integerSet = new HashSet<>(integerList);
 
 - thread-safe하게 쓸 때는 ConcurrentHashMap을 사용한다. Set은 Map으로 Set을 만들수 있기 때문에 그렇다.
 - Set의 내부에 Map이 존재하며, Set에 추가도니 요소는 Map의 key로 유지된다.
+
 ```java
 Set<Integer> concurrentHashSet = Collections.newSetFromMap(new ConcurrentHashMap<Integer, Boolean>());
 ```
@@ -332,6 +343,7 @@ stream.forEach(e -> System.out.println(e.getKey() + ":" + e.getValue()));
 ## Exception handling
 - 아래의 try ~ catch처럼 catch로 잡아도 독자 exception으로 wrapping하는 게 좋다.
 - 또한 throws Exception은 정말로 엔간하면 피해야 한다.
+
 ```java
 class Manager {
 
@@ -352,6 +364,7 @@ class Manager {
 
 - 람다에서 필요한 예외처리는 람다 안에서 이뤄져야 한다.
 - 아래와 같이 try ~ catch를 람다 밖에서 감싸면 parallelStream을 실행할 떄 error catching이 제대로 이뤄지지 않는다.
+
 ```java
 try(BufferedWriter writer = Files.newBufferedWriter(Paths.get(W_FILENMAE))) {
     lines.forEach(s -> writer.write(s + '\n'));
@@ -362,6 +375,7 @@ try(BufferedWriter writer = Files.newBufferedWriter(Paths.get(W_FILENMAE))) {
 ```
 
 - 아래와 같이 람다 안에서 error를 catching하게 바꾸자.
+
 ```java
 try(BufferedWriter writer = Files.newBufferedWriter(Paths.get(W_FILENMAE))) {
     line.forEach(s -> {
@@ -385,6 +399,7 @@ try(BufferedWriter writer = Files.newBufferedWriter(Paths.get(W_FILENMAE))) {
 - 2개의 char로 하나의 문자를 표현하는 경우가 있는데, 이를 서로게이트 페어라고 한다.
 - 이모티콘의 경우에 특히 2개의 문자로 이뤄져 있을 수 있다. 이 경우 문자열 길이 판정에 특수한 method가 필요하다.
 - 만약 서로게이트 페어를 금지하려면 간단하게 아래와 같이 Character class의 method를 활용한다.
+
 ```java
 char[] chars = str.toCharArray();
 for (char c : chars) {
@@ -409,6 +424,7 @@ System.out.println(str.codePointCount(0, str.length())); //4
 - java.nio.file을 활용해야 한다. 
 - java.io.file을 활용하면 안 된다. 
 - 사실 제일 좋은 것은 Paths class를 활용하는 것이다.
+
 ```java
 Path path1 = Paths.get("C:/work/sample.txt");
 System.out.println(path1.getParent());                   //부모 디렉토리 취득. C:/work
@@ -523,6 +539,7 @@ LOcalDate date = LocalDate.from(parsed);
 ## lifeCycle
 - 인스턴스 변수 대신 local 변수를 사용하게 변경
   - 라이프 사이클을 짧게 하여 사고를 방지
+
 ```java
 @Setter
 public class EmployeeService {
@@ -553,6 +570,7 @@ public class MainService {
 
 - Service가 아니라 model class를 따로 만든다.
 - 그리고 그 class를 parameter로 가져와 local 변수로 만든다.
+
 ```java
 public class Employee {
     public int id;
@@ -630,6 +648,7 @@ public class MainService {
 - 엔간하면 interface로 만들어놓자.
 - interface를 쓰면 Java 8부터는 factory class를 굳이 활용하지 않아도 된다.
 - 만약 factory class를 쓴다면 아래와 같다.
+
 ```java
 public class FooFactory {
     public static Foo newInstance(String message) {
@@ -644,7 +663,9 @@ public class ApiClient {
     }
 }
 ```
+
 - Factory class 대신 interface default method를 쓴다면 아래와 같다.
+
 ```java
 public interface Foo {
     String say();
@@ -679,9 +700,11 @@ public class ApiClinet {
 ## design pattern
 - AbstractFacotry 패턴
   - 일련의 인스턴스군을 모아서 생성하기
+
 ```
 DBMS를 가져올 때 필요한 instance를 모아둔다.
 ```
+
 ```java
 //interface로 만들어 어떤 DBMS든 가져올 수 있게끔 만든다.
 public interface Facotry {
@@ -725,6 +748,7 @@ public class PostgreSQLConfiguration extends Configuration {
 ```
 
 - 아래는 Postgre가 아닌 Mysql용으로 만든 것이다.
+
 ```java
 public class MYSQLFactory implements Factory {
     @Override
@@ -748,6 +772,7 @@ public class MYSQLConfiguration extends Configuration {
 ```
 
 - 실제 Factory 사용 class는 아래와 같다.
+
 ```java
 public class SampleMain {
     public static void main(String ...args) {
@@ -853,6 +878,7 @@ public class TopPageBuilder implements Builder {
 ```
 
 - 위처럼 Builder를 만들어두면 복잡한 instance를 만드는 과정이 전부 은폐되고 3줄짜리로 instance를 만드는 것처럼 보이게 된다.
+
 ```java
 public class SampleMain {
     public static void main(String ...args) {
@@ -867,6 +893,7 @@ public class SampleMain {
 - Adapter 패턴
   - 인터페이스에 호환성이 없는 클래스들을 조합시키기
   - 기존 시스템과 새로운 시스템이 완전히 다른 method를 사용하는 경우 사용할 수 있다.
+
 ```java
 public class OldSystem {
     public void oldProcess() {
@@ -904,6 +931,7 @@ public class SampleMain {
   - 파일 시스템에 쓰기 좋다.
 
 - 아래는 실제 Java의 File, Directory class는 아니다. sudo다.
+
 ```java
 public interface Entry {
     void add(Entry entry);
@@ -1166,6 +1194,7 @@ public class SampleMain {
 ## Thread safe
 - thread safe하게 소스코드를 짜는 게 필요하다.
 - Thread safe란 아래와 같은 의미를 지닌다.
+
 ```
 여러 쓰레드에서 읽거나 써도 데이터가 파괴되지 않는다.
 여러 쓰레드에서 읽거나 써도 오류가 없다.
@@ -1173,6 +1202,7 @@ public class SampleMain {
 ```
 
 - thread - safe가 아닌 대표적인 상황들이다.
+
 ```
 int 증가처리
 SimpleDateFormate의 parse method
@@ -1182,6 +1212,7 @@ long으로의 대입
 ```
 
 - int 증가처리
+
 ```java
 public class IntIncrement {
     public static void main(String ...args) {
@@ -1244,6 +1275,7 @@ result: 1097061 //매번 달라짐
 
 - 원래 정상적으로 작동했다면 위의 소스코드는 result가 2_000_000이 나왔어야 한다.
 - 그런데 한참 못미친다. 그 이유는 두 단계로 이뤄지기 때문이다.
+
 ```
 1- 현재 값 취득
 2- 취득 값에 1을 더해서 기록
@@ -1255,6 +1287,7 @@ result: 1097061 //매번 달라짐
 - SDF의 format도 synchronized로 보호받지 않기 때문에 가장 마지막에 수정한 날짜로 format된다.
 
 - HashMap을 여러 스레드에서 동시에 접근하여 put하면 무한 루프가 발생하기도 한다.
+
 ```java
 public class HashMapLoop implements Runnable {
     final Map<Integer, Integer> map = new HashMap<>();
@@ -1290,6 +1323,7 @@ public class HashMapLoop implements Runnable {
 
 - long타입으로의 대입은 32 bit JVM을 쓰는 경우 문제가 된다.
 - long이 64bit기 때문에, 상위 32bit와 하위 32bit를 개별조작하기 때문에 조작이 중복되면 예상치 못한 값이 되기 때문이다.
+
 ```java
 public class IncrementLongSample {
     public static void main(String ...args) {
@@ -1391,6 +1425,7 @@ longNum = 0xffffffff_00000001L; -1의 상위 32 bit + 1의 하위 32bit //-42949
 
 - 아래 식은 변수를 Map<>으로 받는다.
 - 이를 없애려면?
+
 ```java
 public class BadPractice {
     private Map<String,String> map = new HashMap<>();
@@ -1407,6 +1442,7 @@ public class BadPractice {
 ```
 
 - doSomething method에서만 map을 쓰므로 해당 영역에서 만들어준다.
+
 ```java
 public class GoodPractice {
     public void doSomething(String value) {
@@ -1421,9 +1457,10 @@ public class GoodPractice {
 }
 ```
 
-- 이 프로그램을 실행하면 시작 멧지ㅣ가 나오고 나서 1초 후에 콜백 처리가 실시된다. 
+- 이 프로그램을 실행하면 시작 메시지가 나오고 나서 1초 후에 콜백 처리가 실시된다. 
 - AsyncProcess 스레드의 종료 메시지는 콜백 처리의 메시지 후에 표시된다. 
 - 콜백처리가 AsyncProcess 스레드에서 이뤄지고 있기 때문이다.
+
 ```java
 public class CallbackSample {
     public static void main(String... args) {
@@ -1491,6 +1528,7 @@ pbulic class FutureSamle {
 - method 단위가 아니라 처리 단위에 대해 동기화를 해야 한다.
 - HashMap의 예시를 통해 살펴보자.
 - 아래와 같이 put만 synchronzied로 감싸면, 안된다. 
+
 ```java
 public void increment() {
     Integer counter = map.get("COUTNER");
@@ -1513,6 +1551,7 @@ public void increment() {
 
 - 위의 두 소스코드처럼 하면 안 된다.
 - 처리를 동기화하고 싶다면 아래와 같이 처리와 관련된 임계영역을 반드시 설정해줘야 한다.
+
 ```java
 private Map<String, Integer> map = new HashMap<>();
 
@@ -1525,6 +1564,7 @@ public synchronized void increment() {
 
 - 서로 다른 클래스의 synchronized 메서드는 동기화되지 않는다.
 - A class와 B class의  instance는 별개다. 따라서 synchronized를 해도 동일 클래스 내의 메서드끼리만 동기화된다.
+
 ```java
 public class SomeProcessorA {
     public synchronized void doSync1() {}
@@ -1537,6 +1577,7 @@ public class SomeProcessorB  {
 ```
 
 - 같은 instance가 아니어도 동기화가 되지 않는다.
+
 ```java
 public class SomeProcessor {
     public synchronized void doSync() {}
