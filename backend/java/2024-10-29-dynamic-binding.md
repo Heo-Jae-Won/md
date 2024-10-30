@@ -758,3 +758,130 @@ public class AbstractKlass {
 }
 ```
 
+## <span style="color:#802548">_abstarct class와 interface_</span>
+- interfacae는 변수명을 써도, 전부 public static final이 생략되어있다.
+- JDK 1.8 부터 default, static method를 사용할 수 있다.
+- default로 선언하게 되면, sub class에서 굳이 구현하지 않아도 interface의 default method를 활용하게 된다.
+- 어차피 sub class에서도 똑같은 활용을 할거라면 그냥 interface에 집어넣게 해주게 바꼈다.
+- static은 interface type의 참조에서만 호출가능한 method다. sub class에서는 호출이 불가능하다.
+
+```java
+package chapter006.extend;
+
+interface Calc {
+	//public stattic final 이 생략
+	String name = "rr";
+	double PI = 3.14;
+	double ERROR = 100;
+	
+	//abstract public가 생략
+	int add(int num1, int num2);
+	int substract(int num1, int num2);
+	int time(int num1, int num2);
+	int divide(int num1, int num2);
+	
+	//default로 선언하는 건 오직 interface에서만 가능
+	default public void descripton() {
+		System.out.println("descript");
+	}
+	
+	// static으로 선언한 것이 default와 다른 점은?
+	// default는 하위 class에서도 사용가능하지만, static은 해당 interface를 참조타입으로 한 것만 사용가능
+	static int total(int[] arr) {
+		int total = 0;
+		for (int i : arr) {
+			total = total + i;
+		}
+		
+		return total;
+	}
+}
+```
+
+- Calc interfaec는 time, substract, add, divide라는 abstract method가 있다.
+- Calculator abstarct class는 4개를 모두 overrideing 하지 않아도 된다.
+- Calculator는 전부 overriding하지 않아도 된다는 의미다. 원하는 만큼만 해당 부분에서 overriding 가능
+   - 그 이유는 Calculator는 abstract class라 어차피 instance로 만들어지지 않는다.
+   - 즉 new로 구현되는 실체가 있는 class가 아니기 때문이다.
+- 즉 Calc interface의 구현 책임을 지는 건 언제나 실제 instance로 존재하는, 이른바 concrete class들이다.
+   - Calculator class에서 add와 substract가 override 되었다.
+   - 따라서 Calculator class의 하위 class들은 add()와 substract()를 반드시 override 할 필요가 없다.
+   - 대신 time, divide를 반드시 override 해주어야 한다.
+   - Cacl interface에서 아직 구현되지 않은 method가 있으면 안되기 때문이다.
+   - 만약 Calculator 추상 클래스에서 abstract를 더 만든다면, 그것도 구현해줘야 한다.
+
+```java
+abstract class Calculator implements Calc {
+
+	@Override
+	public int add(int num1, int num2) {
+		return num1 + num2;
+	}
+
+	@Override
+	public int substract(int num1, int num2) {
+		return num1 - num2;
+	}
+	
+	abstract public void over();
+}
+```
+
+
+- Calculator를 구현한 concrete class인 CompleteCalc는 time(), divide()를 반드시 구현해야 한다.
+- Cacl interface에서 아직 구현되지 않은 method가 있으면 안되기 때문이다.
+- Calculator 추상 클래스에서 abstract method over()도 추가했기 때문에, 그것도 구현해야 한다.
+
+```java
+class CompleteCalc extends Calculator {
+
+	@Override
+	public int time(int num1, int num2) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public int divide(int num1, int num2) {
+		// TODO Auto-generated method stub
+		return 0;
+	}
+
+	@Override
+	public void over() {
+		// TODO Auto-generated method stub
+		
+	}
+	
+}
+```
+
+- default method를 sub class인 CompleteCalc는 구현하지 않았다.
+- 하지만 sub class에 없어도, 그 부모까지 타고올라가면, default method가 있다.
+- 따라서 해당 interface의 method의 주소값을 찾아 해당 method가 실행된다.
+- 또한 CompleteCalc class는 여러 가지 참조 타입을 가질 수 있음에도 주목하자. 바로 다형성이다.
+	- implements한 Calc interface도 가능하며
+	- extends한 abstract Calculator class도 가능하며
+	- 본인인 CompleteCalc class도 가능하다.
+
+```java
+public interface InterfaceExample {
+	public static void main(String[] args) {
+		System.out.println(Calc.PI);
+		System.out.println(Calc.ERROR);
+		//Calc.PI = 100; //error. final이기 때문
+		int[] arr = {1, 2, 3, 4};
+		int result = Calc.total(arr);
+		
+		
+		Calc implCalc = new CompleteCalc();
+		implCalc.descripton();
+		
+		//다형성
+		Calc 			a = new CompleteCalc(); 
+		Calculator		b = new CompleteCalc(); 
+		CompleteCalc 	c = new CompleteCalc();
+	}
+	
+}
+```
