@@ -595,7 +595,7 @@ public class Knight extends Character implements Skill  {
 }
 ```
 
-- 따라서 아래와 같이 기본 생성자를 명시적으로 만들어준다.
+- 따라서 아래와 같이 Character class에 기본 생성자를 명시적으로 만들어준다.
 
 ```java
 public class Character implements Skill {
@@ -733,14 +733,14 @@ case 4:
 		System.out.println("먼저 캐릭터를 생성해주세요");
 		break;
 	}
-	character.doBasicAttack();
+	character.doBasicAttack(); //ok
 	break;
 case 5:
 	if( character == null) {
 		System.out.println("먼저 캐릭터를 생성해주세요");
 		break;
 	}
-	character.doSkill();
+	character.doSkill();  //ok
 	break;
 ```
 
@@ -941,6 +941,61 @@ public class Game {
 	}
 
 }
+```
+
+- constructor도 공통으로 공유하게 쓰면 된다.
+- 기존에는 각 개별 class의 경우, 아래같이 전부 character.name과 stat을 받아와서 직접 넣었다.
+
+```java
+public Knight(Character character) {
+		this.name = character.name;
+		this.stat = character.stat;
+		this.profession = "기사";
+	}
+
+	public Magician(Character character) {
+		this.name = character.name;
+		this.stat = character.stat;
+		this.profession = "마법사";
+	}
+
+	public Thief(Character character) {
+		this.name = character.name;
+		this.profession = "도적";
+		this.stat = character.stat;
+	}
+```
+
+- 하지만 super class에 미리 설정해놓으면 그럴 필요가 없다.
+- 만들어진 걸 가져다 쓰면 되기 때문이다.
+- 이렇게 부모 생성자를 호출하면, 필요없는 기본 생성자는 이제 지워도 된다.
+	- 딱히 기능도 없이 그냥 호출을 위해 존재만 했던 것이니 없애는 것이 더 좋다.
+
+```java
+public Character(Character character) {
+	this.name = character.name;
+	this.stat = character.stat;
+}
+
+// public Character() {
+
+// }
+
+public Knight(Character character) {
+	super(character);
+	this.profession = "기사";
+}
+
+public Magician(Character character) {
+	super(character);
+	this.profession = "마법사";
+}
+
+public Thief(Character character) {
+	super(character);
+	this.profession = "도적";
+}
+
 ```
 
 ## <span style="color:#802548">_method로 빼기_</span>
@@ -1285,9 +1340,9 @@ public class CreateExcel {
 - 아래처럼 static import를 하면 된다. static import는 class를 import 할 수 없다. 개별 field나 method 단위로 해주자.
 
 ```java
-import static net.openobject.opendashboardserver.asset.service.excel.CreateExcel.excelAddCell;
-import static net.openobject.opendashboardserver.asset.service.excel.CreateExcel.excelSetColumnWidth;
-import static net.openobject.opendashboardserver.asset.service.excel.CreateExcel.rgbToXSSFColor;
+import static xxx.asset.service.excel.CreateExcel.excelAddCell;
+import static xxx.asset.service.excel.CreateExcel.excelSetColumnWidth;
+import static xxx.asset.service.excel.CreateExcel.rgbToXSSFColor;
 
 public abstract class PMSCreateExcel<T> {
 
@@ -1311,7 +1366,7 @@ public class RentApplicationDetailCreateExcel extends PMSCreateExcel<RentAssetDT
 	}
 
 	/** 파일 생성(바디) **/
-	//@override
+	//@override 이거 override 안달아주면 안되는데...
 	protected void createBody(List<RentAssetDTO> rentAssetList) {
 		for (RentAssetDTO asset : rentAssetList) {
 
