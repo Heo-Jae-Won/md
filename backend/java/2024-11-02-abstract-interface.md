@@ -744,6 +744,99 @@ case 5:
 	break;
 ```
 
+- 이젠 abstract class에 전부 의존하면 되므로, concrete class에 implements Skill도 전부 없앤다.
+- 없애도 Character abstract class가 Skill을 implements하기 때문에 구현 책임은 concrete class인 Novice에 있다.
+- 따라서 concrete class 단에 굳이 implements Skill을 쓸 필요가 없다.
+
+```java
+public class Novice extends Character {
+	
+	public Novice(String name) {
+		super(name);
+		this.profession = "초보자";
+	}
+
+	@Override
+	public void doSkill() {
+		System.out.println("아직 스킬이 없습니다");
+	}
+
+	@Override
+	public void doBasicAttack() {
+		System.out.println("기본공격");
+		
+	}
+	
+}
+
+public class Knight extends Character  {
+
+	public Knight(Character character) {
+		super(character);
+		this.profession = "기사";
+	}
+
+	@Override
+	public void doSkill() {
+		System.out.println("쇼크스턴");
+		
+	}
+
+	@Override
+	public void doBasicAttack() {
+		// TODO Auto-generated method stub
+		System.out.println("강력한 배쉬 공격");
+		
+	}
+
+}
+
+public class Thief extends Character {
+
+	
+	public Thief(Character character) {
+		super(character);
+		this.profession = "도적";
+	}
+
+
+	@Override
+	public void doSkill() {
+		System.out.println("사신의 발걸음");
+		
+	}
+
+	@Override
+	public void doBasicAttack() {
+		System.out.println("표창 던지기");
+		
+	}
+
+}
+
+public class Magician extends Character {
+
+	
+	public Magician(Character character) {
+		super(character);
+		this.profession = "마법사";
+	}
+
+	@Override
+	public void doSkill() {
+		System.out.println("메테오");
+		
+	}
+
+	@Override
+	public void doBasicAttack() {
+		System.out.println("매직 애로우 공격");
+		
+	}
+
+}
+```
+
 
 ## <span style="color:#802548">_polymorphism_</span>
 
