@@ -34,19 +34,19 @@ class Box<String>{
 }
 ```
 
-- 위에 말했듯 컴파일 시에 타입을 알아야 한다.
-- 따라서 배열에 제너릭을 줄 수 없고, static에도 제너릭을 줄 수 없다.
-- generics는 instance를 기준으로 작동한다. static은 T라는 instance 변수와 공존할 수 없다.
-- 배열 또한 불가능하다. new로 생성을 할 때 T가 어떤 타입일지 알 수가 없기 때문이다.
+- generics는 compile time에 미리 type을 check하여 안정성을 높이기 위한 것이다.
+    - static은 T가 들어오기 전에 class type이 명확하게 주어져있어야 한다. 가장 먼저 읽혀 올라가기 떄문이다.
+    - generics를 배열로 선언하는 것도 불가능하다. 배열은 runtime에 구체화되기 때문이다.
+    - new로 쓰는 것도 불가능하다. new는 runtime에 구체화되기 때문이다.
 
 ```java
 class Box<T>{
     static T item; //error
-    static int compare //error
-    T[] itemArr;
+    List<String>[] lists = new ArrayList[10];  //error
+    T[] itemArr; //ok
 
     T[] toArray(){
-        T[] temArr = new T[itemArr.length]; //불가능. new를 썼기 때문.
+        T[] temArr = new T[itemArr.length]; //error
     }
 }
 ```
@@ -169,7 +169,7 @@ Collections.sort(grapeBox.getList(), new FruitComp());
 - 쓰지 않았다면 Fruit class만 타입 매개변수로 받는 list가 강제되어 apple만 따로, grape만 따로 모을 수가 없다.
 
 ```java
-List<Apple> list = new ArrayList<>();
+List<Apple> list = new0 ArrayList<>();
     list.add(new Grape("파란", 0));//Fruit이라서 Grape도 담음. 하지만 error가 아님.
     list.add(new Apple("빨간",1));//Fruit이라서 Apple도 담음. 하지만 error가 아님.
     Collections.sort(list, new FruitComp());
