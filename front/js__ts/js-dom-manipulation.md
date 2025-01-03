@@ -212,3 +212,88 @@ fetch('/idCheck', {
 	console.log(error);
 })
 ```
+
+
+## <span style="color:#802548">_새로운 HTML을 fetch하기_</span>
+
+```html
+<table>
+        <thead>
+            <tr>
+                <td>작성일</td>
+                <td>상태</td>
+                <td>중요도</td>
+                <td>분류</td>
+                <td>todo</td>
+                <td>삭제</td>
+            </tr>
+        </thead>
+        <tbody id="list-data">
+
+        </tbody>
+    </table>
+```
+
+- generateHTML은 generate라는 이름에 걸맞게 요소를 추가하는 작업만 실행한다.
+- class로 button을 달아주는 것을 진행하면, 똑같은 event가 중첩되게 되어버린다.
+- tag는 HTML 요소의 string을 만들엏 넣으며, beforeend로 넣어야 한다.
+
+```js
+function generateHTML(element, index) {
+	const dataTable = document.querySelector("#list-data");
+	const tag = `
+			<tr>
+				<td>${element.regDate}</td>
+				<td>${element.status}</td>
+				<td>${element.importance}</td>
+				<td>${element.categories}</td>
+				<td>${element.todo}</td>
+				<td><button type=button data-seqNo=${element.seqNo} id=deleteBtn${index}></td>
+			</tr>
+	`;
+	dataTable.insertAdjacentHTML('beforeend', tag)
+
+	const button = document.querySelector(`deleteBtn${index}`);
+	button.addEventListener('click', function() {
+		if(!confirm("삭제하시겠습니까?")) {
+			return;
+		}
+
+		fetch(`/todo/delete?id=${index}`,{
+			method:'post'
+		}).then((response) => {
+			return response.json();
+		}).then((data) => {
+			console.log(data);
+		})
+	}) 
+}
+```
+
+- fetchList를 할 때는 무조건 이전의 모든 HTML 요소를 삭제해줘야 한다.
+- 그런데 그냥 document로 가져오면 live collection이라 제대로 삭제가 안 되므로, Array.from을 통해 js 객체로 만든다.
+- 그리고 모든 하위 요소를 삭제시킨다.
+
+```js
+function fetchList() {
+	const children = Array.from(document.querySelector("#list-data").childNodes);  // Get all child nodes (including text nodes)
+	children.forEach(child => {
+		document.querySelector("#list-data").removeChild(child);  // Remove each child node
+	});
+
+	fetch('/todo/list',{
+		method:'get'
+	}).then((response) => {
+		return response.json();
+	}).then((list) => {
+		let index = 0;
+		for (const element of list) {
+			generateHTML(element, index);
+			index++;
+		}
+	}).catch((error) => {
+		console.log(error);
+	})
+}
+```
+

@@ -3602,15 +3602,6 @@ if (!isTextCreated) {
 ```
 
 
-## <span style="color:#802548">_이미지내에서만 cropzone 이동하게 하기_</span>
-
-- 
-
-
-```js
-
-```
-
 
 ## <span style="color:#802548">_api 시간지연에 따른 모달창 띄우기_</span>
 - api 시간지연이 15초 이상 지속되면 모달창을 띄우는 기능을 만들어보자.

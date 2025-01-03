@@ -830,6 +830,8 @@ window.onPageShow = function(){
 }
 ```
 ## <span style="color:#802548">_평범한 중복클릭 방지 플래그_</span>
+
+
 ```javascript
 let requestSendingFlag = false;
 
@@ -846,6 +848,7 @@ $("button[id=click]").on('click',function(){
 ```
 ## <span style="color:#802548">_validation과 같이 가는 중복클릭 방지 플래그_</span>
 - 클로저를 사용하지 않고 전역변수를 이용한다
+
 ```javascript
 var reqFlag = false;
 function reqCheck(){
