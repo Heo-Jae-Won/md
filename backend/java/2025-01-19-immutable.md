@@ -253,3 +253,81 @@ public class CarDTO {
 ```
 
 
+## <span style="color:#802548">_요약_</span>
+- form 방식은 아래와 같다.
+
+```
+front content-type: www-x-form-urlencoded
+controller annotation: @ModelAttribute
+serialization/deserialization mechanism: form binding (like JavaBeans serialization/deserialization)
+Dto annotation for immutability: @ConstructorProperties
+```
+
+- 변환은 Spring이 알아서 해준다.
+
+```java
+public class MyDto {
+    private String name;
+    private int age;
+
+    // Getters and Setters
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+}
+
+//name=John&age=25
+```
+
+- Json 방식은 아래와 같다.
+```
+front content-type: application/json
+controller annotation: @RequestBody
+serialization/deserialization mechanism: Jackson library (JSON serialization/deserialization)
+DTO annotation for immutability: @JsonCreator, @JsonProperties
+```
+
+- 변환은 Spring이 아니라 Jackson이 알아서 해준다.
+
+```java
+public class MyDto {
+    private String name;
+    private int age;
+
+    // Getters and Setters
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
+    }
+}
+
+/*
+    {
+        "orderSeq": 123,
+        "carSeq": 456
+    }
+/*
+```
