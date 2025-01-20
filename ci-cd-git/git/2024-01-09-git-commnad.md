@@ -30,20 +30,12 @@ git clone -b(--branch) <branchname> <remote-repo-url>
 ```sh
 git switch -c [branch이름] : 
 ## git branch test + git switch test : branch를 만들고 바로 이동.
-```
-```sh
 git checkout [branch이름] : 
 ## working dir의 소스코드가 해당 commit의 소스코드로 변화한다.
-```
-```sh
 git push origin --delete [branch이름] : 
 ## 로컬저장소와 원격저장소 모두에서 branch 삭제.
-```
-```sh
 git branch -d [branch이름] : 
 ## 로컬저장소에서 branch를 삭제.
-```
-```sh
 git branch --move [바꿀branch이름] [바뀐branch이름] : 
 ## branch 이름을 바꿀 수 있는 기능이다. 
 ```
