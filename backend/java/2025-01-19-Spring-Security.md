@@ -35,7 +35,6 @@ public void signin(SignIndDTO signIndDTO) {
 - 해당 부분을 제대로 이해하지 못하면 redundant한 network call이 일어나게 된다.
 - 그럼 어떻게 바꿔야 할까? 아래처럼 바꾸면 된다.
 - ajax로 보내든, form submit으로 보내든 from login의 경우 어차피 return을 하지 않는다. Spring Security에서 담당하기 때문이다.
-- 따라서 MVC pattern으로서 껍데기만 존재하면 된다.
 
 ```java
 @PostMapping("/signin")
@@ -43,6 +42,26 @@ public void signin() {
 
 }
 ```
+
+- 그런데 form login에 관한 login, logout에 관한 processing url은 SecurityConfig class에 모두 적혀있다.
+
+```java
+http
+    .formLogin((auth) -> 
+        auth.loginPage("/user/login")
+            .loginProcessingUrl("/user/loginProc")
+            .
+            .
+//
+            
+
+http
+    .logout((auth) -> auth
+    .logoutUrl("/user/logout")
+```
+
+- 따라서 사실 Controller에 써놓을 필요조차 없는 셈이다.
+- 지워주자.
 
 
 ## <span style="color:#802548">_Spring Security flowㅡㅡ> UsernamePasswordAuthenticationFilter_</span>
