@@ -873,3 +873,24 @@ git config --system --unset credential.helper
 - 하지만 원인은 remote가 HTTPS였던 것이었다. HTTPS는 password authentication 방식 고정이다.
 - SSH 공용키 등을 다 등록하고, remote를 지우고 SSH url로 다시 remote를 설정하고 push를 하면 잘 작동한다.
 
+
+## <span style="color:#802548">_git remote-local branch 동기화_</span> 
+- git branch를 remote에서 만든 뒤에 clone을 한다.
+- clone을 하게 되면 해당 clone한 branch 하나만 처음에 인식된다.
+- 하지만 remote에 있는 여러 branch들은 인식되지 못한다.
+- 이를 한꺼번에 인식시키는 법을 찾아봤지만, 없었다. remote에 있지만 local에 없는 것은 하나씩 수동으로 인식시킨다.
+
+```sh
+git branch -r
+git switch [branch]
+```
+
+
+- 반면에 remote에 없지만 local에만 있는 것은 일괄로 지워버릴 수 있다.
+- 다만 그것은 remote와 연결되어 있는 것들에 관해서만 가능한 것이다.
+- 즉, remote에 원래 ref가 있었는데, 지금은 사라진 것들만 대상이다. 
+- 아래 명령어를 이용하면 된다. 
+
+```sh
+git fetch --all --prune
+```
