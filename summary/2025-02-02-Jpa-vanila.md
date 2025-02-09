@@ -55,7 +55,7 @@ window.addEventListener('load', async function () {
         const pathParts = path.split('/');
         const movieSeq = pathParts[pathParts.length - 1];
 
-        try {
+        try {   
             const response = await fetch(`/review/list?movieSeq=${movieSeq}`, {
                 method: 'get'
             });
@@ -84,7 +84,7 @@ window.addEventListener('load',  function () {
 - 그 이유는 fetch 함수가 2개라서 그렇다. 
 - load 이후에 eventListener가 작동하기에 문제는 없지만, movie와 review 중 우선순위의 fetch 순서가 있을 것이다.
     - movie가 보이고 나서 댓글이 보이는 게 자연스러우니 async - await를 걸어줘야 한다.
-    - 하지만 이렇게 되면 영화를 call해서 받아온 뒤에 callReview가 발동하므로 너무 느려진다.
+   
     
 
 ```js
@@ -94,10 +94,30 @@ window.addEventListener('load',  async function () {
 })
 ```
 
-- 사실 movie와 review는 같이 api를 날려도 되는데, dom을 movie를 먼저 그리게 하고 싶은 것이다.
+## <span style="color:#802548">_movie와 review를 한꺼번에 api 날리기_</span>
+
+- 하지만 위처럼 하면 영화를 call해서 받아온 뒤에 callReview가 발동하므로 느려진다.
+- 사실 movie와 review는 같이 api를 날려도 되는데, HTML을 movie를 먼저 그리게 하고 싶은 것이다.
+- 그 경우 Promise.all()로 둘을 같이 쏜 다음에, render만 나중에 순차대로 한다.
+    - renderMovie()나 renderReview()는 callback이 아니기 때문에 순서대로 실행되며, 따라서 async - await가 불필요하다.
+    - 반면에 callMovie나 callReview가 다 올 때까지는 기다려야 하기 때문에, await를 붙여준다.
 
 ```js
+window.addEventListener('load', async function () {
+  const [movieData, reviewData] = await Promise.all([callMovie(), callReview()]);
+  
+  renderMovie(movieData);
+  renderReview(reviewData);
+});
 
+function callMovie() {
+  return fetch('movie-api-url').then(res => res.json());
+}
+
+async function callReview() {
+  const response = await fetch('movie-api-url');
+  return response.json();
+}
 ```
 
 
@@ -604,6 +624,105 @@ where
 List<MovieReviewProjection> findMovieWithReviewsProjection(@Param("movieSeq") Long movieSeq);
 ```
 
+
+## <span style="color:#802548">_영화만 있을 떄 댓글 null 값 fetching 방지_</span>
+- 한번에 받아오게 하니, 댓글이 없는 경우 null로 댓글이 1개씩은 표시되는 문제가 생겼다.
+- 그래서 이를 DTO 수준에서 해결했다.
+- left join이라서 댓글이 null로 값이 들어가게 된 것이다.
+- 전부 null이면 댓글이 없는 것이니 그냥 빈 list를 return하게 변경했다.
+
+```java
+@Builder
+public record MovieReviewDTO(
+        MovieDTO.MovieResponse movie,
+        List<ReviewDTO.ReviewResponse> reviews) {
+    public static MovieReviewDTO TODTO(MovieDTO.MovieResponse movie, List<ReviewDTO.ReviewResponse> reviews) {
+
+        for (ReviewDTO.ReviewResponse reviewResponse : reviews) {
+            if (
+                    reviewResponse.reviewNum() == null &&
+                    reviewResponse.reviewDate() == null &&
+                    reviewResponse.reviewText() == null &&
+                    reviewResponse.reviewerNickName() == null &&
+                    reviewResponse.score() == null
+                ) {
+                reviews = Collections.emptyList();
+            }
+        }
+        
+        return MovieReviewDTO.builder()
+                .movie(movie)
+                .reviews(reviews)
+                .build();
+    }
+}
+```
+
+- 역시 method로 따로 빼주는 게 이해하기 편하다.
+
+```java
+@Builder
+public record MovieReviewDTO(
+        MovieDTO.MovieResponse movie,
+        List<ReviewDTO.ReviewResponse> reviews) {
+    public static MovieReviewDTO TODTO(MovieDTO.MovieResponse movie, List<ReviewDTO.ReviewResponse> reviews) {
+
+        for (ReviewDTO.ReviewResponse reviewResponse : reviews) {
+            if (isEmptyReview(reviewResponse)) {
+                reviews = Collections.emptyList();
+            }
+        }
+
+        return MovieReviewDTO.builder()
+                .movie(movie)
+                .reviews(reviews)
+                .build();
+    }
+
+    private static boolean isEmptyReview(ReviewDTO.ReviewResponse review) {
+        return review.reviewNum() == null &&
+               review.reviewDate() == null &&
+               review.reviewText() == null &&
+               review.reviewerNickName() == null &&
+               review.score() == null;
+    }
+}
+```
+
+- 위의 방식대로 하면 댓글 collection이 하나만 비어있어도 모든 댓글이 빈 collection으로 처리된다.
+    - 지금은 그렇게 해도 된다. 영화 1개에 댓글 n개라서, 댓글이 null인 것과 값이 있는 것이 같이 존재할 수가 없다.
+    - 기본적으로 left join의 성격이 그러하다. 따라서 RDB에선 위처럼 써도 무방하다.
+- 만약 같이 존재할 수 있다면? 확인해야 한다. 따라서 stream을 열어 모든 element에 대해 match하는 지 allMatch()로 확인한다.
+
+```java
+@Builder
+public record MovieReviewDTO(
+        MovieDTO.MovieResponse movie,
+        List<ReviewDTO.ReviewResponse> reviews) {
+
+    public static MovieReviewDTO TODTO(MovieDTO.MovieResponse movie, List<ReviewDTO.ReviewResponse> reviews) {
+        if (reviews.stream().allMatch(MovieReviewDTO::isEmptyReview)) {
+            reviews = Collections.emptyList();
+        }
+
+        return MovieReviewDTO.builder()
+                .movie(movie)
+                .reviews(reviews)
+                .build();
+    }
+
+    private static boolean isEmptyReview(ReviewDTO.ReviewResponse review) {
+        return review.reviewNum() == null &&
+               review.reviewDate() == null &&
+               review.reviewText() == null &&
+               review.reviewerNickName() == null &&
+               review.score() == null;
+    }
+}
+```
+
+- reflection을 쓰는 방법도 있다고 하여 썼는데, 작동하지 않는다.
+- List 같은 경우에는 immutable 조건 같은것에 묶여 Reflection에서 조회불가능하다고 한다.
 
 ## <span style="color:#802548">_HTML parsing 빠르게 하는 script 배치_</span>
 - 원래 형태는 아래와 같다.
