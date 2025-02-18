@@ -746,6 +746,22 @@ pick g15155 initial commit
 
 
 
+## <span style="color:#802548">_commit 정렬용 rebase -i_</span>
+- 내 local main branch에 commit을 하고서 remote를 보았더니 1 commit behind였다.
+  - 내가 PR로 다른 branch에서 commit을 github 상으로 넣었기 때문이었다.
+- 그래서 본능적으로 pull origin main을 하게 됐다.
+- 이 경우에 push를 해버리면 push는 되지만, linear history가 유지되지 않아 흐름을 알아보기 어렵다.
+- 이럴 때 git rebase -i를 사용하면 추가된 local commit이 pull 받은 main 뒤에 붙게 된다.
+- local commit은 어차피 remote에 push되지 않았기 때문에 rebase 해도 된다.
+  - 단, 무조건 해당 commit만 rebase해야된다. 원격에서 pull받은 건 절대로 rebase하면 안 된다.
+
+```sh
+git rebase -i 
+:wq
+```
+
+
+
 ## <span style="color:#802548">_local에서 작업한 rebase 취소하기_</span>
 - 위에처럼 rebase -i로 뭔가를 변경헀는데, 그게 실제론 remote에 있던 commit 이었다는 걸 알게 됐다.
 - 그럼 rebase 했던 작업을 되돌려줘야 한다. 여태까지 나만 썼던 remote라면 상관없다.
@@ -1269,3 +1285,58 @@ git push origin master
 ```
 
 - 그럼 첫 legacy 프로젝트를 처음 commit부터 시작할 수 있다.
+
+
+
+## <span style="color:#802548">_git folder명 바꾸기_</span>
+- 그냥 폴더명만 바꾸고서 add commit하면 변화가 관찰되지 않는다.
+- 그렇게 git mv를 활용해야 한다.
+- 우선 그냥 경로에서 진행하면 에러가 난다.
+
+```
+fatal: bad source, source=DTO, destination=foldessd
+```
+
+- 이름을 바꿀 경로까지 이동해주자.
+
+```
+cd src/main/java/org/scit/project/user
+```
+
+- 그러고 나서 폴더를 바꾸려고 하면 이름이 제대로 바뀌지 않는다.
+
+```js
+git mv DTO foldessd
+//fatal: renaming 'src/main/java/org/scit/project/user/DTO' failed: Invalid argument
+```
+
+- 이동 하고서도 그냥 dto로 바꾸면 안되고 temp_folder 같은 식으로 바꿔야됨
+- git config core.ignorecase false 로 놓지 말기. 다른 사람한테 다 영향 갈 수 있으니 쓰지 말자
+
+```
+git mv DTO temp_folder
+git mv temp_folder dto
+```
+- 그러고 나서 git status를 하면 바뀐게 보인다.
+- 직접 git add로 git bash에서 추가해주자.
+
+
+
+
+## <span style="color:#802548">_vscode git 변화사항 추적이 안될 떄_</span>
+- 혹시 gradle build에서 error가 나면 git 등에서도 변화 사항이 반영되지 않는다.
+- output에 보면 error가 나는 지 안 나는 지 확인 가능하다.
+- 아래처럼 나는 에러가 나고 있었다.
+
+```
+Could not execute build using connection to Gradle distribution 'https://services.gradle.org/distributions/gradle-8.12.1-bin.zip'.
+C:\Users\user\OneDrive\바탕 화면\tanomuzoko\src\main\java\org\scit\project\board_heart\entity\BoardHeartEntity.java:46: warning: @Builder will ignore the initializing expression entirely. If you want the initializing expression to ...
+```
+
+
+- 프로젝트 compile 시에 빨간줄이 없는데 위와 같은 에러가 뜬 이유는, 폴더명 변경때문이다..
+- 따라서 그냥 gradle을 전부 clean 시킨다. 해당 명령어는 git bash에서 그냥 실행하면 된다.
+
+```sh
+./gradlew clean build
+```
