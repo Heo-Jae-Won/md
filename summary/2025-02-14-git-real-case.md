@@ -1321,8 +1321,6 @@ git mv temp_folder dto
 - 직접 git add로 git bash에서 추가해주자.
 
 
-
-
 ## <span style="color:#802548">_vscode git 변화사항 추적이 안될 떄_</span>
 - 혹시 gradle build에서 error가 나면 git 등에서도 변화 사항이 반영되지 않는다.
 - output에 보면 error가 나는 지 안 나는 지 확인 가능하다.
@@ -1340,3 +1338,80 @@ C:\Users\user\OneDrive\바탕 화면\tanomuzoko\src\main\java\org\scit\project\b
 ```sh
 ./gradlew clean build
 ```
+
+
+
+
+## <span style="color:#802548">_git merge commit message에 따른 차이_</span>
+
+- github에서 PR을 올리게 되는 경우의 commit 메세지는 아래와 같다.
+
+```
+
+```
+
+- github에서 PR을 올리려는데, conflict가 너무 많아서 resolve를 GUI의 도움을 받아서 해야한다면, GIT BASH에서 진행하게 된다.
+- git merge로 가져다 박을 탠데, 그 때 commit message는 아래와 같다.
+
+```
+
+```
+
+- main에 올라온 PR을 받아서 git pull을 하게 되면 local에서 message는 아래와 같다.
+
+```
+
+```
+
+- remote의 branch와 자기 local branch가 다른 경우, git pull로 올려 받은 경우에는 아래와 같이 된다.
+  - 다른 사람이 대신 자기 local branch에서 무언가를 해준 것을 받을 때
+  - 폴더명은 소문자 원칙이라 대문자 폴더를 소문자로 바꿨지만, git은 case-insensitive라서 인지가 되지 못하고 github에 올라간 경우
+
+```
+Merge remote-tracking branch 'origin/develop' into develop
+```
+
+
+## <span style="color:#802548">_github 상 PR message가 어떻게 나오나_</span>
+
+- 하나만 commit 한 branch를 squash merge 하면 그냥 commit의 message가 들어가게 된다.
+
+```
+DTO -> dto로 폴더명 변경 적용용 (#23)
+```
+
+- 반면에 복수개의 commit을 한 branch는 squash merge를 하면 commit의 message가 아래처럼 나온다.
+
+```
+Feature/login join (#22)
+```
+
+
+## <span style="color:#802548">_vscode git source control_</span>
+
+- U는 untrackted다. 새로 추가된 파일이란 의미다.
+- M은 modified다.
+- D는 deleted다.
+- R은 rename이다.
+
+
+## <span style="color:#802548">_github 상 PR message 규칙_</span>
+- title은 아래처럼 작성한다.
+
+```
+Feature: User profile page (Merge from `feature/profile` to `dev`) (#34)
+```
+
+- 실제 내용은 commit을 포함한다.
+
+```
+This PR merges `feature/profile` into the `dev` branch.
+
+- Created user profile page UI.
+- Integrated with backend API to fetch user data.
+- Added routing for profile navigation.
+
+Closes #34
+```
+
+
