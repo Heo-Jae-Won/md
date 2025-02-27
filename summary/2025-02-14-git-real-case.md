@@ -247,6 +247,13 @@ git push
 git stash clear
 ```
 
+- 파일 한 개만 stash 하고 싶다면, 아래와 같은 형태로 stash를 해주면 된다.
+
+```sh
+git stash push -m "message" [path]
+git stash push -m "info_mypage.js closure" src/main/resources/static/js/info_mypage.js
+```
+
 ## <span style="color:#802548">_stash 복구하기_</span>
 - 작업하던 것을 stash해놨는데, 실수로 clear 했을 때가 있다.
 - 그럴 때는 아래 명령어를 사용하여 clear 된 stash를 확인한다.
