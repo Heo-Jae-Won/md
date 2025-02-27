@@ -1228,7 +1228,7 @@ git push origin master :
 # 원격저장소에 lfs가 포함된 파일까지 올리기
 ```
 
-## <span style="color:#802548">_프로젝트 도중에 git ignore 적용_</span>
+## <span style="color:#802548">_프로젝트 도중에 git ignore 만들어 적용_</span>
 - git ignore 파일 같은 경우, IDE를 통해 Gradle 혹은 Maven project를 만들면 전부 이미 포함되어 있다.
 - 혹시 없는 경우에는 gitignore를 처음에 넣고 시작하는 게 좋다.
 - 하지만 까먹은 경우 아래와 같이 적용한다.
@@ -1249,6 +1249,21 @@ git commit -m"git ignore add"
 git push origin master 
 ## 다시 원격저장소에 올린다. 
 ```
+
+## <span style="color:#802548">_프로젝트 도중에 tracking된 파일을 git ignore에 추가하기_</span>
+
+- 아래와 같이 하면 gitignore에 무시하려는 파일을 추가할 수 있다.
+- 대신에 아래와 같이 하게 되면 git pull을 받는 순간 파일이 사라지기 때문에 자료를 받아야 한다.
+
+```sh
+.gitignore에 무시를 원하는 파일 추가하기
+git rm --cached application.properties
+git add .gitignore 
+git commit -m "ignoring file"
+git push
+```
+
+
 
 ## <span style="color:#802548">_push 시 permission denied 오류_</span> 
 - remote에 push가 안되는 경우가 있다.
