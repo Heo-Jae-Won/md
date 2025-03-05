@@ -1,5 +1,6 @@
 # <span style="color:#802548">_함수 return이 closure일 가능성이 높다._</span>
 - js를 쓸 때 아래와 같이 decorator로 감싸서 log를 남길 수도 있다.
+
 ```javascript
 function logTimeDecorator(fn) {
   return function() {
@@ -18,6 +19,7 @@ foo();
 ```
 
 - React의 useState는 내부에서 closure를 활용한다.
+
 ```javascript
 const useState = (initialValue) => {
     let state = initialValue;
@@ -31,6 +33,7 @@ const useState = (initialValue) => {
 
 - React의 Router를 만약 코드로 짠다면 아래와 같을 것이다.
 - router를 이해하려면 pushState는 꼭 알아두는 게 좋다.
+
 ```javascript
 class Router {
     constructor() {
@@ -50,8 +53,6 @@ class Router {
 # <span style="color:#802548">_if문 줄이기_</span>
 - refactoring해보자. 아래는 원본이다.
 
-
-
 ```js
 function orderCoffee(el, orderList) {
     if (el) {
@@ -70,6 +71,7 @@ function orderCoffee(el, orderList) {
 
 
 - 아래는 내가 한 것이다.
+
 ```js
 function orderCoffee(el, orderList) {
     if (el && Array.isArray(orderList)) {
@@ -88,7 +90,6 @@ function notifyOrderSucccess(orderList) {
 
 
 - 아래는 프롱트에서 보여준 것이다.
-
 
 ```js
 function delay(time) { //setTimeout을 한줄로 간단하게 나눠주기 위한 함수..
@@ -112,6 +113,7 @@ function orderCoffee(el, orderList) {
 # <span style="color:#802548">_callback 함수는 함수 정의를 넣는 것이지, call하는 게 아니다._</span>
 - 왜 그냥 notifyOrderSucccess(orderList)는 안될까?
 - 아래의 구문은, 이미 만들어진 함수를 call하는 것이라 eventListener로 등록되는 데 그치지 않고 즉시 실행된다. 그래서 문제인 것이다.
+
 ```js
  el.addEventListener('click', notifyOrderSucccess(orderList))
  ```
@@ -152,7 +154,6 @@ el.addEventListener('click', notifyOrderSucccess()); //함수를 call했다. 이
 
 - 아래처럼 notifyOrderSucccess(parameter)를 바로 eventListener에 넣어주려면 아래와 같이 return을 함수로 하면 된다.
 
-
 ```js
 function delay(time) { //setTimeout을 한줄로 간단하게 나눠주기 위한 함수..
     return new Promise((resolve) => setTimeout(()=> resolve(),time)); // () => resolve()는 익명함수를 정의한 것과 동일하다. 다시말해 time만큼이 지나면 그냥 resolve()가 된다. 완료된다는 의미다.
@@ -173,6 +174,7 @@ function orderCoffee(el, orderList) {
 ```
 
 - 아래는 함수 선언 방식으로 짰을 때다. 해당 방식에서는 async를 notifyOrderSuccess에 넣으면 안되고, return할 function에 넣어야 한다.
+
 ```js
 function delay(time) { //setTimeout을 한줄로 간단하게 나눠주기 위한 함수..
     return new Promise((resolve) => setTimeout(()=> resolve(),time)); // () => resolve()는 익명함수를 정의한 것과 동일하다. 다시말해 time만큼이 지나면 그냥 resolve()가 된다. 완료된다는 의미다.
@@ -639,11 +641,6 @@ function getImage() {
     }
 }
 
-/* function getImages() {
-    for (section in sections) {
-            return section.image;
-    }
-} */
 
 function getImages() {
     const images = [];
@@ -696,10 +693,11 @@ function predict(cond) {
 function predict(cond) {
     switch (cond) {
         case RESULT.BUST:
-            return faslse;
+            return false;
         case RESULT.OK:
             return true;
-        default: throw new Error("이 케이스가 존재하지 않습니다.");
+        default: 
+            throw new Error("이 케이스가 존재하지 않습니다.");
     }
 }
 ```
@@ -1025,6 +1023,7 @@ scienceFacility.getUnits(); // ['Science Vessel', 'Ghost']
 # <span style="color:#802548">_class가 아닌 function_</span>
 - class가 아니라 함수형으로 해도 똑같이 만들 수 있다.
 - 함수 합성을 통해 가능하다.
+
 ```js
 const pipe = (...fns) => (x) => fns.reduce((y,f) => f(y), x); //와 근데 ㄹㅇ 하나도 안 읽힌다.
 
@@ -1054,6 +1053,7 @@ console.log(scienceFacilityWithPhsicsLab)
 
 # <span style="color:#802548">_strategy pattern_</span>
 - 전략이 바뀌어도 getDialogues()는 바뀌지 않아도 된다.
+
 ```js
 const Units = {
     캐리어() {
@@ -1142,6 +1142,7 @@ export function checkout(productId, paymentInfo) {
 
 - 아래의 4개 함수를 모두 쓰는 비즈니스 로직이다. 
 - 4개의 함수를 모두 쓰기에 전부 알아야 한다.
+
 ```js
 import { checkShippingADdress, checkStock, checkDiscount, checkout} from './myFunctions'
 
@@ -1171,6 +1172,7 @@ if (!checkStock(productId)) {
 
 - 위의 service.js에 모듈을 두어 추상화하자.
 - 그럼 아래와 같이 아주 간단하게 service.js가 바뀐다.
+
 ```js
 const productId = 123;
 const paymentInfo = {...};
@@ -1185,7 +1187,6 @@ try {
 ```
 
 - checkout 함수는 중간 모듈인 payment.js에 있는 것이다.
-
 
 ```js
 import { checkShippingADdress, checkStock, checkDiscount, checkout} from './myFunctions'
