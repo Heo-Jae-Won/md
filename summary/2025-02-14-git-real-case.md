@@ -254,6 +254,17 @@ git stash push -m "message" [path]
 git stash push -m "info_mypage.js closure" src/main/resources/static/js/info_mypage.js
 ```
 
+## <span style="color:#802548">_stash가 되지 않는 대상_</span>
+
+- 처음 만들어져서 commit 되지 않은 파일들은 stash의 대상이 되지 않는다.
+- git switch를 할 때 처음만든 것과 commit된 것이 섞여있는 경우가 문제다.
+  - 이 경우 git stash를 하면 cannot resolve name이 일어날 수 있다.
+  - commit된 파일의 변경사항은 stash가 되었는데, 새로 만든 파일은 stash가 되지 않는다.
+  - 따라서 새로 만든 파일에서 stash된 파일의 변경사항을 참조하고 있다면 error가 뜬다.
+
+- 이럴 떈 commit을 하던가, 그냥 노가다로 파일을 밖에 보존시켜놓는 게 답이다.
+- 아무리 stash를 해도 처음 만든 대상은 stash되지 않는다.
+
 ## <span style="color:#802548">_stash 복구하기_</span>
 - 작업하던 것을 stash해놨는데, 실수로 clear 했을 때가 있다.
 - 그럴 때는 아래 명령어를 사용하여 clear 된 stash를 확인한다.
