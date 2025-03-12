@@ -1276,6 +1276,9 @@ function removeBoomark() {
 ## <span style="color:#802548">_recipe의 history 다시보기- controller_</span>
 
 
+- recipe의 history를 다시보기 위한 page를 만든다.
+- 처음에는 아래처럼 thymeleaf를 통한 fetch를 생각했었다.
+
 
 ```java
 @Controller
@@ -1294,6 +1297,31 @@ public class RecipeMyPageController {
     
 }
 ```
+
+- 그러나 pagination에 따라 매번 page가 reload되는 것이 UX 상 별로라 생각되었다.
+- 따라서 페이지 내에서 ajax를 날리는 식으로 바꿨다.
+
+```java
+@GetMapping("/mypage/getRecipeSave")
+@ResponseBody
+public Page<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, 
+                                    @RequestParam(name = "page", required = false) int page) {
+    Page<RecipeMyPageResponse> recipe = recipeMyPageService.findAllRecipeByUser(loginUserDetails.getUserSeq(), page);
+
+    return recipe; 
+}
+
+
+@GetMapping("/mypage/recipeSave")
+public String viewRecipeSave() {
+
+    return "mypage/recipeSave_mypage";
+}
+```
+
+## <span style="color:#802548">_recipe의 history 다시보기- dto_</span>
+
+- Page에 필요한 response는 아래정도다.
 
 ```java
 @Builder
@@ -1318,6 +1346,36 @@ public record RecipeMyPageResponse(
 }
 ```
 
+- Page를 그대로 return하여 보냈더니 아래와 같은 오류가 뜬다.
+
+```java
+@GetMapping("/mypage/getRecipeSave")
+@ResponseBody
+public Page<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, 
+                                    @RequestParam(name = "page", required = false) int page) {
+    Page<RecipeMyPageResponse> recipe = recipeMyPageService.findAllRecipeByUser(loginUserDetails.getUserSeq(), page);
+
+    return recipe; 
+}
+```
+
+```
+2025-03-12T23:45:51.514+09:00  WARN 5612 --- [project] [nio-9005-exec-5] ration$PageModule$WarningLoggingModifier : Serializing PageImpl instances as-is is not supported, meaning that there is no guarantee about the stability of the resulting JSON structure!
+	For a stable JSON structure, please use Spring Data's PagedModel (globally via @EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO))
+	or Spring HATEOAS and Spring Data's PagedResourcesAssembler as documented in https://docs.spring.io/spring-data/commons/reference/repositories/core-extensions.html#core.web.pageables.
+```
+
+- 따라서 별도의 DTO로 변환하여 사용하기로 결정했다.
+
+
+
+
+
+
+## <span style="color:#802548">_recipe의 history 다시보기- repository_</span>
+
+- 처음에는 아래처럼 query method를 활용하려고 시도했으나, 역시 무리라고 생각이 들었다.
+- 특히 pagenation까지 하게 되면 알아보기 어렵다는 생각이 들었다.
 
 ```java
 public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long>{
@@ -1327,6 +1385,361 @@ public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long
 } 
 ```
 
+- 따라서 아래처럼 JPQL을 사용하게 바꿨다.
+- distinct가 없으면 row가 구별되지 않으므로 entity관계의 OneToOne 등의 관계를 만들기 어렵다.
+
+```java
+public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long>{
+    
+    @Query("""
+        SELECT DISTINCT r FROM RecipeEntity r
+        JOIN r.recipeInputKeywordEntityList k
+        WHERE r.userEntity.userSeq = :userSeq
+        AND r.recipeOutputEntity IS NOT NULL
+    """)
+    Page<RecipeEntity> findRecipesWithPagination(
+        @Param("userSeq") Long userSeq,
+        Pageable pageable
+    );
+    
+} 
+```
+
+- oneToone과 oneToMany에 따른 여러 entity들이 같이 조회되는 모습이다.
+- 사실 redundant한 query가 많기 떄문에 한번에 가져와서 Java 내에서 parsing하는 게 필요해 보인다.
+- 보면 count query가 없는데 count query도 자동으로 날라간 것이 보인다. 
+    - Page interface는 자동으로 count query를 날린다.
+    - totalPage를 알기 위해서 자동으로 날리게끔 구성되어 있다.
+
+```sql
+Hibernate: 
+    select
+        distinct re1_0.recipe_seq,
+        re1_0.created_at,
+        re1_0.user_seq 
+    from
+        recipe re1_0 
+    join
+        recipe_input_keyword rikel1_0 
+            on re1_0.recipe_seq=rikel1_0.recipe_seq 
+    left join
+        recipe_output_content roe1_0 
+            on re1_0.recipe_seq=roe1_0.recipe_seq 
+    where
+        re1_0.user_seq=? 
+        and roe1_0.recipe_output_content_seq is not null 
+    order by
+        re1_0.created_at 
+    limit
+        ?
+Hibernate: 
+    select
+        roe1_0.recipe_output_content_seq,
+        roe1_0.output_content,
+        roe1_0.recipe_seq,
+        roe1_0.recipe_title 
+    from
+        recipe_output_content roe1_0 
+    where
+        roe1_0.recipe_seq=?
+Hibernate: 
+    select
+        ue1_0.user_seq,
+        ue1_0.created_at,
+        ue1_0.is_deleted,
+        ue1_0.roles,
+        ue1_0.updated_at,
+        ue1_0.user_email,
+        ue1_0.user_id,
+        ue1_0.user_name,
+        ue1_0.user_password 
+    from
+        user ue1_0 
+    where
+        ue1_0.user_seq=?
+Hibernate: 
+    select
+        roe1_0.recipe_output_content_seq,
+        roe1_0.output_content,
+        roe1_0.recipe_seq,
+        roe1_0.recipe_title 
+    from
+        recipe_output_content roe1_0 
+    where
+        roe1_0.recipe_seq=?
+Hibernate: 
+    select
+        roe1_0.recipe_output_content_seq,
+        roe1_0.output_content,
+        roe1_0.recipe_seq,
+        roe1_0.recipe_title 
+    from
+        recipe_output_content roe1_0 
+    where
+        roe1_0.recipe_seq=?
+Hibernate: 
+    select
+        count(distinct re1_0.recipe_seq) 
+    from
+        recipe re1_0 
+    join
+        recipe_input_keyword rikel1_0 
+            on re1_0.recipe_seq=rikel1_0.recipe_seq 
+    left join
+        recipe_output_content roe1_0 
+            on re1_0.recipe_seq=roe1_0.recipe_seq 
+    where
+        re1_0.user_seq=? 
+        and roe1_0.recipe_output_content_seq is not null
+Hibernate: 
+    select
+        rikel1_0.recipe_seq,
+        rikel1_0.keyword 
+    from
+        recipe_input_keyword rikel1_0 
+    where
+        rikel1_0.recipe_seq=?
+Hibernate: 
+    select
+        rikel1_0.recipe_seq,
+        rikel1_0.keyword 
+    from
+        recipe_input_keyword rikel1_0 
+    where
+        rikel1_0.recipe_seq=?
+Hibernate: 
+    select
+        rikel1_0.recipe_seq,
+        rikel1_0.keyword 
+    from
+        recipe_input_keyword rikel1_0 
+    where
+        rikel1_0.recipe_seq=?
+```
+
+- redundant한 query가 덜 나게끔 한번에 받아오게 한다.
+- EntityGraph를 추가하면 된다. 그럼 한꺼번에 받아오게 변경된다.
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList", "userEntity"})
+@Query("""
+    SELECT DISTINCT r FROM RecipeEntity r
+    JOIN r.recipeInputKeywordEntityList k
+    WHERE r.userEntity.userSeq = :userSeq
+    AND r.recipeOutputEntity IS NOT NULL
+""")
+Page<RecipeEntity> findRecipesWithPagination(
+    @Param("userSeq") Long userSeq,
+    Pageable pageable
+);
+```
+
+- 대신 query를 보면 알 수 있듯, recipe_output_content에는 recipe_seq index를 걸어야 한다.
+- recipe_input_keyword에도 마찬가지다.
+
+```sql
+select
+    distinct re1_0.recipe_seq,
+    re1_0.created_at,
+    rikel1_0.recipe_seq,
+    rikel1_0.keyword,
+    roe1_0.recipe_output_content_seq,
+    roe1_0.output_content,
+    roe1_0.recipe_seq,
+    roe1_0.recipe_title,
+    ue1_0.user_seq,
+    ue1_0.created_at,
+    ue1_0.is_deleted,
+    ue1_0.roles,
+    ue1_0.updated_at,
+    ue1_0.user_email,
+    ue1_0.user_id,
+    ue1_0.user_name,
+    ue1_0.user_password 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+left join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+left join
+    user ue1_0 
+        on ue1_0.user_seq=re1_0.user_seq 
+where
+    re1_0.user_seq=? 
+    and roe1_0.recipe_output_content_seq is not null 
+order by
+    re1_0.created_at
+Hibernate: 
+select
+    count(distinct re1_0.recipe_seq) 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+left join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+where
+    re1_0.user_seq=? 
+    and roe1_0.recipe_output_content_seq is not null
+```
+
+- is not null도 필요가 없는 조건이다. recipe를 만드는 순간, 무조건 recipe_output_content를 같이 생성하기 때문이다.
+- 따라서 빼준다. 빼주면서 동시에 join 조건으로서 recipeOutputEntity는 유지되어야 하므로 join 문에 추가해준다.
+- join도 헷갈릴 우려가 있으니 INNER JOIN이라고 명시해주자.
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList", "userEntity"})
+@Query("""
+    SELECT DISTINCT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    WHERE r.userEntity.userSeq = :userSeq
+""")
+Page<RecipeEntity> findRecipesWithPagination(
+    @Param("userSeq") Long userSeq,
+    Pageable pageable
+);
+```
+
+- sql 상에서는 여전히 join이라고 뜨지만, on keyword가 붙어있기 때문에 cross join은 아니다.
+- 따라서 inner join이라고 생각하면 된다.
+
+```sql
+select
+    distinct re1_0.recipe_seq,
+    re1_0.created_at,
+    rikel1_0.recipe_seq,
+    rikel1_0.keyword,
+    roe1_0.recipe_output_content_seq,
+    roe1_0.output_content,
+    roe1_0.recipe_seq,
+    roe1_0.recipe_title,
+    ue1_0.user_seq,
+    ue1_0.created_at,
+    ue1_0.is_deleted,
+    ue1_0.roles,
+    ue1_0.updated_at,
+    ue1_0.user_email,
+    ue1_0.user_id,
+    ue1_0.user_name,
+    ue1_0.user_password 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+left join
+    user ue1_0 
+        on ue1_0.user_seq=re1_0.user_seq 
+where
+    re1_0.user_seq=? 
+order by
+    re1_0.created_at
+Hibernate: 
+select
+    count(distinct re1_0.recipe_seq) 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+left join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+where
+    re1_0.user_seq=? 
+```
+
+- 그런데 보면 user는 left join을 수행하고 있다.
+- user가 탈퇴가 아니라 아예 DB상에서 삭제된 경우에도 보여주는 recipe service가 존재한다면, user가 null이어도 값을 가져야 한다. 따라서 left join이 맞다.
+- 그런데 mypage에서 보여주는 것은, user가 무조건 있어야 접근 가능한 페이지기 때문에, left join을 쓰면 성능만 구려진다.
+- EntityGraph에 UserEntity를 넣으면, userEntity는 무조건 보유하게 되는 조건이 아니기 때문에 아마 null일 경우를 대비해 left join으로 만드는 것으로 보인다.
+- 무조건 user가 있다는 전제가 성립하기 때문에 여기서는 EntitityGraph에서 UserEntity를 지워준다.
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query("""
+    SELECT DISTINCT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    INNER JOIN r.userEntity u
+    WHERE u.userSeq = :userSeq
+""")
+Page<RecipeEntity> findRecipesWithPagination(
+    @Param("userSeq") Long userSeq,
+    Pageable pageable
+);
+```
+
+- 그럼 user entity의 내용도 거의 안가져오고, join도 left join에서 inner join으로 바뀐다.
+
+```sql
+select
+        distinct re1_0.recipe_seq,
+        re1_0.created_at,
+        rikel1_0.recipe_seq,
+        rikel1_0.keyword,
+        roe1_0.recipe_output_content_seq,
+        roe1_0.output_content,
+        roe1_0.recipe_seq,
+        roe1_0.recipe_title,
+        re1_0.user_seq 
+    from
+        recipe re1_0 
+    join
+        recipe_input_keyword rikel1_0 
+            on re1_0.recipe_seq=rikel1_0.recipe_seq 
+    join
+        recipe_output_content roe1_0 
+            on re1_0.recipe_seq=roe1_0.recipe_seq 
+    join
+        user ue1_0 
+            on ue1_0.user_seq=re1_0.user_seq 
+    where
+        ue1_0.user_seq=? 
+    order by
+        re1_0.created_at
+
+    select
+        count(distinct re1_0.recipe_seq) 
+    from
+        recipe re1_0 
+    join
+        recipe_input_keyword rikel1_0 
+            on re1_0.recipe_seq=rikel1_0.recipe_seq 
+    join
+        recipe_output_content roe1_0 
+            on re1_0.recipe_seq=roe1_0.recipe_seq 
+    join
+        user ue1_0 
+            on ue1_0.user_seq=re1_0.user_seq 
+    where
+        ue1_0.user_seq=?
+```
+
+
+- 실제로 sql을 받아서 적어넣어보면, distinct keyword는 필요하지 않다.
+- distinct가 있든 없든 sql 상의 결과값은 동일하다.
+- DISTINCT를 JPQL에 넣은 이유는 duplicated된 entity들을 제거하여 JAVA Object 관점에서 뽑기 좋게 만든 것 뿐이다.
+- 극한의 성능을 위해서라면 distinct를 빼고 JPA의 도움 없이 Java단에서 직접 entity들을 제거하고 합치는 작업을 해야한다.
+
+```java
+
+```
+
+
+## <span style="color:#802548">_recipe의 history 다시보기- service_</span>
+
+- Pagination이 들어가기 때문에 pageable도 넣어준다.
+
 ```java
 @Service
 @RequiredArgsConstructor
@@ -1334,17 +1747,21 @@ public class RecipeMyPageService {
 
     private final RecipeMyPageRepository recipeMyPageRepository;
 
-
-    public List<RecipeMyPageResponse> findAllByUser(Long userSeq) {
-        return recipeMyPageRepository.findByUserEntity_UserSeqAndRecipeInputKeywordEntityListIsNotNullAndRecipeOutputEntityIsNotNull(userSeq)
-                                        .stream().map(RecipeMyPageResponse::toDTO).toList();
-         
+    public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
+        Pageable pageable = PageRequest.of(currentPage, 3, Sort.by(Sort.Direction.ASC, "createdAt"));
+        
+        return recipeMyPageRepository.findRecipesWithPagination(userSeq, pageable)
+                                        .map(RecipeMyPageResponse::toDTO);
     };
-    
     
 }
 ```
 
+
+## <span style="color:#802548">_recipe의 history 다시보기- html_</span>
+
+- js로 recipe가 fetch 되는 영역을 그려준다.
+- 그를 위해 recipe-fetch-region을 따로 만들어줬다.
 
 ```html
 <!DOCTYPE html>
@@ -1371,22 +1788,15 @@ public class RecipeMyPageService {
             <div class="mypage-content">
                 <h1>레시피 저장 리스트</h1>
                 <div class="recipe-list">
-                    <ul>
-                        <li th:each="recipe : ${recipes}">
-                            <a href="#" class="recipe-item" th:data-recipe-id="${recipe.id}" th:data-recipe-output="${recipe.outputHTML}">
-                                <span class="recipe-name" th:text="${recipe.title}">레시피 이름</span>
-                                <div>
-                                    <span class="option" th:each="tag : ${recipe.inputKeywords}" th:text="${tag}">카테고리</span>
-                                    <span class="date" th:text="${#temporals.format(recipe.createdDateTime, 'yyyy-MM-dd')}">2025-02-12</span>
-                                </div>
-                            </a>
-                        </li>
-
-                        <th:block th:if="${recipes.size() == 0}">
-                            <p>레시피가 없습니다.</p>
-                        </th:block>
+                    <ul id="recipe-fetch-region">
 
                     </ul>
+                </div>
+
+                <div class="pagination-container">
+                    <div id="pagination">
+                        <!-- AJAX로 페이지네이션 버튼 생성 -->
+                    </div>
                 </div>
 
                 <div id="recipeModal" class="recipe-modal">
@@ -1407,19 +1817,16 @@ public class RecipeMyPageService {
 </html>
 ```
 
-```js
-const recipeItems = document.querySelectorAll(".recipe-item");
 
+## <span style="color:#802548">_recipe의 history 다시보기- js_</span>
+
+- 페이지를 누를 때마다 fetch가 이뤄져야 한다.
+- HTML을 처음 만들 때부터 fetch가 이뤄지게 HTML 내에 click listener를 달았다.
+
+```js
 // 모달창 요소
 const modal = document.getElementById("recipeModal");
 const closeBtn = document.querySelector(".close-btn");
-
-recipeItems.forEach(item => {
-    item.addEventListener("click", function (event) {
-        event.preventDefault(); // 페이지 이동 방지
-        modal.style.display = "flex";
-    })
-});
 
 // 모달창 닫기 버튼
 closeBtn.addEventListener("click", function () {
@@ -1433,12 +1840,94 @@ window.addEventListener("click", function (event) {
     }
 });
 
-for (const eventListener of document.querySelectorAll(".recipe-item")) {
-    eventListener.addEventListener("click", function () {
-        const buttonTag = `<div class="footer">
-                                <button onclick="window.location.href='/board/boardWrite'">게시글 작성하기</button>
-                            </div>`;
-        document.querySelector(".recipe-info").innerHTML = this.dataset.recipeOutput + buttonTag;
-    })
+async function fetchRecipes(currentPage) {
+    try {
+        const response = await fetch(`/mypage/getRecipeSave?page=${currentPage}`);
+        const data = await response.json(); // Assuming JSON response
+
+        renderRecipes(data.content);
+        generatePagination(data);
+
+    } catch (error) {
+        console.error("Error fetching recipes:", error);
+    }
 }
+
+function renderRecipes(recipes) {
+    const recipeHTML = document.querySelector("#recipe-fetch-region");
+    recipeHTML.innerHTML = ""; // Clear previous content
+    let html = '';
+
+    recipes.forEach(recipe => {
+        const outerHTML = escapeHTML(recipe.outputHTML);
+        const createdDateTime = new Date(recipe.createdDateTime).toISOString().split('T')[0];
+        html += `<li>
+                        <a href="#" class="recipe-item" data-recipe-id="${recipe.id}" data-recipe-output="${outerHTML}">
+                            <span class="recipe-name">${recipe.title}</span>
+                            <div>
+                            `;
+        recipe.inputKeywords.forEach(keyword => {
+            html += `
+                                    <span class="option">${keyword}</span>
+                        `;
+        })
+        html += `
+                                    <span class="date">${createdDateTime}</span>
+                            </div>
+                        </a>
+                    </li>
+                `;
+    });
+    recipeHTML.innerHTML = html;
+    handlerRecipeItemClick();
+}
+
+function generatePagination(resp) {
+    let pagination = '';
+    let currentPage = resp.number;
+    let totalPages = resp.totalPages;
+    let groupSize = 10;
+    let startPage = Math.floor(currentPage / groupSize) * groupSize;
+    let endPage = Math.min(startPage + groupSize, totalPages);
+
+    if (startPage > 0) {
+        pagination += `<button onclick="fetchRecipes(${startPage - 1})">◀ 이전</button>`;
+    }
+
+    for (let i = startPage; i < endPage; i++) {
+        pagination += `<button onclick="fetchRecipes(${i})" class="${i === currentPage ? 'active' : ''}">${i + 1}</button>`;
+    }
+
+    if (endPage < totalPages) {
+        pagination += `<button onclick="fetchRecipes(${endPage})">다음 ▶</button>`;
+    }
+
+    document.querySelector('#pagination').innerHTML= pagination;
+}
+
+function handlerRecipeItemClick() {
+    for (const eventListener of document.querySelectorAll(".recipe-item")) {
+        eventListener.addEventListener("click", function (event) {
+            event.preventDefault(); // 페이지 이동 방지
+            modal.style.display = "flex";
+
+            const buttonTag = `<div class="footer">
+                                    <button onclick="window.location.href='/board/boardWrite'">게시글 작성하기</button>
+                                </div>`;
+            document.querySelector(".recipe-info").innerHTML = this.dataset.recipeOutput + buttonTag;
+        })
+    }
+}
+
+// Load first page
+fetchRecipes(0);
+
+function escapeHTML(str) {
+    return str.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 ```
