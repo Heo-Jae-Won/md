@@ -8,7 +8,7 @@ implementation 'org.springframework.boot:spring-boot-starter-webflux'
 ```
 
 - 추가했다면 webflux를 쓰기 편하게 config로 하여 bean을 만들어준다.
-- webcline는 이제 bean으로 만들어졌다.
+- webcline는 이제 bean으로 만들어졌다. 
 
 ```java
 @Configuration
@@ -25,12 +25,6 @@ public class RecipeRecommendConfig {
                 .build();
     }
     
-    // ObjectMapper 빈 등록
-
-    @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
-    }
 }
 ```
 
@@ -81,7 +75,7 @@ public class MessageDTO {
 ```
 
 - 외부로 보내야 하기 때문에 class 위에 다음과 같은 annotation이 필요하다.
-- Serializable도 implements해줘야 한다.
+- 외부로는 JSON구조로 통신하기 때문에 Serializable을 implements할 필요는 없다.
 
 ```java
 @ToString
@@ -90,11 +84,23 @@ public class MessageDTO {
 @Setter
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ChatGPTRequestDTO implements Seriablizable {
+public class ChatGPTRequestDTO {
     private String model;
     private List<MessageDTO> messages;
     private Double temperature;
 }
+```
+
+- 덕지덕지 붙는 게 싫은 사람들은 Java17에서 사용가능한 record class를 사용하면 더 좋다.
+
+```java
+@Builder
+public record ChatGPTRequestDTO(
+                                    String model,
+                                    List<MessageDTO> messages,
+                                    Double temperature) {
+
+                                    }
 ```
 
 ## <span style="color:#802548">_chatGPT에서 response 받기- responseDTO_</span>
@@ -158,9 +164,9 @@ public class RecipeChatGPTResponseDTO implements Serializable {
 }
 ```
 
+
 - MessageChatGPT는 role과 content로 이뤄져있다.
 - role은 system, user를 사용하게 되므로 이를 맞춰 값을 만들어 준다.
-- 
 
 ```java
 @ToString
@@ -185,7 +191,7 @@ public class MessageChatGPTDTO implements Serializable {
 ```
 
 - 재료, 음식용도, 메뉴, 맛, 난이도의 변수를 받아올 수 있는 DTO를 만든다.
-- 아래와 같이 간편한 방식은 Java 15이상에서만 가능하다. 
+- 아래와 같이 간편한 방식(""")은 Java 15이상에서만 가능하다. 
 
 ```java
 .
@@ -247,7 +253,8 @@ public class RecipeUserRequestDTO  {
 }
 ```
 
-- recipeConditionDTO는 추가될 수 있기 때문에 따로 class를 만들어 관리한다.
+- recipeConditionDTO는 추가될 수 있다.
+- 유지보수하기 쉽게 따로 class를 만들어 관리한다.
 
 ```java
 @ToString
@@ -423,7 +430,7 @@ public String viewRecipeRecoomendOutput(Model model, HttpSession session) {
 ```
 
 - empty인 경우의 builder를 추가해준다.
-- session이 시간이 지나 무효화된 경우, 어떻게 처리할 지는 이제 front에 달렸다.
+- session이 시간이 지나 무효화된 경우, 어떻게 처리할 지도 backend에서 정하는 형태다.
 - string message는 전부 enum으로 나중에 변환이 필요하다.
 
 ```java
@@ -482,6 +489,44 @@ public class RecipeConditionDTO {
 }
 ```
 
+- string message는 앞으로 session 만료에 따른 기본 default message로 작동하게 된다.
+- 여러군데 분산되어 string으로 관리하면 전부 한꺼번에 찾아내기가 매우 어렵다.
+
+```java
+public static RecipeUserResponseDTO empty() {
+        return RecipeUserResponseDTO.builder()
+                                    .title("session이 만료되었습니다.")
+                                    .ingredients(new String[]{"session이 만료되었습니다."})
+                                    .cookingMethods(new String[]{"session이 만료되었습니다."})
+                                    .recipeConditionDTO(RecipeConditionDTO.empty())
+                                    .build();
+}
+```
+
+- enum을 활용해 전체적으로 한군데에서 관리하기 쉽게 변경한다.
+- global 폴더 안에 놔두면 더 편리해진다.
+
+```java
+@Getter
+@RequiredArgsConstructor
+public enum ErrorEnum {
+    SESSION_INVALIDATE("session이 만료되었습니다.");
+
+    private final String message;
+}
+
+public static RecipeUserResponseDTO empty() {
+        return RecipeUserResponseDTO.builder()
+                                    .title(ErrorEnum.SESSION_INVALIDATE.getMessage())
+                                    .ingredients(new String[]{ErrorEnum.SESSION_INVALIDATE.getMessage()})
+                                    .cookingMethods(new String[]{ErrorEnum.SESSION_INVALIDATE.getMessage()})
+                                    .recipeConditionDTO(RecipeConditionDTO.empty())
+                                    .build();
+    }
+```
+
+
+
 - session에서 너무 오래 쥐고 있으면 부담이 간다.
 - 다시 추천페이지에 들어왔다면, 이전에 저장해둔 정보를 활용할 이유가 없다. 
 - 따라서 그냥 지워준다.
@@ -502,7 +547,7 @@ public String viewRecipeRecoomend(HttpSession session) {
 - 첫번째 처럼 만들면 local에서만 작동한다.
     - 반드시 두번째처럼 만들어줘야 배포했을 때도 정상 작동한다.
     - 두번째가 context-relative resolution이기 때문이다. 
-    - 경로가 바껴도 정상 작동하게 하려면 두번째 것으로 하자.
+    - 경로가 바뀌어도 정상 작동하게 하려면 두번째 것으로 하자.
 
 ```html
 <div class="header" th:replace="/fragment/header :: top-menu"></div>
@@ -805,7 +850,251 @@ $(document).on('submit', '#recommend-form', function (e) {
 });
 ```
 
-//TODO. properties 파일 암호화 관련 추가 --jascyprt
+- chatGPT와의 통신은 수 초간 지속되는 경우가 많으므로 loading 이미지를 넣어준다.
+
+```html
+<div  class="loader" style="display: none;">
+    <img class="loader-bar" th:src="@{/image/cook-load.gif}"></img>
+</div>
+```
+
+- css는 인터넷에 있는 거 그냥 가져왔다.
+
+```css
+.loader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    z-index: 9999;
+    opacity: 70%;
+  }
+  
+.loader-bar {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 300px;
+    height: 300px;
+    margin-top: -5px;
+    margin-left: -50px;
+    background-color: white;
+}
+  
+@keyframes loader-bar {
+    0% {
+        transform: translateX(-50%) scaleX(0);
+    }
+    50% {
+        transform: translateX(-50%) scaleX(1);
+    }
+    100% {
+        transform: translateX(-50%) scaleX(0);
+    }
+}
+```
+
+- js로 loading bar를 control한다.
+
+```js
+function showLoader() {
+  loader.style.display = 'block';
+}
+
+function hideLoader() {
+  loader.style.display = 'none';
+}
+
+$(document).on('submit', '#recommend-form', function (e) {
+    //data-collect
+    showLoader();
+    fetch('/recipe/chatGPT', {
+        body:JSON.stringify(sendData),
+        headers:{
+            'content-type':'application/json'
+        },
+        method:'post'
+    }).then((response) => {
+        hideLoader();
+        if(!response.ok) {
+            Swal.fire({
+                icon: 'error',
+                title: '오류가 발생하였습니다.',
+                text: '네트워크가 연결되어있는지 확인해주세요',
+                confirmButtonColor: '#ff7f50',
+                confirmButtonText: '확인',
+            });
+            return;
+        }
+
+        location.href='/recipe/recommend/output';
+    })
+    .catch((error)=> hideLoader());
+});
+```
+
+## <span style="color:#802548">_user의 request api key 암호화_</span>
+
+- open api key가 노출되면 악용될 수 있다.
+- 따라서 application-properties에 암호화된 값을 올려야 한다.
+- 그 때 Spring Valut를 쓰기도 하는데, 우리는 서버를 더 추가했다간 RAM이 박살나서 포기했다.
+- 대신 흔하게 쓰이는 jascyprt로 암호화된 값을 넣어준다.
+
+```java
+implementation 'com.github.ulisesbocchio:jasypt-spring-boot-starter:3.0.5'
+```
+
+- 이름은 Encryptor긴 하지만, decrypt 로직으로도 쓰인다.
+- 아래 encryptKey는 system 변수인데, 구동할 때 받는 JVM option을 의미한다.
+    - application.properties에 있는 값이 아니다.
+    - application에 password를 노출하면 복호화가 그대로 뚫려버리는 것이므로 JVM option으로 줘야한다.
+
+```java
+@Configuration
+public class PropertiesEncryptConfig {
+
+    @Value("#{systemProperties['jasypt.encryptor.password']}")
+    private String encryptKey;
+
+    @Bean(name = "JasyptEncoder")
+    public PooledPBEStringEncryptor stringEncryptor() {
+        PooledPBEStringEncryptor encryptor = new PooledPBEStringEncryptor();
+        SimpleStringPBEConfig config = new SimpleStringPBEConfig();
+        config.setPassword(encryptKey);
+        config.setAlgorithm("PBEWithMD5AndDES");
+        config.setKeyObtentionIterations("1000");
+        config.setPoolSize("1");
+        config.setSaltGeneratorClassName("org.jasypt.salt.RandomSaltGenerator");
+        config.setStringOutputType("base64");
+        encryptor.setConfig(config);
+        return encryptor;
+    }
+}
+```
+
+- JVM option으로 아래와 같은 형태다.
+- JVM의 최적화 용도로도 쓰지만, Spring boot server에 관한 옵션으로도 쓴다.
+
+```sh
+java -Djasypt.encryptor.password=나는비밀키야 ~~~.jar
+```
+
+- vscode에서 local에서 위의 JVM 변수 값을 주려면 아래와 같이 준다.
+- 아래 파일은 launch.json인데, 좌측 side bar에 run and debug 메뉴를 누르면 create a launch.json이 뜬다.
+- 거기서 vmArgs를 넣어주면 된다. -D를 붙이는 형태다. 
+- JVM option으로 두가지 값을 넣어도 그냥 띄어쓰기하고 그대로 이어준다. 배열같은데 구분해서 넣지 않는다.
+
+```json
+{
+    "version": "0.0.2",
+    "configurations": [
+        {
+            "type": "본인거",
+            "name": "본인거",
+            "request": "본인거",
+            "mainClass": "본인거",
+            "projectName": "본인거",
+            "vmArgs": "-Dspring.profiles.active=local -Dspring.profiles.active=local"
+        },
+    ]
+}
+```
+
+- 암호화된 값을 알아내는 법은 두 가지다.
+- 하나는 그냥 test에서 돌리는 방법이다.
+- test에서 돌릴 때는 서버의 JVM option을 가져오지 못하므로 test class에서 직접 박아 넣는다.
+
+```java
+@SpringBootTest
+class ProjectApplicationTests {
+
+	@Test
+	void contextLoads() {
+	}
+
+	@BeforeAll
+    static void setup() {
+        System.setProperty("jasypt.encryptor.password", "나는비밀키야");
+        System.setProperty("jasypt.encryptor.bean", "JasyptEncoder");
+    }
+
+	@Test
+    @DisplayName("1. Encrypt Test")
+    void test1() {
+        String secretKey = "나는비밀키야";
+
+        String targetText = "나는암호화해야할중요한값";
+
+        // Using Jasypt
+        StandardPBEStringEncryptor encryptor = new StandardPBEStringEncryptor();
+        encryptor.setPassword(secretKey);
+		encryptor.setAlgorithm("PBEWithMD5AndDES");
+        String encryptedText = encryptor.encrypt(targetText);
+        System.out.println("encryptedText = " + encryptedText);
+
+        String decryptedText = encryptor.decrypt(encryptedText);
+        System.out.println("decryptedText = " + decryptedText);
+
+        Assertions.assertThat(decryptedText).isEqualTo(targetText);
+    }
+}
+```
+
+
+- 다른 하나는 jar를 다운로드하여 java -cp를 돌리는 방법이다.
+- chatGPT에 jasypt-1.9.3.jar를 다운로드 받는 link를 달라고 하자.
+- 위에서 우리가 받은 것은 boot-starter 버전인데 왜 jasypt-1.9.3인지 의문이 드는 사람도 있을 수 있다.
+    - 하지만 spring-boot-starter 버전에는 CLI 용이 포함되어 있지 않다.
+    - 따라서 jasypt-1.9.3.jar를 다운로드 받아야한다.
+    - https://mvnrepository.com/artifact/org.jasypt/jasypt/1.9.3 참고 링크다.
+    - 여기서 Files를 보면 jar가 보인다. 이걸 다운로드 받자.
+        - java HOME 경로를 우선 등록하여 system 변수로 활용할 수 있게끔 해주는 선행작업이 필요하다.
+        - 그 후에 cmd를 켜서 다운로드 받은 경로에 들어가서 아래 명령어를 실행하면 된다.
+        - 그냥 아무대서나 실행하면 오류가 뜬다. 해당 jar가 없기 떄문이다.
+
+
+```sh
+java -cp jasypt-1.9.3.jar org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI input="open.api.key"  password="ㄹㄹㄹ" algorithm=PBEWithMD5AndDES
+```
+
+- 그럼 아래와 같이 메시지가 뜨게된다. output이 암호화된 값이다.
+
+```
+C:\>java -cp jasypt-1.9.3.jar org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI input="open.api.key"  password="ㄹㄹㄹ" algorithm=PBEWithMD5AndDES
+
+----ENVIRONMENT-----------------
+
+Runtime: Oracle Corporation OpenJDK 64-Bit Server VM 17.0.2+8-86
+
+
+
+----ARGUMENTS-------------------
+
+input: email
+password: rezotakonooomu114451@@44%%
+algorithm: PBEWithMD5AndDES
+
+
+
+----OUTPUT----------------------
+
+egwSedXojdGIdVc9p+XXoA==
+```
+
+- 이제 암호화된 값을 ENC()의 괄호 안에 넣어준다.
+- decode하는 역할은 bean의 이름을 주어야 한다.
+    - 위에 PropertiesEncryptConfig에서 만든 bean의 이름을 넣자.
+        - name = ""에 써져있는 JasyptEncoder다.
+        - 사람마다 다르니까 알아서 잘 넣어주자.
+        - 안 넣으면 decrypt가 안 돼서 오류난다.
+
+```sh
+open.api.key=ENC(egwSedXojdGIdVc9p+XXoA==)
+jasypt.encryptor.bean=JasyptEncoder
+```
+
 
 ## <span style="color:#802548">_recipe의 history 저장하기- ERD_</span>
 
@@ -824,20 +1113,75 @@ Create table recipe
 );
 ```
 
-
+- keyword는 복수개를 집어넣어야 한다.
+- 따라서 batch insert가 필요하므로 auto_increment를 걸지 않고 compound로 PK를 만든다.
 
 ```sql
-
+CREATE TABLE recipe_input_keyword
+(
+    recipe_seq BIGINT NOT NULL,
+    keyword VARCHAR(30) NOT NULL,
+    CONSTRAINT recipe_input_keyword_PK PRIMARY KEY (recipe_seq, keyword),
+    CONSTRAINT recipe_input_keyword_FK FOREIGN KEY (recipe_seq) REFERENCES recipe(recipe_seq) ON DELETE CASCADE
+);
 ```
 
 
-
-//TODO. recipe-output table
+- recipe_output_content는 strict한 identifying relationship을 만들까 고민을 했다.
+- 우리는 recipe 1개에 recipe-content가 하나였기 떄문이다.
+- 근데 확장성을 위해서는 대리키를 쓰는게 좋다고 하여, 일단은 대리키를 사용했다.
 
 ```sql
+CREATE TABLE recipe_output_content
+(
+    recipe_output_content_seq BIGINT AUTO_INCREMENT,
+    recipe_seq BIGINT NOT NULL,
+    recipe_title varchar(100) NOT NULL,
+    output_content longtext NOT NULL,
+    CONSTRAINT recipe_output_content_PK PRIMARY KEY (recipe_output_content_seq),
+    CONSTRAINT recipe_output_content_recipe_FK FOREIGN KEY (recipe_seq) REFERENCES recipe(recipe_seq) ON DELETE CASCADE
+);
 
 ```
 
+- 만약 대리키를 사용하지 않았다면 strict한 identifying relationship이 됐을 것이다.
+
+```sql
+CREATE TABLE recipe_output_content
+(
+    recipe_seq BIGINT NOT NULL,
+    recipe_title varchar(100) NOT NULL,
+    output_content longtext NOT NULL,
+    CONSTRAINT recipe_output_content_PK PRIMARY KEY (recipe_seq),
+    CONSTRAINT recipe_output_content_recipe_FK FOREIGN KEY (recipe_seq) REFERENCES recipe(recipe_seq) ON DELETE CASCADE
+);
+```
+
+- entity도 아래와 같이 만들어졌을 것이다.
+
+```java
+@Entity
+@Getter
+@Setter
+@Table(name = "recipe_output_content")
+public class RecipeOutputContent {
+
+    @Id
+    @Column(name = "recipe_seq")
+    private Long recipeSeq;
+
+    @OneToOne
+    @MapsId("recipeSeq")  // This makes recipe_seq both the primary key and foreign key
+    @JoinColumn(name = "recipe_seq")
+    private RecipeEntity recipeEntity;
+
+    @Column(name = "recipe_title", length = 100, nullable = false)
+    private String recipeTitle;
+
+    @Column(name = "output_content", columnDefinition = "LONGTEXT", nullable = false)
+    private String outputContent;
+}
+```
 
 
 
@@ -868,7 +1212,6 @@ public class RecipeEntity {
     @JoinColumn(name = "user_seq", referencedColumnName = "user_seq")
     private UserEntity userEntity;
 
-
     @Column(name = "created_at")
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -892,12 +1235,11 @@ public class RecipeEntity {
 
 ```java
 @Embeddable
-@EqualsAndHashCode
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
 @Getter
-public class RecipeComplicatedPK implements Serializable {
+public class RecipeComplicatedPK {
 
     @Column(name = "recipe_seq")
     private Long recipeSeq;
@@ -1038,9 +1380,390 @@ public class RecipeHistoryService {
 }
 ```
 
+- 하지만 saveALl의 경우, 불필요한 여러 select query를 마주하게 된다.
+- 이는 saveAllAndFlush를 해도 마찬가지다.
 
-//TODO bulk insert 적용하기
-//TODO 쓸데없는 쿼리문 줄이기
+```
+Hibernate: 
+    select
+        ue1_0.user_seq,
+        ue1_0.created_at,
+        ue1_0.is_deleted,
+        ue1_0.roles,
+        ue1_0.updated_at,
+        ue1_0.user_email,
+        ue1_0.user_id,
+        ue1_0.user_name,
+        ue1_0.user_password 
+    from
+        user ue1_0 
+    where
+        ue1_0.user_id=?
+Sun Mar 16 21:07:21 KST 2025 INFO: [QUERY] select ue1_0.user_seq,ue1_0.created_at,ue1_0.is_deleted,ue1_0.roles,ue1_0.updated_at,ue1_0.user_email,ue1_0.user_id,ue1_0.user_name,ue1_0.user_password from user ue1_0 where ue1_0.user_id='ruincraim' [Created on: Sun Mar 16 21:07:21 KST 2025, duration: 0, connection-id: 2786, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)]
+ProxyPreparedStatement.java:52
+Sun Mar 16 21:07:21 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:07:21 KST 2025, duration: 0, connection-id: 2786, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)]
+ProxyPreparedStatement.java:52
+Hibernate: 
+    insert 
+    into
+        recipe
+        (created_at, user_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    select
+        rike1_0.keyword,
+        rike1_0.recipe_seq 
+    from
+        recipe_input_keyword rike1_0 
+    where
+        (
+            rike1_0.keyword, rike1_0.recipe_seq
+        ) in ((?, ?))
+Hibernate: 
+    select
+        rike1_0.keyword,
+        rike1_0.recipe_seq 
+    from
+        recipe_input_keyword rike1_0 
+    where
+        (
+            rike1_0.keyword, rike1_0.recipe_seq
+        ) in ((?, ?))
+Hibernate: 
+    select
+        rike1_0.keyword,
+        rike1_0.recipe_seq 
+    from
+        recipe_input_keyword rike1_0 
+    where
+        (
+            rike1_0.keyword, rike1_0.recipe_seq
+        ) in ((?, ?))
+Hibernate: 
+    select
+        rike1_0.keyword,
+        rike1_0.recipe_seq 
+    from
+        recipe_input_keyword rike1_0 
+    where
+        (
+            rike1_0.keyword, rike1_0.recipe_seq
+        ) in ((?, ?))
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_output_content
+        (output_content, recipe_seq, recipe_title) 
+    values
+        (?, ?, ?)
+```
+
+- 아래 select는 굳이 필요하지 않은 select다.
+
+```
+select
+        rike1_0.keyword,
+        rike1_0.recipe_seq 
+    from
+        recipe_input_keyword rike1_0 
+    where
+        (
+            rike1_0.keyword, rike1_0.recipe_seq
+        ) in ((?, ?))
+```
+
+
+- 또한 insert 문도 batch insert로 적용되지 않는다.
+
+```
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+```
+
+- 해당 문제는 save자체의 문제에서 비롯된다.
+- save는 entity가 영속화되지 않은 경우, 반드시 그 존재 여부를 select를 통해서 확인하기 때문이다.
+- 있는 것이 명확한 경우에는 불필요한 select를 제외하기 위해 EntityManager를 통한 persist - flush를 사용한다.
+
+```java
+@Repository
+public class RecipeInputBatchInSertRepository {
+
+    @PersistenceContext
+    EntityManager entityManager;
+
+    public void bulkInsertRecipeKeywords(List<RecipeInputKeywordEntity> keywords) {
+        for (int i = 0; i < keywords.size(); i++) {
+            entityManager.persist(keywords.get(i));
+        }
+        entityManager.flush(); // Final flush
+        entityManager.clear();
+    }
+
+}
+```
+
+- saveAll을 쓸 때 있었던 불필요한 select 문이 사라졌음을 알 수 있다.
+
+```
+Hibernate: 
+    select
+        ue1_0.user_seq,
+        ue1_0.created_at,
+        ue1_0.is_deleted,
+        ue1_0.roles,
+        ue1_0.updated_at,
+        ue1_0.user_email,
+        ue1_0.user_id,
+        ue1_0.user_name,
+        ue1_0.user_password 
+    from
+        user ue1_0 
+    where
+        ue1_0.user_id=?
+Hibernate: 
+    insert 
+    into
+        recipe
+        (created_at, user_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_output_content
+        (output_content, recipe_seq, recipe_title) 
+    values
+        (?, ?, ?)
+```
+
+- 위와 같은 방식을 해도 batch insert는 개선되지 않는다.
+- batch insert는 우선 @Id가 Identity로 선언되면 안된다.
+    - idenetity는 일단 insert된 뒤에 그 id 값을 JPA에서 인지할 수 있기 떄문에 batch insert를 지원하지 않는다.
+    - 내 경우에는 identity가 아닌 복합키 방식이므로 batch insert가 가능했다.
+- 그래서 안 되는 이유를 찾아보니, 특별한 설정이 요구되었다.
+    - url에는 rewriteBatchedStatements=true를 추가한다.
+
+```sh
+spring.datasource.url=jdbc:mysql://localhost:3306/project?rewriteBatchedStatements=true
+```
+
+- 위의 설정을 추가해도 hibernate 상으로는 insert문이 4번 나간다.
+
+```
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+```
+
+
+- 하지만 실제 SQL과 hibernate의 sql은 다르게 나갈 수 있다.
+    - hibernate에서 생성한 sql을 mysql driver가 rewrite하기때문에, 실제 native sql이 어떻게 진행되는지가 중요하다.
+    - 관련해선 https://stackoverflow.com/questions/21530112/no-matter-what-i-cant-batch-mysql-insert-statements-in-hibernate  참고하자.
+- 실제 natvie sql을 살펴보고 싶다면 driver url에 아래 내용을 추가해야 한다.
+    - &profileSQL=true
+
+```sh
+spring.datasource.url=jdbc:mysql://localhost:3306/project?rewriteBatchedStatements=true&profileSQL=true
+```
+
+- 실제 natvie sqlmf 살펴봐도 insert 문은 4개가 나가고 있다.
+- batch insert가 아닌 것이다.
+
+```
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Sun Mar 16 21:02:17 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('일반식',18) [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 1, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Sun Mar 16 21:02:17 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 0, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Sun Mar 16 21:02:17 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('한식',18) [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 2, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Sun Mar 16 21:02:17 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 0, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Sun Mar 16 21:02:17 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('매운맛',18) [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 0, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Sun Mar 16 21:02:17 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 1, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Sun Mar 16 21:02:17 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('초보',18) [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 0, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+ProxyPreparedStatement.java:61
+Sun Mar 16 21:02:17 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:02:17 KST 2025, duration: 0, connection-id: 2776, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeUpdate(ProxyPreparedStatement.java:61)]
+```
+
+
+- batch insert를 위해선 option이 한 가지 더 필요한 것이다.
+- 바로 batch size이다.
+
+```sh
+spring.jpa.properties.hibernate.jdbc.batch_size = 50
+```
+
+- hibernate 상으로는 insert문이 여러개지만, natvieSQL로는 batch insert가 이뤄지고 있다.
+
+```
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Hibernate: 
+    insert 
+    into
+        recipe_input_keyword
+        (keyword, recipe_seq) 
+    values
+        (?, ?)
+Sun Mar 16 20:58:13 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('일반식',17),('한식',17),('매운맛',17),('초보',17)
+```
 
 
 ## <span style="color:#802548">_recipe history 저장하기- controller_</span>
@@ -1269,8 +1992,72 @@ function removeBoomark() {
 
 
 ## <span style="color:#802548">_recipe의 history 저장하기- replay attack 방지용 nonce_</span>
-//TODO replay attack을 방지하는 nonce 값 추가
+- replay attack, 새로고침을 통한 무한 저장 등을 방지하기 위해 nonce 값을 도입하였다.
+- 우선 UUID로 이뤄진 nonce를 session에 저장한다.
 
+```java
+@PostMapping("/recipe/chatGPT")
+@ResponseBody
+public void viewRecipeOutput(@RequestBody RecipeUserRequestDTO recipeUserRequestDTO, HttpSession session) {
+
+    RecipeUserResponseDTO response = recipeService.getRecipeResponse(recipeUserRequestDTO);
+    
+    session.setAttribute("recipe", response);
+    String newUUID = UUID.randomUUID().toString(); 
+    session.setAttribute("nonce", newUUID);
+}
+```
+
+- model로 보낸 nonce는 html에서 hidden으로 보관한다.
+
+```html
+<input type="hidden" th:value="${nonce}" name="nonce" id="nonce">
+<input type="hidden" th:value="${recipe.recipeConditionDTO.usage}" name="usage" id="usage">
+<input type="hidden" th:value="${recipe.recipeConditionDTO.menu}" name="menu" id="menu">
+<input type="hidden" th:value="${recipe.recipeConditionDTO.taste}" name="taste" id="taste">
+<input type="hidden" th:value="${recipe.recipeConditionDTO.level}" name="level" id="level">
+```
+
+- 보관한 것을 js에서 보낸다.
+
+```js
+ const title = document.querySelector(".recipe-title").textContent;
+const outputContent = document.querySelector(".recipe-info").innerHTML; // HTML itself as a string
+const usage = document.querySelector("input[name='usage']").value;
+const menu = document.querySelector("input[name='menu']").value;
+const taste = document.querySelector("input[name='taste']").value;
+const level = document.querySelector("input[name='level']").value;
+const nonce = document.querySelector("input[name='nonce']").value;
+
+const data = {
+    title,
+    recipeCondition: { usage, menu, taste, level },
+    outputContent,
+    nonce
+};
+```
+
+
+- nonce를 확인하여 저장하고, 저장이 성공하면 nonce 값을 지워 replay, refresh를 통한 무한 저장을 방지한다.
+
+```java
+@PostMapping("/recipe/history/save")
+@ResponseBody
+public ResponseEntity<Long> saveRecipeHistory(@RequestBody RecipeHistroyRequsetDTO recipeHistroyRequsetDTO, HttpSession session) throws InterruptedException {
+    String userNonce = (String) session.getAttribute("nonce");
+
+    if (!StringUtils.hasText(userNonce) || !recipeHistroyRequsetDTO.getNonce().equals(userNonce)) {
+        throw new RuntimeException("nonce 값이 존재하지 않습니다.");
+    }
+
+    Long savedRecipeSeq = recipeHistoryService.saveRecipeAndReturnSavedPK(recipeHistroyRequsetDTO);
+    if(savedRecipeSeq != 0) {
+        session.removeAttribute("nonce");   //recipe save 성공 시에는 즉시 session에서 nonce 값 제거하여 데이터 정합성 확보
+    }
+    
+    return ResponseEntity.ok(savedRecipeSeq);
+}
+```
 
 
 ## <span style="color:#802548">_recipe의 history 다시보기- controller_</span>
@@ -1366,10 +2153,75 @@ public Page<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincip
 ```
 
 - 따라서 별도의 DTO로 변환하여 사용하기로 결정했다.
+- Content의 type은 무엇이 될지 알 수 없기 때문에 generics를 사용한다.
+
+```java
+@ToString
+@Builder
+@AllArgsConstructor
+@Setter
+@Getter
+@NoArgsConstructor
+public class PageDTO<T> {
+    private List<T> content;
+    private int pageNumber;
+    private int totalPages;
+    private long totalElements;
+}
+```
+
+- builder를 통한 TODTO를 만들지 않는다면 아래와 같이 직접 가져오면 된다.
+- generics를 주었기 때문에, builder() 앞에 어떤 type인지 명시해준다.
+
+```java
+ @GetMapping("/mypage/getRecipeSave")
+@ResponseBody
+public PageDTO<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, 
+                                    @RequestParam(name = "page", required = false) int page) {
+    Page<RecipeMyPageResponse> recipePage = recipeMyPageService.findAllRecipeByUser(loginUserDetails.getUserSeq(), page);
+
+    PageDTO<RecipeMyPageResponse> recipe = PageDTO.<RecipeMyPageResponse>builder().content(recipePage.getContent())
+                                                            .pageNumber(recipeContent.getNumber())
+                                                            .totalElements(recipeContent.getTotalElements())
+                                                            .totalPages(recipeContent.getTotalPages())
+                                                            .build();
+    
+
+    return recipe; 
+}
+```
+
+- TODTO를 만들게 되면 아래와 같은 형태로 만들어준다.
+- genercis여도 parameter를 받아서 T를 미리 compile부터 알 수 있게 된다.
+- 그럼 runtime이 아니라 compile time에 해석가능하기에 generics를 써도 non-static reference error가 나지 않는다.
+
+```java
+public class PageDto<T> {
+    private List<T> content;
+    private int pageNumber;
+    private int totalPages;
+    private long totalElements;
+
+    public static <T> PageDTO<T> TODTO(Page<T> page) {
+        return PageDTO.<T>builder().content(page.getContent())
+                                    .pageNumber(page.getNumber())
+                                    .totalElements(page.getTotalElements())
+                                    .totalPages(page.getTotalPages())
+                                    .build();
+    }
+}
 
 
+@GetMapping("/mypage/getRecipeSave")
+@ResponseBody
+public PageDTO<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, 
+                                    @RequestParam(name = "page", required = false) int page) {
+    Page<RecipeMyPageResponse> recipeContent = recipeMyPageService.findAllRecipeByUser(loginUserDetails.getUserSeq(), page);
+    PageDTO<RecipeMyPageResponse> recipe = PageDTO.TODTO(recipeContent);
 
-
+    return recipe; 
+}
+```
 
 
 ## <span style="color:#802548">_recipe의 history 다시보기- repository_</span>
@@ -1535,7 +2387,7 @@ Page<RecipeEntity> findRecipesWithPagination(
 ```
 
 - 대신 query를 보면 알 수 있듯, recipe_output_content에는 recipe_seq index를 걸어야 한다.
-- recipe_input_keyword에도 마찬가지다.
+- recipe_input_keyword에도 마찬가지다. join 조건절이 해당 column을 사용하기 때문이다.
 
 ```sql
 select
@@ -1572,6 +2424,7 @@ where
     and roe1_0.recipe_output_content_seq is not null 
 order by
     re1_0.created_at
+
 Hibernate: 
 select
     count(distinct re1_0.recipe_seq) 
@@ -1728,9 +2581,11 @@ select
 
 - 실제로 sql을 받아서 적어넣어보면, distinct keyword는 필요하지 않다.
 - distinct가 있든 없든 sql 상의 결과값은 동일하다.
-- DISTINCT를 JPQL에 넣은 이유는 duplicated된 entity들을 제거하여 JAVA Object 관점에서 뽑기 좋게 만든 것 뿐이다.
-- 극한의 성능을 위해서라면 distinct를 빼고 JPA의 도움 없이 Java단에서 직접 entity들을 제거하고 합치는 작업을 해야한다.
+- DISTINCT를 JPQL에 넣은 이유는 JPQL의 distinct는 native sql의 distinct만이 아니라 다른 역할도 하기 때문이다.
+    - duplicated된 entity들을 제거하여 JAVA Object 관점에서 뽑기 좋게 만들어준다.
+    - 극한의 성능을 위해서라면 distinct를 빼고 JPA의 도움 없이 Java단에서 직접 entity들을 제거하고 합치는 작업을 해야한다.
 
+//TODO
 ```java
 
 ```
@@ -1930,4 +2785,36 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
+```
+
+- 그 중 주목해야 할 js는 아래의 js다.
+- 아래 js에서 groupSize는 page에 보여줄 size가 아니다.
+- page에서 이전과 다음 버튼이 나오게 할 분수령의 pageNumber다.
+    - 따라서 총 10 page가 넘어가야 다음 버튼이 생긴다.
+    - 다음 버튼을 눌러 11 page 쪽을 도달하면, 이전 버튼이 생긴다.
+    - 이러한 형태가 매 10page씩 반복된다.
+
+```js
+function generatePagination(resp) {
+    let pagination = '';
+    let currentPage = resp.number;
+    let totalPages = resp.totalPages;
+    let groupSize = 10;
+    let startPage = Math.floor(currentPage / groupSize) * groupSize;
+    let endPage = Math.min(startPage + groupSize, totalPages);
+
+    if (startPage > 0) {
+        pagination += `<button onclick="fetchRecipes(${startPage - 1})">◀ 이전</button>`;
+    }
+
+    for (let i = startPage; i < endPage; i++) {
+        pagination += `<button onclick="fetchRecipes(${i})" class="${i === currentPage ? 'active' : ''}">${i + 1}</button>`;
+    }
+
+    if (endPage < totalPages) {
+        pagination += `<button onclick="fetchRecipes(${endPage})">다음 ▶</button>`;
+    }
+
+    document.querySelector('#pagination').innerHTML= pagination;
+}
 ```
