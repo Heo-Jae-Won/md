@@ -1878,6 +1878,76 @@ Hibernate:
 Sun Mar 16 20:58:13 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (keyword,recipe_seq) values ('일반식',17),('한식',17),('매운맛',17),('초보',17)
 ```
 
+- 나눈다면 아래처럼 나눠줄 수도 있다.
+    - 참고로 private위에는 @Transctional을 넣을 필요가 없다.
+    - @Transactional은 Spring Aop를 통해 rollback을 수행한다.
+    - 그런데 private의 경우에는 Aop가 접근할 수 없어 rollback이 안된다. 이는 final도 마찬가지다.
+- 그러니 public method에 @Transactional을 달고 그 안에서 호출시키면 된다.
+
+```java
+@Transactional
+public Long saveRecipeAndReturnSavedPK(RecipeHistroyRequsetDTO recipeHistroyRequsetDTO) {
+    UserEntity user = findUser();
+    
+    RecipeEntity recipeEntity = recipeRepository.save(RecipeEntity.TOENTITY(user));
+
+    if (recipeEntity == null) {
+        throw new RuntimeException("recipe is not saved due to error");
+    }
+
+    List<RecipeInputKeywordEntity> recipeInputKeywords = recipeHistroyRequsetDTO.getAllConditions()
+                                                                                                .stream()
+                                                                                                .map(condition -> RecipeInputKeywordEntity.TOENTITY(recipeEntity, condition))
+                                                                                                .collect(Collectors.toList());
+
+    // 여기서 save query 안 나가고 select query가 발생함. 불필요한.. @Id에 generated 전략이 IDENTITY가 아니면 entity를 check하기 때문이라고 함.
+    RecipeInputBatchInSertRepository.bulkInsertRecipeKeywords(recipeInputKeywords);
+    
+    saveRecipeOutput(recipeEntity, recipeHistroyRequsetDTO.getTitle(), recipeHistroyRequsetDTO.getOutputContent());
+        
+    return recipeEntity.getRecipeSeq();
+}
+
+//@Transactional
+private /* final */ void saveRecipeOutput(RecipeEntity recipeEntity, String title, String outputContent) {
+    recipeOutputRepository.save(RecipeOutputEntity.TOENTTIY(recipeEntity, title,outputContent));
+}
+```
+
+- saveRecipeOutput()를 public으로 만들고 @Transactional을 붙여도 Controller에서 사용되는 게 saveRecipeAndReturnSavedPK()면 transactional은 작동하지 않는다. 
+- 무조건 외부에서 호출되는 method에 @Transactional을 붙여줘야 한다.
+- 아래는 만들면 안되는 예시인 것이다.
+
+```java
+public Long saveRecipeAndReturnSavedPK(RecipeHistroyRequsetDTO recipeHistroyRequsetDTO) {
+    UserEntity user = findUser();
+    
+    RecipeEntity recipeEntity = recipeRepository.save(RecipeEntity.TOENTITY(user));
+
+    if (recipeEntity == null) {
+        throw new RuntimeException("recipe is not saved due to error");
+    }
+
+    List<RecipeInputKeywordEntity> recipeInputKeywords = recipeHistroyRequsetDTO.getAllConditions()
+                                                                                                .stream()
+                                                                                                .map(condition -> RecipeInputKeywordEntity.TOENTITY(recipeEntity, condition))
+                                                                                                .collect(Collectors.toList());
+
+    // 여기서 save query 안 나가고 select query가 발생함. 불필요한.. @Id에 generated 전략이 IDENTITY가 아니면 entity를 check하기 때문이라고 함.
+    RecipeInputBatchInSertRepository.bulkInsertRecipeKeywords(recipeInputKeywords);
+    
+    saveRecipeOutput(recipeEntity, recipeHistroyRequsetDTO.getTitle(), recipeHistroyRequsetDTO.getOutputContent());
+        
+    return recipeEntity.getRecipeSeq();
+}
+
+@Transactional
+public void saveRecipeOutput(RecipeEntity recipeEntity, String title, String outputContent) {
+    recipeOutputRepository.save(RecipeOutputEntity.TOENTTIY(recipeEntity, title,outputContent));
+}
+```
+
+
 
 ## <span style="color:#802548">_recipe history 저장하기- controller_</span>
 - result를 저장해서 성공하면, recipeSeq를 return한다.
