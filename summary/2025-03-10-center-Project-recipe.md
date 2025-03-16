@@ -145,7 +145,7 @@ public record ChatGPTRequestDTO(
 @AllArgsConstructor
 @Setter
 @Getter
-public class RecipeChatGPTResponseDTO implements Serializable {
+public class RecipeChatGPTResponseDTO {
     private String id;
     private String object;
     private LocalDate created;
@@ -176,7 +176,7 @@ public class RecipeChatGPTResponseDTO implements Serializable {
 @Getter
 @Slf4j
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class MessageChatGPTDTO implements Serializable {
+public class MessageChatGPTDTO {
 
     private String role;
     private String content;
@@ -188,6 +188,7 @@ public class MessageChatGPTDTO implements Serializable {
                 .build();
 
     }
+}
 ```
 
 - 재료, 음식용도, 메뉴, 맛, 난이도의 변수를 받아올 수 있는 DTO를 만든다.
@@ -197,7 +198,7 @@ public class MessageChatGPTDTO implements Serializable {
 .
 .
 .
-public class MessageChatGPTDTO implements Serializable {
+public class MessageChatGPTDTO {
     public static MessageChatGPTDTO TOUSERMESSAGE(RecipeUserRequestDTO recipeUserRequestDTO) {
 
         String content = String.format("""
@@ -356,7 +357,11 @@ public class RecipeService {
     
 
 ```java
- // //GPT-4
+public RecipeUserResponseDTO sendRequestToChatGPT(RecipeUserRequestDTO recipeUserRequestDTO) {
+    List<MessageChatGPTDTO> messages = List.of(MessageChatGPTDTO.TOUSERMESSAGE(recipeUserRequestDTO),
+                    MessageChatGPTDTO.TOSYSTEMMESSAGE(recipeUserRequestDTO));
+    RecipeChatGPTRequestDTO recipeChatGPTRequestDTO = RecipeChatGPTRequestDTO.TODTO(model, messages, temperature);
+
     try {
         String jsonString = webClient.post()
                 .uri("https://api.openai.com/v1/chat/completions")
@@ -395,7 +400,84 @@ public class RecipeService {
         exception.printStackTrace();
         throw new RuntimeException("알 수 없는 에러가 발생하였습니다");
     }
+}
 ```
+
+- 위를 보다 명확하게 의미를 드러내주기 위해선 private method로 빼주자.
+- 과정에 의미를 부여하는 것이다.
+    - chatGPT 요청을 위한 message -> 응답받기 -> 응답을 parsing 순의 과정이 명확하게 드러난다.
+
+```java
+public RecipeUserResponseDTO getRecipeResponse(RecipeUserRequestDTO recipeUserRequestDTO) {
+    //CHATGPT에 필요한 system, user message를 생성
+    RecipeChatGPTRequestDTO recipeChatGPTRequestDTO = createMessageForChatGPTRequest(recipeUserRequestDTO);
+
+    try {
+        String jsonString = getResponseFromChatGPT(recipeChatGPTRequestDTO);
+        RecipeUserResponseDTO recipeUserResponseDTO = parseResponseFromChatGPT(jsonString, recipeUserRequestDTO.getRecipeConditionDTO());
+            
+        return recipeUserResponseDTO;
+
+    } catch (Exception exception) {
+        throw new RuntimeException("알 수 없는 에러가 발생하였습니다");
+    }
+}
+```
+
+
+- public은 controller에서 써야하는 것만 public으로 준다.
+- 내부에서만 사용하는 것들은 private으로 만들어준다.
+
+```java
+private RecipeChatGPTRequestDTO createMessageForChatGPTRequest(RecipeUserRequestDTO recipeUserRequestDTO) {
+    List<MessageChatGPTDTO> messages = List.of(MessageChatGPTDTO.TOUSERMESSAGE(recipeUserRequestDTO),
+            MessageChatGPTDTO.TOSYSTEMMESSAGE(recipeUserRequestDTO));
+
+    return RecipeChatGPTRequestDTO.TODTO(model, messages, temperature);
+}
+
+/**
+ * 타이틀, 재료, 조리방법을 parsing. 조리방법은 숫자를 기준으로 parsing.
+ */
+private RecipeUserResponseDTO parseResponseFromChatGPT(String jsonString, RecipeConditionDTO recipeUserRequestDTO) throws JsonMappingException, JsonProcessingException {
+    JsonNode jsonNode = objectMapper.readTree(jsonString);
+    JsonNode choicesNode = jsonNode.get("choices");
+    if (choicesNode.isArray()) {
+        String content = jsonNode.get("choices").get(0).get("message").get("content").asText();
+        String firstElement = "타이틀: ";
+        String secondElement = "재료: ";
+        String thridElement = "조리방법: ";
+        String title = content.substring(content.indexOf(firstElement) + firstElement.length(), content.indexOf(secondElement));
+        String[] ingredients = content.substring(content.lastIndexOf(secondElement) + secondElement.length(), content.indexOf(thridElement)).split(",");
+        String cookingMethod = content.substring(content.lastIndexOf(thridElement) + thridElement.length());
+
+        Pattern pattern = Pattern.compile("\\d+\\.\\s*(.*?)(?=\\s*\\d+\\.|$)");
+        Matcher matcher = pattern.matcher(cookingMethod);
+        List<String> steps = new ArrayList<>();
+        while (matcher.find()) {
+            steps.add(matcher.group(1).trim());
+        }
+        String[] cookingMethods = steps.toArray(new String[0]);
+
+        return RecipeUserResponseDTO.TODTO(title, ingredients, cookingMethods, recipeUserRequestDTO);
+    } else {
+        throw new RuntimeException("choiesNode가 array형태가 아닙니다.");
+    }
+}
+
+private String getResponseFromChatGPT(RecipeChatGPTRequestDTO recipeChatGPTRequestDTO) {
+    return webClient.post()
+                    .uri("/v1/chat/completions")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .bodyValue(recipeChatGPTRequestDTO)
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .block();
+}
+```
+
+
+
 
 ## <span style="color:#802548">_chatGPT에서 request 보내고 response 받기- controller_</span>
 
@@ -797,7 +879,7 @@ $(document).on('click', '.option-btn', function () {
 
 
 ```js
-$(document).on('submit', '#recommend-form', function (e) {
+$('#recommend-form').on('submit', function (e) {
     e.preventDefault(); // 폼 제출 방지
     if (!$('#ingredients-input').val().trim()) {
         Swal.fire({
@@ -907,7 +989,7 @@ function hideLoader() {
   loader.style.display = 'none';
 }
 
-$(document).on('submit', '#recommend-form', function (e) {
+$('#recommend-form').on('submit',  function (e) {
     //data-collect
     showLoader();
     fetch('/recipe/chatGPT', {
@@ -939,7 +1021,8 @@ $(document).on('submit', '#recommend-form', function (e) {
 
 - open api key가 노출되면 악용될 수 있다.
 - 따라서 application-properties에 암호화된 값을 올려야 한다.
-- 그 때 Spring Valut를 쓰기도 하는데, 우리는 서버를 더 추가했다간 RAM이 박살나서 포기했다.
+- 그 때 Spring Valut를 쓰기도 하는데, Vault는 서버를 하나 따로 만들어야한다.
+- 우리는 서버를 더 추가했다간 RAM이 박살나서 포기했다.
 - 대신 흔하게 쓰이는 jascyprt로 암호화된 값을 넣어준다.
 
 ```java
@@ -1005,6 +1088,7 @@ java -Djasypt.encryptor.password=나는비밀키야 ~~~.jar
 - 암호화된 값을 알아내는 법은 두 가지다.
 - 하나는 그냥 test에서 돌리는 방법이다.
 - test에서 돌릴 때는 서버의 JVM option을 가져오지 못하므로 test class에서 직접 박아 넣는다.
+    - @BeforeAll이다.
 
 ```java
 @SpringBootTest
@@ -1072,8 +1156,8 @@ Runtime: Oracle Corporation OpenJDK 64-Bit Server VM 17.0.2+8-86
 
 ----ARGUMENTS-------------------
 
-input: email
-password: rezotakonooomu114451@@44%%
+input: open.api.key
+password: ㄹㄹㄹ
 algorithm: PBEWithMD5AndDES
 
 
@@ -1094,6 +1178,8 @@ egwSedXojdGIdVc9p+XXoA==
 open.api.key=ENC(egwSedXojdGIdVc9p+XXoA==)
 jasypt.encryptor.bean=JasyptEncoder
 ```
+
+- 이제 서버가 구동될 떄마다 JasyptEncoder라는 bean이 decode를 하여 properties 값을 해석해 @Value에 넣어준다.
 
 
 ## <span style="color:#802548">_recipe의 history 저장하기- ERD_</span>
@@ -1130,6 +1216,7 @@ CREATE TABLE recipe_input_keyword
 - recipe_output_content는 strict한 identifying relationship을 만들까 고민을 했다.
 - 우리는 recipe 1개에 recipe-content가 하나였기 떄문이다.
 - 근데 확장성을 위해서는 대리키를 쓰는게 좋다고 하여, 일단은 대리키를 사용했다.
+    - 한 마디로 나중에 1 : n으로 바꿀 떄는 대리키가 아니면 안 된다는 의미다. 
 
 ```sql
 CREATE TABLE recipe_output_content
@@ -1332,6 +1419,35 @@ public class RecipeOutputEntity {
 }
 ```
 
+## <span style="color:#802548">_recipe의 history 저장하기- requestDTO_</span>
+
+- RecipeHistroyRequsetDTO는 별다를 게 없다. 
+- recipeInputKeyword 저장에 필요한 recipeCondition class
+- recipeOutputContent 저장에 필요한 outputContent와 title를 받는다.
+
+```java
+@ToString
+@NoArgsConstructor
+@Builder
+@AllArgsConstructor
+@Setter
+@Getter
+public class RecipeHistroyRequsetDTO {
+    private String title;
+    private String outputContent;
+    private RecipeConditionDTO recipeCondition;
+
+    public List<String> getAllConditions() {
+        return Arrays.asList(recipeCondition.getUsage(), 
+                                recipeCondition.getMenu(), 
+                                recipeCondition.getTaste(), 
+                                recipeCondition.getLevel()
+                            );
+    }
+
+}
+```
+
 ## <span style="color:#802548">_recipe의 history 저장하기- service_</span>
 
 - result를 저장할 때는 복수개의 entity를 저장하게 된다.
@@ -1399,10 +1515,6 @@ Hibernate:
         user ue1_0 
     where
         ue1_0.user_id=?
-Sun Mar 16 21:07:21 KST 2025 INFO: [QUERY] select ue1_0.user_seq,ue1_0.created_at,ue1_0.is_deleted,ue1_0.roles,ue1_0.updated_at,ue1_0.user_email,ue1_0.user_id,ue1_0.user_name,ue1_0.user_password from user ue1_0 where ue1_0.user_id='ruincraim' [Created on: Sun Mar 16 21:07:21 KST 2025, duration: 0, connection-id: 2786, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)]
-ProxyPreparedStatement.java:52
-Sun Mar 16 21:07:21 KST 2025 INFO: [FETCH]  [Created on: Sun Mar 16 21:07:21 KST 2025, duration: 0, connection-id: 2786, statement-id: 0, resultset-id: 0,	at com.zaxxer.hikari.pool.ProxyPreparedStatement.executeQuery(ProxyPreparedStatement.java:52)]
-ProxyPreparedStatement.java:52
 Hibernate: 
     insert 
     into
@@ -1557,6 +1669,7 @@ public class RecipeInputBatchInSertRepository {
 }
 ```
 
+- saveAll()대신 RecipeInputBatchInSertRepository를 DI하여 bulkInsertRecipeKeywords()로 사용하자.
 - saveAll을 쓸 때 있었던 불필요한 select 문이 사라졌음을 알 수 있다.
 
 ```
@@ -1767,11 +1880,9 @@ Sun Mar 16 20:58:13 KST 2025 INFO: [QUERY] insert into recipe_input_keyword (key
 
 
 ## <span style="color:#802548">_recipe history 저장하기- controller_</span>
-
-
 - result를 저장해서 성공하면, recipeSeq를 return한다.
 - return 한 recipeSeq 값이 있다면 성공하여 저장된 것으로 간주한다.
-- 이 recipeSeq를 free variable로 보유하여 2번 저장을 방지하는 형태다.
+- 이 recipeSeq를 js closure의 free variable로 보유하여 2번 저장을 방지하는 형태다.
 
 ```java
 @Controller
@@ -1787,33 +1898,6 @@ public class RecipeHistoryController {
 
         return ResponseEntity.ok(recipeHistoryService.saveRecipeHisotry(recipeHistroyRequsetDTO));
     }
-}
-```
-
-## <span style="color:#802548">_recipe의 history 저장하기- requestDTOs_</span>
-
-- 
-
-```java
-@ToString
-@NoArgsConstructor
-@Builder
-@AllArgsConstructor
-@Setter
-@Getter
-public class RecipeHistroyRequsetDTO {
-    private String title;
-    private String outputContent;
-    private RecipeConditionDTO recipeCondition;
-
-    public List<String> getAllConditions() {
-        return Arrays.asList(recipeCondition.getUsage(), 
-                                recipeCondition.getMenu(), 
-                                recipeCondition.getTaste(), 
-                                recipeCondition.getLevel()
-                            );
-    }
-
 }
 ```
 
@@ -2066,7 +2150,6 @@ public ResponseEntity<Long> saveRecipeHistory(@RequestBody RecipeHistroyRequsetD
 - recipe의 history를 다시보기 위한 page를 만든다.
 - 처음에는 아래처럼 thymeleaf를 통한 fetch를 생각했었다.
 
-
 ```java
 @Controller
 @RequiredArgsConstructor
@@ -2217,9 +2300,9 @@ public class PageDto<T> {
 public PageDTO<RecipeMyPageResponse> recipeSave(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, 
                                     @RequestParam(name = "page", required = false) int page) {
     Page<RecipeMyPageResponse> recipeContent = recipeMyPageService.findAllRecipeByUser(loginUserDetails.getUserSeq(), page);
-    PageDTO<RecipeMyPageResponse> recipe = PageDTO.TODTO(recipeContent);
+    PageDTO<RecipeMyPageResponse> recipes = PageDTO.TODTO(recipeContent);
 
-    return recipe; 
+    return recipes; 
 }
 ```
 
@@ -2257,7 +2340,7 @@ public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long
 } 
 ```
 
-- oneToone과 oneToMany에 따른 여러 entity들이 같이 조회되는 모습이다.
+- OneTOne과 oneToMany에 따른 여러 entity들이 같이 조회되는 모습이다.
 - 사실 redundant한 query가 많기 떄문에 한번에 가져와서 Java 내에서 parsing하는 게 필요해 보인다.
 - 보면 count query가 없는데 count query도 자동으로 날라간 것이 보인다. 
     - Page interface는 자동으로 count query를 날린다.
@@ -2284,6 +2367,7 @@ Hibernate:
         re1_0.created_at 
     limit
         ?
+
 Hibernate: 
     select
         roe1_0.recipe_output_content_seq,
@@ -2294,6 +2378,7 @@ Hibernate:
         recipe_output_content roe1_0 
     where
         roe1_0.recipe_seq=?
+
 Hibernate: 
     select
         ue1_0.user_seq,
@@ -2309,6 +2394,7 @@ Hibernate:
         user ue1_0 
     where
         ue1_0.user_seq=?
+
 Hibernate: 
     select
         roe1_0.recipe_output_content_seq,
@@ -2319,6 +2405,7 @@ Hibernate:
         recipe_output_content roe1_0 
     where
         roe1_0.recipe_seq=?
+
 Hibernate: 
     select
         roe1_0.recipe_output_content_seq,
@@ -2329,6 +2416,7 @@ Hibernate:
         recipe_output_content roe1_0 
     where
         roe1_0.recipe_seq=?
+
 Hibernate: 
     select
         count(distinct re1_0.recipe_seq) 
@@ -2343,6 +2431,7 @@ Hibernate:
     where
         re1_0.user_seq=? 
         and roe1_0.recipe_output_content_seq is not null
+
 Hibernate: 
     select
         rikel1_0.recipe_seq,
@@ -2351,6 +2440,7 @@ Hibernate:
         recipe_input_keyword rikel1_0 
     where
         rikel1_0.recipe_seq=?
+
 Hibernate: 
     select
         rikel1_0.recipe_seq,
@@ -2359,6 +2449,7 @@ Hibernate:
         recipe_input_keyword rikel1_0 
     where
         rikel1_0.recipe_seq=?
+
 Hibernate: 
     select
         rikel1_0.recipe_seq,
@@ -2536,46 +2627,46 @@ Page<RecipeEntity> findRecipesWithPagination(
 
 ```sql
 select
-        distinct re1_0.recipe_seq,
-        re1_0.created_at,
-        rikel1_0.recipe_seq,
-        rikel1_0.keyword,
-        roe1_0.recipe_output_content_seq,
-        roe1_0.output_content,
-        roe1_0.recipe_seq,
-        roe1_0.recipe_title,
-        re1_0.user_seq 
-    from
-        recipe re1_0 
-    join
-        recipe_input_keyword rikel1_0 
-            on re1_0.recipe_seq=rikel1_0.recipe_seq 
-    join
-        recipe_output_content roe1_0 
-            on re1_0.recipe_seq=roe1_0.recipe_seq 
-    join
-        user ue1_0 
-            on ue1_0.user_seq=re1_0.user_seq 
-    where
-        ue1_0.user_seq=? 
-    order by
-        re1_0.created_at
+    distinct re1_0.recipe_seq,
+    re1_0.created_at,
+    rikel1_0.recipe_seq,
+    rikel1_0.keyword,
+    roe1_0.recipe_output_content_seq,
+    roe1_0.output_content,
+    roe1_0.recipe_seq,
+    roe1_0.recipe_title,
+    re1_0.user_seq 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+join
+    user ue1_0 
+        on ue1_0.user_seq=re1_0.user_seq 
+where
+    ue1_0.user_seq=? 
+order by
+    re1_0.created_at
 
-    select
-        count(distinct re1_0.recipe_seq) 
-    from
-        recipe re1_0 
-    join
-        recipe_input_keyword rikel1_0 
-            on re1_0.recipe_seq=rikel1_0.recipe_seq 
-    join
-        recipe_output_content roe1_0 
-            on re1_0.recipe_seq=roe1_0.recipe_seq 
-    join
-        user ue1_0 
-            on ue1_0.user_seq=re1_0.user_seq 
-    where
-        ue1_0.user_seq=?
+select
+    count(distinct re1_0.recipe_seq) 
+from
+    recipe re1_0 
+join
+    recipe_input_keyword rikel1_0 
+        on re1_0.recipe_seq=rikel1_0.recipe_seq 
+join
+    recipe_output_content roe1_0 
+        on re1_0.recipe_seq=roe1_0.recipe_seq 
+join
+    user ue1_0 
+        on ue1_0.user_seq=re1_0.user_seq 
+where
+    ue1_0.user_seq=?
 ```
 
 
@@ -2611,6 +2702,8 @@ public class RecipeMyPageService {
     
 }
 ```
+
+- 참고로 Page로 return한 것은 위에서 만든 PageDTO로 다시 감싸서 front에 보내야 한다.
 
 
 ## <span style="color:#802548">_recipe의 history 다시보기- html_</span>
