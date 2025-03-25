@@ -1243,5 +1243,73 @@ public String logMapData(HashMap<String,Object> mapData){
         return mapLogger.toString();
 }
 
+```
+## <span style="color:#802548">_nativeBridge_</span>
 
+```js
+var callbackId=Math.floor(Math.randow()*2000000000);
+var callbacks = {}
 
+window.NativeBridge = {
+	exec: function(action,param,successCallback,fallCallback){
+		var sCallbackId = action + (callbackId++).toString();
+		
+		callbacks[sCallbackId]={
+			success : successCallback,
+			fail : failCallback
+		}
+
+		var osName = getOSName()
+		if(osName=='android'){
+			try{
+				var paramJsonString = null;
+				if(param != null && typeof param =="object"){
+					paramJsonString = JSON.stringify(param);
+					window["allonepayApp"][action](paramJsonString, sCallbackId)
+				}else{
+					window["allonepayApp"][action](sCallbackId)
+				}
+			}catch(e){
+				window.nativeBridge.fail(sCallbackId, 'action' + action + ':: nativeBridge exception ' + e);
+			}
+		}else if(osName =='ios'){
+			try{
+				var cmd={
+					name : action,
+					param : param,
+					sCallbackId : sCallbackId
+				}
+				window.webkit.messageHandlers.NHCWebInterface.postMessage(JSON.stringify(cmd))
+			}catch(e){
+				window.nativeBridge.fail(sCallbackId, 'action' + action + ':: nativeBridge exception ' + e);
+			}
+		}else{
+			console.log('web?');
+			window.nativeBridge.success(sCallbackId, action + 'result success!');
+		}
+	}
+
+	getCallbacks: function(){
+		return callbacks;
+	}
+
+	sucess: function(callbackId,data){
+		window.nativeBridge.callbackFromNative(callbackId,true,data);
+	}
+	
+	fail: function(callbackId,data){
+		window.nativeBridge.callbackFromNative(callbackId,false,data):
+	}
+
+	callbackFromNative: function(callbackId, isSuccess, data){
+		var callback = callbacks[callbackId]
+		if(isSuccess){
+			callback.sucess && callback.success.apply(null,[data]):
+		}else{
+			callback.fail && callback.fail.apply(null,[data]);
+		}
+		delete callbacks[callbackId];
+	}
+
+}
+```
