@@ -453,3 +453,17 @@ vi ~~~.log
 pageup/pagedown
 # 거기서부터 페이지를 올리고 내리면서 계속 로그를 본다.
 ```
+
+
+
+## <span style="color:#802548">_서비스 만들기_</span>
+
+```sh
+sudo journalctl -u tanomuzoko -f #돌아가고 있는 process에 접속하는 것. logback 없을 떄 로그보는 용도.
+
+sudo systemctl status mysql     # 해당 서비스가 running인지, 
+
+sudo systemctl status tanomuzoko.service #시작 시 jvm option은 무엇인지 등 볼 수 있음.
+
+sudo vi /etc/systemd/system/tanomuzoko.service #service 관련 start option 등 설정하는 것
+```
