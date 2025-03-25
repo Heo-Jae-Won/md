@@ -276,7 +276,7 @@ git fsck --no-reflog | awk '/dangling commit/ {print $3}' | xargs -L 1 git --no-
 - vscode의 gitlens가 깔렸다는 가정하에, 
   -  git stash를 클릭해보면서 자기가 만들었던 파일이 포함되어 있는지 확인해준다.
   - stash이므로 WIP 같은 이름으로 되어있을 것이다.
-  - WIP 같은 이름이 아닌 것들은 무시하자.
+  - WIP 같은 이름이 아닌 것들은 무시하자. 물론 별도의 이름을 준 경우도 있으니 그런 사항들은 확인이 필요하다.
   - WIP가 붙어있는 것들은 files changed를 보면서 바뀐게 내것이 맞는지 확인하자.
 
 
@@ -370,6 +370,7 @@ git restore --source [해쉬이름] [파일이름]
 ## <span style="color:#802548">_뺴먹은 내용 포함하여 다시 commit_</span>
 - 직전 commit에 포함시킬 경우 사용 가능한 방법이다.
 - 온전히 하나의 commit에 다 담을 수 있다.
+- 아직 remote에 push하지 않았을 때만 사용하자. --amend는 commit의 hash값을 바꾸기 떄문이다.
 
 ```sh
 git add [file이름] 
@@ -685,6 +686,7 @@ bvbaf1z d is added
 - 오타를 낸 걸 수정하고, 또 수정하는 commit을 했을 때도 유용하게 쓸 수 있다.
 - fixup을 2개를 하면, 2개 commit이 바뀐 내용을 합쳐서 다음 commit에 녹여낸다.
 - 아래와 같은 commit history가 있다고 해보자.
+- 원격에 올라간 commit 대상으로는 절대로 rebase를 쓰면 안된다.
 
 
 ```sh
@@ -730,7 +732,7 @@ v51241 my cat made this commit
 
 - commit을 아예 삭제하는 것도 가능하다.
 - 똑같이 현재 branch를 rebase 해준다.
-
+- 원격에 올라간 commit 대상으로는 절대로 rebase를 쓰면 안된다.
 
 ```sh
 git rebase -i HEAD~4
@@ -834,7 +836,8 @@ git reset --hard HEAD@{3}(ffcf8a9)
 - reflog에서는 움직임만을 HEAD로 잡아 알려주지, branch의 HEAD를 가리키지 않는다.
 - 따라서 HEAD@{0}과 HEAD@{2}가 실제로 branch 내에서 같은 것을 ref할 수 있다.
   - 여기선 donkey branch의 HEAD다.
-```
+
+```sh
 HEAD@{0}: checkout: moving from b151241251289512412 to donkey
 HEAD@{1}: checkout: moving from donkey to b165125125fs1512515 //donkey HEAD에서 donkey 내 다른 commit으로 이동. detached HEAD
 HEAD@{2}: commit: add haha
@@ -866,6 +869,7 @@ git reset --hard [commit hash]
 - git cherry pick은 주로 특정 branch에서 몇 개의 commit만 따오는 경우에 사용한다.
 - 이렇게 따온 commit이 있게 되면, 해당 branch를 main에 push할 경우 이미 가져온 commit에 의해 conflict가 난다.
 - 따라서 필요한 것만 따서 쓴 다음에 branch를 없애버리는 형태로 진행된다. 즉 다른 branch에 merge나 rebase하지 않는다.
+- dev branch와 main branch가 완전히 별도로 진행되는 경우, 주로 cherry-pick을 통해 dev -> main으로 들어간다.
 
 ```
 cderf21
@@ -1304,9 +1308,9 @@ git switch [feature branch] //그럼 알아서 upstream이 origin/featrue branch
 
 
 
-## <span style="color:#802548">_git commit 전부 초기화하면서 폴더 내용 그대로 가져가기_</span>
+## <span style="color:#802548">_git commit 전부 초기화하면서 프로젝트 그대로 가져가기_</span>
 - React를 js에서 ts로 바꾸는데 이전 commit은 전부 없애고 새로 시작하려고 한다. 
-- 그러면서 동시에 작업했던 내용은 가져가고 싶다면 아래와 같은 방법을 활용할 수 있다. 
+- 그러면서 동시에 작업했던 프로젝트를 이어갈 떄 아래와 같은 방법을 활용할 수 있다. 
 
 ```sh
 rm -rf .git
@@ -1319,6 +1323,22 @@ git push origin master
 
 - 그럼 첫 legacy 프로젝트를 처음 commit부터 시작할 수 있다.
 
+## <span style="color:#802548">_git commit을 이어가며 프로젝트 그대로 가져가기_</span>
+- React를 js에서 ts로 바꾸는데 이전 commit을 유지하며 새로 시작하려고 한다. 
+- 다만 git tag로 구분하지 않고 아예 별도의 repository를 만들고 싶다. 이러한 경우 아래처럼 하면 된다.
+
+```sh
+git clone --bare https://github.com/your-username/old-repo.git
+cd old-repo.git
+git push --mirror https://github.com/your-username/new-repo.git
+git clone https://github.com/your-username/new-repo.git
+cd new-repo
+git add .
+git commit -m "Start migration to TypeScript"
+git push origin migrate-to-ts
+```
+
+- 그럼 첫 js 프로젝트를 commit을 이어받으면서 ts로 conversion할 수 있다.
 
 
 ## <span style="color:#802548">_git folder명 바꾸기_</span>
@@ -1352,6 +1372,7 @@ git mv temp_folder dto
 ```
 - 그러고 나서 git status를 하면 바뀐게 보인다.
 - 직접 git add로 git bash에서 추가해주자.
+
 
 
 ## <span style="color:#802548">_vscode git 변화사항 추적이 안될 떄_</span>
