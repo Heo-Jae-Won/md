@@ -660,4 +660,75 @@ sudo systemctl daemon-reload
 ```
 
 
+## <span style="color:#802548">_CI_CD 설정_</span>
+
+<details>
+<summary>content</summary>
+<div markdown="1">
+
+- main branch에서 push와 PR이 진행될 때 trigger된다.
+- AWS_HOST와 AWS_USER, SSH_PRIVATE_KEY는 모두 AWS에 접속하기 위해 필요한 정보다.
+- 해당 정보를 그냥 쓰면 안 된다. public이라서 정보가 다 노출된다. 
+- repositry setting - > Security tab의 Secrets and variables - > actions -> repository secrets에 추가
+- SCP로 jar를 만들어서 하는 방법도 있지만, git 연동을 AWS에서 완성했다면, 그럴 필요가 없다.
+- 직접 안에서 다 수행하면 된다.
+    - AWS로 접속할 임식 private key 파일을 만든다. 
+    - git action을 실행하는 local의 ssh known host에 AWS_HOST를 등록한다.
+    - SSH접속으로 AWS에 들어간다.
+    - git pull을 받는다.
+    - bulld를 진행한다.
+    - spring boot를 stop한다.
+    - spring boot를 restart시킨다.
+
+```sh
+name: tanomuzoko-build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+    - name: SSH into AWS Instance, Build and Restart Service
+      env:
+        AWS_HOST: ${{ secrets.AWS_HOST }}
+        AWS_USER: ${{ secrets.AWS_USER }}
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      run: |
+        echo "$SSH_PRIVATE_KEY" > private_key.pem
+        chmod 600 private_key.pem
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        # Add the AWS EC2 instance's public key to known_hosts securely
+        ssh-keyscan -H $AWS_HOST >> ~/.ssh/known_hosts
+        # SSH into the EC2 instance and run the build process directly
+        ssh -i private_key.pem $AWS_USER@$AWS_HOST << 'EOF'
+          # Navigate to the project directory
+          cd ~/tanomuzoko/
+          # Pull the latest code if needed (e.g., from GitHub)
+          git pull origin main
+          # Build the project using Gradle (assuming Gradle is installed or using the wrapper)
+          ./gradlew build -x test
+          # Stop the Spring Boot service
+          sudo systemctl stop tanomuzoko.service
+          # Restart the service (no need to copy the JAR, it will already be built in place)
+          sudo systemctl restart tanomuzoko.service
+        EOF
+        
+        # Clean up the private key
+        rm private_key.pem
+```
+
+</div>
+</details>
+
+
+
 
