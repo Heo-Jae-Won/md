@@ -118,10 +118,17 @@ C:\Program Files\OpenLogic\jdk-21.0.6.7-hotspot\bin
 - 이 extension pack을 지우니까 JAVA_HOME을 제대로 인식하기 시작했다.
     - 여기서 뭔가 문제가 생긴게 틀림없었다.
     - 살펴보니 lanugage support의 settings에 gradle 쪽이 따로 있었다.
+
+```
+Java › Import › Gradle › Java: Home
+The location to the JVM used to run the Gradle daemon.
+```
+
 - 이제 gradle은 문제없이 build가 된다.
+- 아니면 user setting.json에 아래처럼 추가하자.
 
 ```sh
- "java.import.gradle.java.home": "C:\\JDK\\jdk-17.0.2",
+"java.import.gradle.java.home": "C:\\JDK\\jdk-17.0.2",
 ```
 
 - 하지만 run을 때리면 여전히 문제가 발생했다.

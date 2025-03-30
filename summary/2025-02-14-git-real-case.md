@@ -1316,7 +1316,7 @@ git switch [feature branch] //그럼 알아서 upstream이 origin/featrue branch
 rm -rf .git
 git init
 git add .
-git commit "initial commit"
+git commit -m "initial commit"
 git remote add origin "url"
 git push origin master
 ```
