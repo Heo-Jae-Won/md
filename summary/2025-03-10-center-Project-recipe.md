@@ -845,6 +845,60 @@ function toggleCartItem(button, ingredient) {
 }
 ```
 
+- 위의 방식에는 문제가 있다. 매번 element가 새로 생성되기 때문이다.
+- eventListener로 달렸던 객체가 참조를 잃어버린다.
+- 위 toggleCartItem()에서 button이라는 variable이 없어진다는 의미다.
+- 그래서 검색을 하고나서 선택한 뒤, 검색을 풀면 다른 객체이므로, 장바구니의 X 버튼을 눌러도 css가 변화하지 않는다. 
+- 안 지워진 것처럼 보인다는 의미다.
+
+```js
+ btn.onclick = function () {
+    this.remove();
+    button.classList.remove('selected');
+    updateCartData();
+};
+```
+
+- 그래서 처음에 생성하고 그 다음에는 없애지 않고 그냥 숨기는 형태로 로직을 바꿔야 한다.
+- 그래야 HTMLDOMElement가 달고 있는 참조가 유지된다.
+
+```js
+function displayIngredients() {
+    ingredientsList.innerHTML = '';
+    ingredients.forEach((item) => {
+        let btn = document.createElement('button');
+        btn.textContent = item;
+        btn.classList.add('ingredient-btn');
+
+        if (document.querySelector(`[data-item="${item}"]`)) {
+            btn.classList.add('selected');
+        }
+
+        btn.onclick = () => toggleCartItem(btn, item);
+        ingredientsList.appendChild(btn);
+    });
+}
+
+const debouncedFilterIngredients = debounce(filterIngredients, 150);
+
+function filterIngredients() {
+    const ingredientsBtns = Array.from(ingredientsList.children);
+    ingredientsBtns.filter((item) => !item.textContent.includes(searchInput.value))
+                    .forEach((item) => {
+                        item.style.display = 'none';
+                    })
+    ingredientsBtns.filter((item) => item.textContent.includes(searchInput.value))
+                    .forEach((item) => {
+                        item.style.display = 'block';
+                    })
+}
+
+document.querySelector("#search-input").addEventListener('input', function() {
+    debouncedFilterIngredients();
+})
+```
+
+
 - 장바구니에 재료가 선택되면 css 처리하는 과정과 별도로, data도 연계한다.
 - 배열로 보유하지 않고, 선택된 값들은 쉼표로 전부 이어준다.
 
@@ -1016,6 +1070,8 @@ $('#recommend-form').on('submit',  function (e) {
     .catch((error)=> hideLoader());
 });
 ```
+
+//TODO. 움직이는 image 쓰는 방법 알아내기. css분석
 
 ## <span style="color:#802548">_user의 request api key 암호화_</span>
 
@@ -1453,7 +1509,6 @@ public class RecipeHistroyRequsetDTO {
 - result를 저장할 때는 복수개의 entity를 저장하게 된다.
     - recipe -> recipeInput -> recipeOutput 순이다.
 - 따라서 @Transactional이 필요하다.
-- 
 
 ```java
 @Service
@@ -2751,6 +2806,44 @@ where
 
 ```
 
+- 아니면 아래처럼 distince를 쓰지 않고 두개의 query로 나눠서 가져갈 수도 있다.
+- 성능은 실행 계획으로 비교해보고 결정하면 된다.
+
+```java
+public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long>{
+    @Query("""
+        SELECT r.recipeSeq FROM RecipeEntity r
+        WHERE r.userEntity.userSeq = :userSeq
+    """)
+    List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
+
+    @EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+    @Query(value = """
+        SELECT r FROM RecipeEntity r
+        INNER JOIN r.recipeInputKeywordEntityList k
+        INNER JOIN r.recipeOutputEntity j
+        WHERE r.recipeSeq IN :recipeIds
+    """, countQuery = """
+            select count(r) FROM RecipeEntity r
+            WHERE r.recipeSeq IN :recipeIds
+    """)
+    Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
+} 
+```
+
+
+- 서비스는 아래와 같이 바꿔주면 된다.
+
+```java
+public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
+    Pageable pageable = PageRequest.of(currentPage, 3, Sort.by(Sort.Direction.ASC, "createdAt"));
+
+    List<Long> recipeIds = recipeMyPageRepository.findRecipeIdsByUser(userSeq);
+    Page<RecipeMyPageResponse> recipes = recipeMyPageRepository.findRecipesByIds(recipeIds, pageable).map(RecipeMyPageResponse::toDTO);
+
+    return recipes;
+};
+```
 
 ## <span style="color:#802548">_recipe의 history 다시보기- service_</span>
 
@@ -2981,3 +3074,140 @@ function generatePagination(resp) {
     document.querySelector('#pagination').innerHTML= pagination;
 }
 ```
+
+## <span style="color:#802548">_recipe로 board를 만들었는지에 따른 UX 분기처리_</span>
+
+- recipe로 board를 만들었다면 만들러 가기를 보여주면 안 된다. 이미 만들었기 떄문이다. 대신 이미 만들어진 걸 보여줘야 한다.
+- 반면에 recipe로 board를 안 만들었다면 만들어주기를 보여줘야 한다.
+- 이를 위해 별도의 query를 하나 더 딸려 보낸다. 필요한 것만 가져오게끔 projection DTO를 써서 최소화한다.
+- 삭제되지 않은 recipe들 대상으로, board로 이미 사용된 recipe를 가져오는 것이다.
+
+```java
+public interface RecipeWrittenDTO {
+    Long getBoardSeq();
+    Long getRecipeSeq();
+}
+
+@Query("""
+        SELECT b.boardSeq as boardSeq, r.recipeSeq as recipeSeq
+        from BoardEntity b
+        INNER JOIN b.recipeEntity r
+        WHERE b.isDeleted = false
+        AND b.userEntity.userSeq = :userSeq
+    """)
+    List<RecipeWrittenDTO> findRecipeAndBoardWritten(@Param("userSeq") Long userSeq);
+```
+
+- 이를 controller로 내보낸다.
+
+```java
+//dto
+@Builder
+public record RecipeWrittenResponse(Long boardSeq, Long recipeSeq) {
+    public static RecipeWrittenResponse TODTO(RecipeWrittenDTO recipeWrittenDTO) {
+        return RecipeWrittenResponse.builder()
+                                    .boardSeq(recipeWrittenDTO.getBoardSeq())
+                                    .recipeSeq(recipeWrittenDTO.getRecipeSeq())
+                                    .build();
+    }
+    
+}
+
+//service
+public List<RecipeWrittenResponse> findAllRecipeUsedAndBoardWrittenByLoginUser(Long userSeq) {
+    
+    return recipeMyPageRepository.findRecipeAndBoardWritten(userSeq).stream().map(RecipeWrittenResponse::TODTO).toList();
+}
+
+//controller
+@GetMapping("/getRecipeWritten")
+    @ResponseBody
+    public List<RecipeWrittenResponse> getBoardAndRecipeAlreadyWritten(@AuthenticationPrincipal LoginUserDetails loginUserDetails) {
+        Long userSeq = loginUserDetails.getUserSeq();
+
+        return recipeMyPageService.findAllRecipeUsedAndBoardWrittenByLoginUser(userSeq);
+    }
+```
+
+- js에서는 thymeleaf로 가져온 전체 recipeId 중 별도 api로 가져온 board로 이미 쓰인 recipe를 찾아낸다.
+- find()를 통해 찾아낸 값에 따라 있으면 게시글 보러가기로, 없으면 게시글 작성하기로 보낸다.
+
+```js
+async function handlerRecipeItemClick() {
+    const data = await getRecipeWritten();
+
+    for (const eventListener of document.querySelectorAll(".recipe-item")) {
+        eventListener.addEventListener("click", function (event) {
+            event.preventDefault(); // 페이지 이동 방지
+            modal.style.display = "flex";
+            const recipeId = this.dataset.recipeId;
+            const recipeData = data.find(item => item.recipeSeq === parseInt(recipeId));
+
+            let buttonTag = '';
+            if (recipeData) {
+                // If recipeData is found, it means there's a corresponding board, so show "See Board"
+                buttonTag = `<div class="footer">
+                                <button onclick="window.location.href='/board/boardDetail?boardSeq=${recipeData.boardSeq}'">게시글 보러가기</button>
+                                <button onclick="unActivateRecipe(${recipeId})">레시피 삭제하기</button>
+                            </div>`;
+            } else {
+                // If no corresponding board, show "Write Board"
+                buttonTag = `<div class="footer">
+                                <button onclick="window.location.href='/board/boardWrite?recipeSeq=${recipeId}'">게시글 작성하기</button>
+                                <button onclick="unActivateRecipe(${recipeId})">레시피 삭제하기</button>
+                            </div>`;
+            }
+
+            document.querySelector(".recipe-info").innerHTML = this.dataset.recipeOutput + buttonTag;
+        })
+    }
+}
+```
+
+
+- 그냥 게시글 작성 시에도 작동해야 하므로, recipeSeq라는 RequestParam은 false로 변경한다.
+
+```java
+ @GetMapping("/boardWrite")
+public String boardWrite(Model model, @AuthenticationPrincipal LoginUserDetails loginUserDetails, @RequestParam(name = "recipeSeq", required = false) Long recipeSeq) {
+    model.addAttribute("recipes", recipeService.getAllRecipesByUser(loginUserDetails.getUserSeq()));
+    model.addAttribute("recipeSeq", recipeSeq);
+    return "board/boardWrite";
+}
+```
+
+- 게시글을 작성하러 간다면, 게시글에서 recipe가 selected 되어있게끔 해야 UX적으로 완성도가 높다.
+- recipeSeq를 달고 오는 경우에는 selected 처리도 넣어준다.
+
+```html
+<option th:each="recipe : ${recipes}" th:value="${recipe.id}" th:text="${recipe.title}" th:selected="${recipe.id == recipeSeq}"></option>
+```
+
+
+
+
+
+## <span style="color:#802548">_recipe 삭제 후 게시물 재생성 가능하게 변경 UX처리_</span>
+-  recipe가 삭제 후 게시물 재생성이 가능하게 바뀌었다면, 관계도 변경해야한다.
+- 그 변화를 반영하지 않으면 에러가 나기 시작한다.
+
+```
+org.hibernate.HibernateException: Duplicate row was found and ASSERT was specified
+```
+
+
+- recipe와 board는 1 : 1에서 1 : n으로 변경된다. 
+
+```java
+public class RecipeEntity {
+
+
+    @OneToMany(mappedBy = "recipeEntity")
+    @Builder.Default
+    private List<BoardEntity> boardEntity = new ArrayList<>();
+
+}
+```
+
+- 삭제하는 기능은 그냥 flag column을 변경하는 정도다.
+
