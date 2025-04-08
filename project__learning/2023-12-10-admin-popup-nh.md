@@ -467,7 +467,7 @@ HashMap<String,Object> outputMap = new HashMap<>();
 List<HashMap<String,Object>> subPopupList = new ArrayList<>();
 String type = "";
 
-for(int i =0; i <param.length; i++){
+for(int i = 0; i < param.length; i++){
         inputParamMap = new HashMap<>();
         inputParamMap.put("BLTN_LOC",param[i]);
         subPopupList = Dao.selectList(inputParamMap);
@@ -477,13 +477,13 @@ for(int i =0; i <param.length; i++){
                 continue;
         }
 
-        for(int j=0; j<subPopupList.size();j++){
-                decodeXssMap.put("EXPS_YN",subPopupList.get(j).get("EXPS_YN"));
-                decodeXssMap.put("EXPS_OS_TP",subPopupList.get(j).get("EXPS_OS_TP"));
+        for(int j = 0; j < subPopupList.size(); j++){
+                decodeXssMap.put("EXPS_YN", subPopupList.get(j).get("EXPS_YN"));
+                decodeXssMap.put("EXPS_OS_TP", subPopupList.get(j).get("EXPS_OS_TP"));
                 decodeXssList.add(decodeXssMap);
         }
 
-        if(subPopupList.get(0).get("PUP_TP").equals("bottom")){
+        if( "bottom".equals(subPopupList.get(0).get("PUP_TP")) ){
                 type = "bottom";
         }else{
                 type = "layer";
