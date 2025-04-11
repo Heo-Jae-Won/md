@@ -27,20 +27,20 @@ for (Event item : items) {
 - 그래서 헤매다가 이전일정 1개와 이후 일정 1개만 비교하는 것으로 범주를 팍 좁혔다. 
 
 ```java
-Events events = service.events().list("ddddd@gmail.com").setTimeMin(startDateTime).setMaxResults(2)
-				.setSingleEvents(true).setOrderBy("starttime").execute();
+Events events = service.events().list("ddddd@gmail.com")
+								.setTimeMin(startDateTime)
+								.setMaxResults(2)
+								.setSingleEvents(true)
+								.setOrderBy("starttime")
+								.execute();
 ```
-## <span style="color:#802548">_5. 캘린더 CRUD with front_</span>
+
+
+## <span style="color:#802548">_캘린더 CRUD with front_</span>
 
 - 마침내 API를 완성하고 내가 멘토링을 할 때 받은 서버로 배포를 진행한 뒤 front분과 협업을 시작했다. 
-- 그런데 여러 가지 추가사항이 들어갔다. 
-
-```java
-Events events = service.events().list("ddddd@gmail.com").setTimeMax(lastDay).setTimeMin(firstDay)
-				.execute();
-```
-
- - 필요없는 데이터들은 걸러내고 그 중에 필요한 몇가지만 추려서 새롭게 데이터를 만들어서 보낸다던가 하는 식이다.  event를 가져는 경우에 아래와 같이 필요사항만 map에 넣어서 보내는 형태로 진행했다. 
+- 프론트 입장에서 필요없는 데이터들은 받아도 눈에 거슬릴 뿐이며, 트래픽이 높아지기 때문에 필요한 값만 보내달라는 이야기를 받았다.
+- HashMap을 통해 해당 요구사항을 구현했다.
 
 ```java
 public HashMap<String, Object> getEvent(String eventId)
@@ -63,40 +63,41 @@ public HashMap<String, Object> getEvent(String eventId)
 
 ```java
 if (inputEndDateTime.atZone(ZoneId.of("Asia/Seoul")).equals(listEndDateTime)
-		&& inputStartDateTime.atZone(ZoneId.of("Asia/Seoul")).equals(listStartDateTime)) {
+		&& 
+	inputStartDateTime.atZone(ZoneId.of("Asia/Seoul")).equals(listStartDateTime)) {
 	break;
 }
 ```
 
 
-## <span style="color:#802548">_7. 캘린더 CRUD  추가된 요구사항_</span>
-- 회사의 달력이 멘토분의 핸드폰과 연동되어 있어 밤에 울리지 않게 해달라는 요청을 받았다. 
-- 당시에는 설정을 보고서 그런 알림을 끄는 설정이 없었기에 없다고 대답했는데, 없다보다는 한 번 알아보고 답변드리겠습니다 라고 하는 게 옳았다. 
-- 네이버에 나중에 다시 치니까 바로 알림 끄는 법이 나왔기 때문이다. 
-- 요구사항에 안된다가 아니라 알아보겠습니다라고 답변하는 것으로 방향을 정했다. 그게 더 바람직하다. 
+## <span style="color:#802548">_7. 캘린더 CRUD 추가 고려_</span>
+- 그러나 구현 도중, 휴일을 포함하지 않고서 진행하면 반쪽짜리로 되어버린다는 생각이 들었다.
+- 구글 캘린더로 휴일을 알 수 있나 확인 결과, 대체휴일 마저 받아올 수 있어 공공API가 아닌 구글 API를 사용하기로 했다.
 
-​
-
-- 그래서 이후 휴일도 포함되었으면 한다는 요청이 제기되었을 때 알아보겠다는 답변을 드렸다. 
-- 다행히 개발자 분이 천문 쪽 특일이라는 공휴일을 알려주는 공공 API를 활용하면 된다는 정보를 제시해주셨다. 
-- 그래서 해당 API를 찾아봤는데 붙이면 google과 공공 모두 데이터를 받아오는 데 시간이 꽤나 걸릴 거 같았다. 
-- 그런 와중에 프론트분이 구글 캘린더 api로도 휴일을 받아올 수 있다고 하셨다. 그래서 알아보니 가능하며 대체휴일도 받아올 수 있어 그 방향으로 진행하기로 했다. 
 ```java
-Events events = service.events().list("ko.south_korea#holiday@group.v.calendar.google.com").setTimeMax(lastDay).setTimeMin(firstDay)
-				.execute();
+Events events = service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+								.setTimeMax(lastDay)
+								.setTimeMin(firstDay)
+								.execute();
 ```
-## <span style="color:#802548">_8. 캘린더 CRUD feedback_</span>
-- 그리고 피드백을 받은 결과 map을 쓰는 것은 유지보수에 매우 좋지 않으므로 그것을 Dto나 VO로 바꾸라는 조언을 받았다. 
-- 그래서 아래와 같이 VO로 전부 바꾸었다. 
+
+
+## <span style="color:#802548">_map 대신 DTO 사용하기_</span>
+- 그리고 피드백을 받은 결과 map으로 front에 return하는 것은 유지보수에 매우 좋지 않으므로 그것을 Dto나 VO로 바꾸라는 조언을 받았다. 
+	- 특히 front와의 의사소통에 Swagger를 사용할 경우, map은 지원되지 않기 때문에 VO로 바꿔달라는 이야기를 들었다.
+	- 그래서 아래와 같이 VO로 전부 바꾸었다. 
+
 ```java
 List<CalendarEventResDto> calendarEventList = calendarService.getEventList(firstDayOfMonth, lastDayOfMonth);
 List<CalendarHolidayDto> holidayList = calendarService.getHolidayList(firstDayOfMonth, lastDayOfMonth);
-CalendarEventListResponse response= new CalendarEventListResponse();
+CalendarEventListResponse response = new CalendarEventListResponse();
 response.setCalendarEventList(calendarEventList);
 ```
+
 - 어떻게 담아야할 까 고민했는데, 처음엔 req와 res를 구분해서 담지 않고 그냥 담았다. 
 - 그런데 req와 res에 받아야하는 data의 type이 서로 달라야 했다. 
 - response로 뿌리는 데이터와 front에서 받은 request 데이터로 구글에 보낼 때 서로 다른 data type이 요구됐기 때문이다. 
+
 ```java
 public class CalendarEventReqDto {
 	
@@ -106,7 +107,11 @@ public class CalendarEventReqDto {
 	private String endDateTime;
 }
 ```
-- 그래서 req와 res를 구분해서 만들었다. 
+
+- 그래서 처음에는 DTO를 계속 늘려나가며 떄로는 필요 없는 field가 추가됐다. 
+- 사수 분에게 Request와 Response에 동일한 DTO를 사용하지말고, 구분하여 DTO를 만들라는 의견을 들었다.
+- Request와 Response가 각각 따로 존재해야 유지보수성에 도움이 된다는 이야기를 수용해 구분해서 만들었다. 
+
 ```java
 @Data
 public class CalendarEventResDto {
@@ -118,13 +123,16 @@ public class CalendarEventResDto {
 
 }
 ```
+
 - 그리고 response는 휴일과 이벤트일정을 동시에 보내야 해서 아래와 같이 새로운 클래스에 담아서 보냈다. 
+
 ```java
 public class CalendarEventListResponse {
 	private List<CalendarEventResDto> calendarEventList;
 	private List<CalendarHolidayDto> holidayList;
 }
 ```
+
 - 아래와 같이 set해주면 데이터가 기존에 map으로 만들었던 것과 동일하게 보내진다. 
 
 ```java
@@ -135,8 +143,9 @@ response.setHolidayList(holidayList);
 
 
 
-## <span style="color:#802548">_9. 회사일정과 휴일 달력 parallel 하게 가져오기_</span>
-- 이전에 만든 소스코드는 회사일정과 휴일을 sequential하게 가져왔다. 그래서 느렸다.
+## <span style="color:#802548">_회사일정과 휴일 달력 parallel 하게 가져오기_</span>
+- 실제 테스트 결과, 웹화면에 느리게 로딩되었다. 
+- 회사일정과 휴일을 sequential하게 가져왔기 때문이었다.
 - 따라서 회사일정을 가져오면서 동시에 휴일도 가져오게끔 하려했다.
 - 그래서 아래와 같이 바꿨다. 그러나 이미 구글의 서비스를 호출할 때 execute를 하기 때문에 아래 구조로는 CompletalbeFuture를 활용해도 sequential이었다.
 
@@ -181,6 +190,7 @@ public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDa
 ```
 
 - 그런 이유로 아래와 같이 execute를 CompletableFuture에서 실행하게 변경했다.
+
 ```java
 public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
 		throws FileNotFoundException, IOException, GeneralSecurityException {
@@ -221,6 +231,7 @@ public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDa
 
 - 안타깝게도 매 service 실행마다 authtoken이 날라가야 할까? 날라가야 하면 아래처럼....
 - 따라서 auth 인증 서비스도 각 completableFuture마다 들어가줘야 한다.
+
 ```java
 public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
 		throws FileNotFoundException, IOException, GeneralSecurityException {
