@@ -13,11 +13,10 @@
 - 더불어 md 파일내에 published를 true로 설정해야 한다.
   - md 파일의 맨 위에 아래와 같이 제목을 정하고 published를 true로 줘야한다는 의미다.
   - 블로그 상에서 글이 써진 날짜는 파일명에 붙은 날짜로 지정된다. 
+  
 ```
----
 title: Network first week
 published: true
----
 ```
 
 
@@ -124,3 +123,58 @@ _site/**
 Gemfile.lock
 ```
 
+
+## <span style="color:#802548">_2025년부터 갑자기 github hosting 배포가 안 됨_</span>
+
+- 똑같이 했는데 github blog 배포가 안되기 시작했다.
+- 그 이유를 찾아보기 위해 local에서 ruby를 깔아 테스트해보았다.
+- 잘 됐다. 원인은 암묵적으로 진행되는 github action에 있다고 보았고, chatGPT에 문의하여 직접 github hosting service에 넣게 yaml을 박아넣었다.
+
+```java
+name: Build and Deploy Jekyll Site
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  jekyll:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle install
+      - name: Build Jekyll site
+        run: bundle exec jekyll build
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./_site
+
+  deploy:
+    needs: jekyll
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: https://heo-jae-won.github.io/
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+```
