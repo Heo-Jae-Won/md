@@ -103,8 +103,7 @@ const classifyImage = async (imgObj) => {
 ```
 
 
-- script import를 가져올 때, export나 import가 없는 library는 src로 가져온다.
-- library를 가져오는 순서도 중요하다. coco-ssd는 tf.js를 필요로 하기에, tf.js를 먼저 가져와야 한다.
+- script import를 가져올 때, export나 import가 문법을 지원하지 않는 library는 src로 가져온다.
 
 ```html
 <script src="/conts/photo/libjs/fabric.js"></script>
@@ -113,9 +112,7 @@ const classifyImage = async (imgObj) => {
 <script src="/conts/photo/libjs/lodash.js"></script>
 ```
 
-- tf.js나 coco-ssd.js에 require 문법이 있을 수 있다.
-- 하지만 node modules가 없어도 require를 읽어온다. 따라서 문제가 없었다.
-- 그 이유는 libray js 내에서 node 환경인지, AMD 환경인지, browser환경(대부분의 내부망-외부인터넷 연결X, 노드X, bundler x- 쓰는 legacy들)인지 검사하기 때문이다.
+- libray js 내에서 node 환경인지, AMD 환경인지, browser환경(대부분의 내부망-외부인터넷 연결X, 노드X, bundler x- 쓰는 legacy들)인지 검사하기 때문이다.
   - node를 쓰면 require("@tensorflow/tfjs-converter")로 해당 library를 가져온다. 마치 maven처럼 연관된 모든 library를 가져온다고 보면 된다.
   - require.js도 이와 마찬가지다.
   - browser 환경에서는 window 전역 변수에 넣어서 사용한다. self가 window다.
@@ -358,120 +355,6 @@ $(function() {
 ```
 
 
-## <span style="color:#802548">_tensorflow model 외부통신 없이 model 사용하기_</span>
-
-- 그런데 legacy 내부망 환경에서는 model을 외부와 통신하여 사용하는 것이 불가능했다.
-- 따라서 model을 직접 안으로 들여와서 사용해야 했다.
-- 따라서 아래처럼 model을 내부에서 가져오는 방식으로 변경했다.
-
-```js
-let loadedModel = null;
-
-const classifyImage = async (imgObj) => {
-    // cocossd 모델 로드
-  if (!loadedModel) {
-      // loadedModel = await cocoSsd.load();
-      loadedModel = await cocoSsd.load({
-              base: 'lite_mobilenet_v2',
-              modelUrl: 'src/assets/models/models.json'
-          }
-      );
-  }
-  .
-  .
-  .
-  
-  return topPrediction;
-};
-```
-
-- load를 위와 같이 한 이유는 아래가 공식 refer의 선언이기 때문이다.
-
-```js
-//https://github.com/tensorflow/tfjs-models/tree/master/coco-ssd
-export interface ModelConfig {
-  base?: ObjectDetectionBaseModel;
-  modelUrl?: string;
-}
-
-cocoSsd.load(config: ModelConfig = {});
-```
-
-- models.json과 그에 필요한 base 들은 구글에서 다운로드 가능하다.
-
-```
-https://www.tensorflow.org/js/guide/conversion?hl=ko 에서 TensorFlow Hub 모듈: 모델을 공유하고 찾기 위한 플랫폼인 TensorFlow Hub에서 배포하기 위해 패키지로 구성되는 모델입니다. 모델 라이브러리는 여기에서 확인할 수 있습니다.
-https://www.kaggle.com/models/google/mobilenet-v2/tfJs 
-```
-
-- model을 다운로드받았으면 model을 채울 연료(?)인 bin이 필요하다.
-- models.json은 크게 modelTopology와 weightsManifest 옵션으로 나뉜다.
-- 그 중 model에 쓰일 bin을 채워넣는 option은 weightsManifest의 paths다.
-
-```
-"weightsManifest": [
-  {
-    "weights": [
-        {
-          "shape": [],
-          "dtype": "float32",
-          "name": "ConstantFolding/Postprocessor/Decode/div_recip"
-        },
-        .
-        .
-    ],
-    "paths": [
-          "group1-shard1of5.bin",
-          "group1-shard2of5.bin",
-          "group1-shard3of5.bin",
-          "group1-shard4of5.bin",
-          "group1-shard5of5.bin"
-    ]
-  }
-]
- 
-```
-
-- 그리고 돌려보면 잘 돌아가는 것을 확인할 수 있다.
-- 그런데 신한서버에서는 bin파일 확장자를 읽어오지 못했다. 404오류가 떴다.
-  - 그래서 txt파일로 변환해봤는데, svn commit을 하려니 오류가 났다.
-  - 방법을 찾아보니, 확장자를 바꾸는 게 아니라, 파일을 전부 삭제하고 다시 새로운 확장자로 커밋하라고 한다.
-  - 그래서 해당 방식으로 했더니 svn commit 오류는 해결했다.
-- 그런데 txt로 바꿔도 여전히 읽어오지 못했다. 404오류가 떴다.
-  - 혹시 https의 문제인가 싶어서 살펴보려 했지만, 볼 수가 없었다. http로 해도 https로 redirect해버렸다.
-  - 그래서 경로를 절대경로로 바꿔보았다. 
-
-```js
- "paths": [
-  "/group1-shard1of5.bin",
-  "/group1-shard2of5.bin",
-  "/group1-shard3of5.bin",
-  "/group1-shard4of5.bin",
-  "/group1-shard5of5.bin"
-]
-```
-
-- 그랬더니 /logic/js/cmm/pet/json//1groupof5.txt로 /가 아니라 //로 변해버렸다.
-- 그래서 다시 복원하고 살펴보니, 개발서버의 경로도 /logic/js/cmm/pet/json/1groupof5.txt고, local도 그랬다.
-
-```js
- "paths": [
-  "group1-shard1of5.bin",
-  "group1-shard2of5.bin",
-  "group1-shard3of5.bin",
-  "group1-shard4of5.bin",
-  "group1-shard5of5.bin"
-]
-```
-
-- 경로는 전혀 문제가 아니었다. 그래서 txt대신 json으로 만들어서 올렸더니 개발서버에서도 잘 작동했다.
-- 파일의 내용이 binary인 경우에는, json 구조를 무시하고 그냥 확장자만 바꿔도 전혀 상관이 없었다.
-- 아래같이 json 구조가 아니라 그냥 진짜 쌩 binary 파일이었는데, path를 읽어왔다. 참 다행이었던 순간이다.
-
-```js
-[""];
-```
-
 
 ## <span style="color:#802548">_뒤로가기_</span>
 
@@ -537,248 +420,15 @@ this.foregroundCanvas.on("object:modified", saveState); //foreg
 ```
 
 
-## <span style="color:#802548">_tab 이동 시 focus된 버튼 하위 요소를 enter했을 때 문제 해결_</span> 
 
-- focus된 버튼의 경우, enter를 누르면 keydown event에서 enter를 감지한다.
-- 그런데 버튼 안에 span 태그에다가 enter를 하는 경우에도 button에서 click event가 일어난다.
+## <span style="color:#802548">_회전에 따른 카드 여백체크 불가능 문제_</span>
 
-```html
-<button id="accordion02" class="accordion-btn is-active" type="button" aria-expanded="false"
-  aria-controls="layerPanel">
-  <span class="accordion-title">
-      레이어
-      <span class="tooltip-icon">
-          <span class="accordion-tooltip">
-              한 작업에 관리 가능한 <br>
-              레이어 개수는 10개 입니다.
-          </span>
-      </span>
-  </span>
-  <!-- <span class="accordion-tooltip">
-          한 작업에 관리 가능한 <br>
-          레이어 개수는 10개 입니다.
-      </span> -->
-  <span class="icon icon-arrow"><span class="sr-only">닫힘</span></span>
-</button>
-```
-
-- 그래서 아래와 같이 span 태그에서 event가 bubbling되지 못하게 막았다.
-- 하지만 e.stopPropgation()을 추가해도 여전히 버튼이 클릭되었다.
-
-```js
-const accTooltip = document.querySelector('.tooltip-icon');
-const accTooltipCon = document.querySelector('.accordion-tooltip');
-accTooltip.addEventListener('click', (e) => {
-  e.stopPropagation()
-  if (!accTooltipCon.classList.contains('is-show')) {
-      accTooltipCon.classList.add('is-show')
-      accTooltipCon.style.display = 'block'
-  } else {
-      accTooltipCon.classList.remove('is-show')
-      accTooltipCon.style.display = 'none'
-  }
-})
-```
-
-- 그래서 보니 btn에 click listener가 있었다.
-- event bubbling 되지 않는 위치일탠데 bubbling이 되는 게 좀 이상하다 싶었는데, click listener가 발동된 것이었다.
-
-```js
-btn.addEventListener("click", function () {
-  if (acc.classList.contains("onlyone")) {
-      // onlyone
-      if (this.ariaExpanded === "false") {
-          for (let k = 0; k < accBtns.length; k++) {
-              accClose(accBtns[k]);
-          }
-          accOpen(this);
-      } else {
-          accClose(this);
-      }
-  } else {
-      this.ariaExpanded === "false"
-          ? accOpen(this)
-          : accClose(this);
-  }
-});
-``` 
-
-- 따라서 span태그가 있는 tooltip에서 event를 막아버렸다.
-- event를 if문 밖에서 막으면 되어야할 다른 event가 안되니까, enter일 때만 막도록 하자.
-- enter일 떄 event를 막아놓으면 위의 button click event만 막힌다. enter event는 인지가 된다.
-
-```js
-const accTooltip = document.querySelector('.tooltip-icon');
-const accTooltipCon = document.querySelector('.accordion-tooltip');
-accTooltip.addEventListener('click', (e) => {
-
-  if(e.key ==="Enter") {
-    e.preventDefault();
-     if (!accTooltipCon.classList.contains('is-show')) {
-      accTooltipCon.classList.add('is-show')
-      accTooltipCon.style.display = 'block'
-    } else {
-        accTooltipCon.classList.remove('is-show')
-        accTooltipCon.style.display = 'none'
-    }
-  }
-})
-```
-
-
-## <span style="color:#802548">_json 파일 읽어오기_</span>
-
-- 욕설을 원래는 서버에서 읽어서 처리했지만, front에서 읽어 처리하는 것으로 결정했다.
-- 따라서 json을 front에 두고 처리하기로 했다.
-- 코드를 아래와 같이 사용한다.
-- isProfanity라는 boolean 변수를 resolve하므로, await로 받게된다면 boolean 변수가 된다.
-
-```js
-export const filterProfanity = (text) => {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    
-    xhr.open('GET', '/src/assets/profanity.json', true);
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        let profanitys = JSON.parse(xhr.responseText);
-        for (const element of profanitys) {
-          const isProfanity = text.includes(element);
-          if (isProfanity) {
-            resolve(isProfanity);
-          }
-        }
-      } else {
-        reject();
-      }
-    }
-
-    xhr.send();
-  })
-}
-```
-
-- json 파일은 아래와 같다.
-- 외국어도 들어있어서 ,utf-8로 설정해서 저장해야 된다.
-
-```json
-["씨발","개새끼","썅년아","씨발새끼야"....];
-```
-
-```js
-async function checkProfanity(text) {
-  const isProfanity = await filterProfanity(text);
-
-  return isProfanity;
-}
-
-const debouncedCheckProfanity = debounce(async (textBox) => {
-  const result = await checkProfanity(textBox.text);
-  if (result) {
-    openModal("욕설꺼져");
-    text.set('text,''');
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-    this.canvas.renderAll();
-  }
-}, 400)
-```
-
-
-## <span style="color:#802548">_fabric.js 비동기 문제_</span>
-
-- fabric.js는 비동기로 실행되는 것들 투성이다.
-- 그런데 legacy 환경에서 만들어서 Promise로 감싸져 있지 않아, async await를 쓸 수 없다.
-- 비동기로 진행되어 특정 상황에서는 원하는 바가 실현되지 않기도 한다.
-  - 예를 들어, 현재 코드는 기존 canvas의 이미지 데이터를 가져와서 씌우고 거기다가 카드를 씌우는 의도다.
-  - 그런데, 이미지를 읽는 데 시간이 오래걸리는 경우, 2번째인 cardImage가 먼저 발동되어 2번째 fromURL이 먼저 실행된다.
-  - 그리고 나서 1번째 fromURL이 실행되기 때문에, modelCanvas가 clear되고, cardImage를 씌운 부분이 사라지고 동물 이미지(croppedImageData)만 남는다.
-
-```js
-fabric.Image.fromURL(croppedImageData, (img) => {
-  img.set({
-    left: 0,
-    top: 0,
-    scaleX: modalWidth / viewWidth,
-    scaleY: modalHeight / viewHeigth,
-    selectable: false,
-  })
-  modalCanvas.clear();
-
-  modelCanvas.add(img);
-})
-
-fabric.Image.fromURL(cardImageUrl, (img) => {
-  img.set({
-    left: 0,
-    top: 0,
-    scaleX: modalWidth / viewWidth,
-    scaleY: modalHeight / viewHeight,
-    selectable: false,
-  });
-
-modelCanvas.add(img);
-})
-```
-
-- 그러한 상황을 방지하기 위해, 무조건 첫번째 fromURL의 add가 먼저 발동되게 해주어야 한다.
-- 그를 위해서는 두번째 fromURL, 즉 카드 이미지를 씌우는 과정에 setTimeout을 주어 event loop에 박는다.
-- 그럼 첫번째 fromURL의 콜백이 다 발동된 뒤에 두번째 fromURL의 modelCanvas.add(img)가 발동되기 때문에 정상적으로 카드 이미지도 출력된다.
-- 원래는 async await를 쓰는게 좋지만, promise를 return하지 않기에 쓸 수가 없어 setTimeout을 써야 한다.
-
-```js
-fabric.Image.fromURL(croppedImageData, (img) => {
-  img.set({
-    left: 0,
-    top: 0,
-    scaleX: modalWidth / viewWidth,
-    scaleY: modalHeight / viewHeigth,
-    selectable: false,
-  })
-  modalCanvas.clear();
-
-  modelCanvas.add(img);
-})
-
-fabric.Image.fromURL(cardImageUrl, (img) => {
-  img.set({
-    left: 0,
-    top: 0,
-    scaleX: modalWidth / viewWidth,
-    scaleY: modalHeight / viewHeight,
-    selectable: false,
-  });
-
-  setTimeout(()=> {
-    modelCanvas.add(img);
-  },10)
-
-})
-```
-
-## <span style="color:#802548">_회전에 따른 left, top 미 갱신 문제_</span>
-
+- 카드이미지에 여백이 없게 이미지를 전부 덧씌웠는지 확인해달라는 요구사항이 있었다.
+- 해당 사항 구현을 간단하게 생각했으나, 그리 간단하지 않았다.
 - 회전을 하게 되면, left, top 값이 당연히 회전된 객체에 맞춰 정해지는 거라고 생각했다.
-- 그런데, 전혀 그렇지 않았다. 원래의 left, top값으로 찍힌 좌표가 회전과 같이 이동했다.
-  - left, top이 왼쪽 90도 회전 시에는 회전된 객체에 대해서 left, bottom값을 갖는다.
-  - 왼쪽 180도 회전 시에는 회전된 객체에 대해서 right, bottom 값을 갖는다.
-  - 왼쪽 270도 회전 시에는 회전된 객체에 대해서 right, top 값을 갖는다.
-  - 왼쪽 360도 회전 시에는 다시 돌아온다.
-- 이런 상황이다 보니, 회전 시에 그려진 객체에 대한 left, top 값이 측정이 안 됐다.
-- 그런 이유로 회전된 이미지 안에서만 cropzone을 만들어서 이동시키는 것이 고장났다.
-- 여백을 체크하는 로직도 그러다보니 전부 고장났다.
-- 이를 해결하기 위해 여러 시도를 해봤는데, 좌표 값을 갱신하는 코드는 먹지 않았다.
-- 좌표값 갱신은 그려진 객체에 대해 left, top점을 유지하면서 좌표 값을 가져왔다.
-
-```js
-setCoords();
-```
-
-- 결국 방법은 하나였다. left, top 값을 일일이 전부 각도에 맞춰 바꿔주는 것이었다.
-- 아래와 같이 일일이 바꿔주었는데, 문제가 생겼다.
-- 객체의 속성을 직접 바꿔버리니까 imageObj의 left, top값이 실제로 변동해 render되는 것이었다.
-- 캔버스 바깥으로 벗어나 버리는 등 문제가 생겼다.
+- 그런데, 전혀 그렇지 않았다. 원래의 left, top값으로 찍힌 좌표가 원하는대로 이동하지 않았다.
+- 그런 이유로 회전된 이미지의 경우, 여백을 체크하는 로직도 그러다보니 전부 고장났다.
+- left, top 값을 일일이 전부 각도에 맞춰 바꿔주는 것을 시도했다.
 
 ```js
 const imageObj = this.canvas.getObjects().find((obj) => obj.name?.includes('image'))
@@ -800,28 +450,6 @@ if(imageObj.angle === 0 || imageObj.angle === 360 || imageObj.angle === -360 ) {
   }
 ```                  
 
-
-- 따라서 속성 값을 바꾸지 않고, 대리 변수를 사용해 left, top값을 측정하는 로직으로 바꿨다.
-
-```js
-const imageObj = this.canvas.getObjects().find((obj) => obj.name?.includes('image'))
-
-let imgLeft = imageObj.left
-let imgTop = imageObj.top
-if(imageObj.angle === 0 || imageObj.angle === 360 || imageObj.angle === -360 ) {
-  imgLeft = imageObj.oCoords.tl.x;
-  imgTop = imageObj.oCoords.tl.y;
-} else if(imageObj.angle === -90) {
-  imgLeft = imageObj.oCoords.tr.x;
-  imgTop = imageObj.oCoords.tr.y;
-} else if(imageObj.angle === -180) {
-  imgLeft = imageObj.oCoords.br.x;
-  imgTop = imageObj.oCoords.br.y;
-} else if(imageObj.angle === -270) {
-  imgLeft = imageObj.oCoords.bl.x;
-  imgTop = imageObj.oCoords.bl.y;
-}
-```   
 
 - 또한 rotate 시 매번 -90도를 하는 것 때문에, -90 + 360n으로 무한하게 angle 값이 뻗어나가고 있었다. 
 - 해당 경우에는 if문을 구성하는 게 불가능하기 때문에, -360도와 +360도 사이에서 값이 변동하게 만들어야 했다.
@@ -902,7 +530,7 @@ if (imageObj.angle === 0 || imageObj.angle === 360 || imageObj.angle === -360 ) 
 
 - 하지만 위와 같은 코드는 js로 90도씩 돌렸을 때만 유효하다.
 - 근본적으로 사용자가 마우스로 돌리는 event에는 소용이 없다.
-- 그래서 아래와 같이 
+- 그래서 고민해봤지만, 도저히 답이 나오지 않아 구글링을 하였다.
 
 ```js
 const imageObj = this.canvas.getObjects().find((obj) => obj.name?.includes('image'))
@@ -952,985 +580,198 @@ function isPointInsidePolygon(imgCoords, cardCoords) {
 - cropZone이 이미지 내에서만 이동하게 하는 코드를 그대로 넣고, left, top만 angle에 맞게 변경시켜준다.
 
 
-
-
-## <span style="color:#802548">_카드 여백 체크 로직_</span>
-
-- 원래는 viewWidth로 정한 값을 카드의 left, right, bottom, top 값으로 했다.
-- 그런데 실제 값과 달랐다.
-- 그래서 아래 같이 background의 left, right, bottom, top을 구하기로 했다.
-- cardObj는 회전하지 않기 때문에 분기처리할 필요가 없었다.
+## <span style="color:#802548">_image 내에서만 cropzone 움직이게 하기_</span>
+- image와 동일한 크기의 rect를 만들어서 움직이는데, 그게 image zone에서만 움직이게 해달라는 이야기가 있었다.
+- 그걸 구현하지 못해서 도움을 구했다.
+- 핵심 기획은 회전이 된 경우는 
 
 
 ```js
-const cardObj = this.canvas.getObjects().find((obj) => obj.name?.includes('background'));
+this.canvas.on('object:moving', (e) => {
+    const obj = e.target;
 
-const cardLeft = cardObj.oCoords.t1.x;
-const cardTop = cardObj.oCoords.t1.y;
-const cardRight = cardObj.getScaledWidth() + cardLeft
-const cardBottom =  cardObj.getScaledWidth() + cardTop;
-```
-
-- 그럼 아래와 같은 분기를 통해 어떤 회전을 하든 background 카드에 여백이 있는지 체크가 가능하다.
-
-```js
-if(
-  imgTop <= cardTop &&
-  imgLeft <= cardLeft && 
-  imgRight >= cardRight &&
-  imgBottom >= cardBottom
-) {
-
-}
-```
-
-
-## <span style="color:#802548">_canvas api의 event는 document의 event와 다르다._</span>
-
-- canvas object에 name 속성을 주는 것은 매우 간단하다.
-- fabric.js를 이용한 예시인데, 아래처럼 name을 property로 주면 된다.
-
-
-```js
-const text = new fabric.Textbox('', fontStyleObj);
-text.name = _.uniqueId("text_");
-this.canvas.centerObject(text);
-this.canvas.setActiveObject(text); // 텍스트 상자를 활성 상태로 설정
-this.canvas.add(text);
-```
-
-- 참고로 fabric.js의 canvas event는 다른 event target과는 다르게 구현되어있다.
-- 원래라면 target의 name속성은 HTMLInputElement class의 경우에만 있다. 
-- 하지만 여기서 event의 target은 언제나 canvas api 상의 object이므로 name 속성을 부여하기만 하면 가져올 수 있다.
-
-```js
-this.canvas.on("object:added", (e) => {
-  // 레이어 개수에서 cropZone 제외
-  const objects = this.canvas.getObjects();
-  // name이 "cropZone"인 객체를 제외한 객체들의 개수
-  const count = objects.filter(obj => obj.name !== "cropZone").length;
-  .
-  .
-
-  const name = e.target.name;
-  if (LAYER_IGONORE.includes(name)) return;
-
-});
-```
-
-- click event도 아래처럼 준다.
-
-```js
-this.canvas.on('mouse:down', function() {
-
-});
-```
-
-- canvas만의 특수 event들도 명시할 수 있다.
-
-```js
-this.canvas.on('text:changed',function() {
-
-})
-this.canvas.on('text:editing:entered',function() {
-  
-})
-```
-
-
-## <span style="color:#802548">_multipart/form-data data를 보내기_</span>
-
-- 제이쿼리 ajax에서 contentType을 false로 하면 jquery가 알아서 판단해 보낸다.
-- 아래처럼 contentType이 두개면 나중에 쓴 게 적용된다.
-- false인데 param이 formData니까 multipart/form-data가 된다.
-- 객체를 보낼 때, 문자열로 보내지 않기 위해 processData를 false로 준다. 객체 자체로 보낸다.
-
-```js
-$.ajax({
-  type:'post',
-  enctype:'multipart/form-data',
-  url: '/qq/tttq/rqwr.ajax',
-  contentType:'application/x-www-form/urlencoded;charset=utf-8',
-  data: param,
-  processData: false,
-  contentType:false,
-  cache: false,
-  timeout: 60000,
-})
-```
-
-
-- xhr로 바꾸면 아래와 같다.
-- enctype='multipart/form-data'의 경우는 formData를 쓰면 자동 설정된다.
-- formData에 파일을 안 넣고 문자만 넣어도 알아서 encType이 multipart/form-data로 설정된다.
-- formData는 사실 contentType을 설정하지 않는게 좋다. 가장 적절한 형태를 알아서 넣는다. 보통 multipart/formData다.
-- processData false 옵션도 줄 필요 없다. formData만 넣으면 자동으로 객체 자체로 보낸다.
-
-```js
-function sendRequest(param) {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/qq/tttq/rqwr.ajax', true);
-    xhr.timeout = 60000; // 타임아웃 설정
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded;charset=utf-8');
-
-    // onreadystatechange 이벤트 리스너를 설정하여 응답을 처리합니다.
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === XMLHttpRequest.DONE) {
-            if (xhr.status === 200) {
-                console.log('Success:', xhr.responseText);
-            } else {
-                console.log('Error:', xhr.status, xhr.statusText);
-            }
-        }
-    };
-
-    // ontimeout 이벤트 리스너를 설정합니다.
-    xhr.ontimeout = function() {
-        console.error('The request for /qq/tttq/rqwr.ajax timed out.');
-    };
-
-    // 요청을 보냅니다.
-    xhr.send(param);
-}
-
-// 예제 호출
-const param = new FormData();
-param.append('key1', 'value1');
-param.append('key2', 'value2');
-param.append('file', file);
-sendRequest(param);
-```
-
-
-## <span style="color:#802548">_crop시 image 해상도가 깨졌던 이유_</span>
-
-- image 해상도가 깨졌던 이유는 left 값을 round 처리를 안해준 것에 더해,
-- border size 값을 생각하지 않은 것 때문이었다. 아래 1은 border size다.
-
-```js
-const scaleX = activeSelection.scaleX;
-const scaleY = activeSelection.scaleY;
-
-const fixWidth = rect.width - 1; // border size 때문에 값을 빼줘야 정상적으로 보임
-const fixHeight = rect.height - 1; // border size 때문에 값을 빼줘야 정상적으로 보임
-cropped.src = activeSelection.origin.src;
-
-fabric.Image.fromURL(activeSelection.origin.src, (myImg)=> {
-//i create an extra var for to change some image properties
-  const url = myImg.toDataURL({
-    left: Math.round((rect.left - activeSelection.left) / scaleX),
-    top: Math.round((rect.top - activeSelection.top) / scaleY),
-    width: Math.round(fixWidth / scaleX),
-    height: Math.round(fixHeight / scaleY),
-  });
-});
-```
-
-
-## <span style="color:#802548">_fabric에서 js로 발생시킨 event는 인식되지 않는다._</span> 
-
-- js로 돌리는 순간, 그냥으로는 event가 발생하지 않는다.
-- 아래같이 암만 달아봐야 인지하지 못한다.
-- 마우스 클릭을 통한 event로만 인지 가능하다.
-
-```js
-this.canvas.on('object:rotated', function(options) {
-    options.target.setCoords();
-    console.log(options.target);
-
-    let left = null;
-    let top = null;
-    if(options.target.angle === 0 || options.target.angle === 360 || options.target.angle === -360 ) {
-      left = options.target.oCoords.tl.x;
-      top = options.target.oCoords.tl.y;
-    } else if(options.target.angle === -90) {
-      left = options.target.oCoords.tr.x;
-      top = options.target.oCoords.tr.y;
-    } else if(options.target.angle === -180) {
-      left = options.target.oCoords.br.x;
-      top = options.target.oCoords.br.y;
-    } else if(options.target.angle === -270) {
-      left = options.target.oCoords.bl.x;
-      top = options.target.oCoords.bl.y;
-    }
-    console.log(left, top);
-  });
-```
-
-  - 인지시키기 위해선 강제로 event를 발동시켜줘야 한다.
-  - 그럼 위에 걸어둔 rotated event가 인지된다.
-
-  ```js
-  this.canvas.fire("object:rotated", {target: activeSelection});
-  ```
-
-## <span style="color:#802548">_rotate 돌린 상태로 저장하기_</span>
-
-- 차장게이가 왼90도 돌린 상태로 서버에 전송해달라는 말을 했다.
-
-
-- 아래처럼 canvas하나를 그냥 새롭게 만들어버리는 게 낫다.
-- 원래 있던 canvas를 기반으로 그리려고 해봐야 소용없다..
-- 아래처럼 MathPI / 2로 나누면 왼 90도 돌아간 dataurl을 뱉는다.
-- -Math.PI / 2로 나누면 오른 90도 돌아간 dataUrl을 뱉는다.
-- ToDataUrl()이 비동기라서 Promise 안에 넣어서 async await를 쓸 수 있게 만든다.
-
-```js
-function rotateImage90Degrees(imageDataUrl) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => {
-      const width = image.width;
-      const height = image.height;
-      const canvas2 = document.createElement('canvas');
-
-      if(!(canvas2 instanceof HTMLCanvasElement)) {
-        return reject(new Error('failed to create canvas'));
-      }
-
-      const ctx = canvas2.getContext('2d');
-
-      canvas2.width = height;
-      canvas2.height = width;
-
-      ctx.translate(height / 2, width / 2);
-      ctx.rotate(Math.PI / 2);
-      ctx.drawImage(image, -width / 2, -height / 2);
-
-      resolve(canvas2.toDataURL());
-    }
-    image.onerror = reject;
-    image.src = imageDataUrl;
-  })
-}
-
-async function getRotatedImageUrl(imageDataUrl) {
-  try {
-    const rotateImageUrl = await rotateImage90Degrees(imageDataUrl);
-    
-    return rotateImageUrl;
-  } catch {
-    throw error;
-  }
-}
-```
-
-
-- 그럼 아래와 같이 local에 저장할 수 있다.
-- 파일 객체로 만들어 저장한다. 
-
-```js
-let saveImg = document.createElement('a');
-getRotatedImageUrl(croppedImageData).then((rotatedUrl) => {
-  const binaryData = base64UrlToBinary(rotatedUrl);
-  const blob = new Blob([binaryData], {type: 'image/jpeg'});
-  const file = new File([blob], 'image/jpeg', {type:'image/jpeg'});
-  const url = URL.createObjectURL(file);
-
-  saveImg.setAttribute('href', url);
-  saveImg.setAttribute('download', "카드.jpg");
-  saveImg.click();
-  saveImg.remove();
-  URL.revokeObjectURL(url);
-  tempCavnas.clear();
-})
-```
-
-- 서버에 보낼 때는 주의할 점이 있다.
-- 신한은 legacy 좆병신이라 form-urlencoded 고정으로 보냈다.
-- 따라서 body에 넣어 보내도, 전부 string처리되기 때문에, 객체를 그냥 넣으면 절대 안된다.
-
-```js
-const data = {
-  img: 'img'
-};
-
-const xhr = new XMLHttpRequest();
-xhr.open('POST', 'your-url-here', true);
-xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-xhr.send('url=' + data);
-```
-
-- 위와 같이 url이란 name에 data를 객체로 보내면 제대로 인식되지 못한다.
-
-```
-url=[object object]
-```
-
-- formurlencoded로 보내려면 아래처럼 encodeURIComponent로 감싸서 보내줘야 한다.
-
-```js
-const data = {
-  img: 'img'
-};
-
-// URL-encoded 형식으로 변환
-const encodedData = 'json=' + encodeURIComponent(data);
-
-// XMLHttpRequest 객체 생성
-const xhr = new XMLHttpRequest();
-xhr.open('POST', 'your-url-here', true);
-xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-
-// 데이터 전송
-xhr.send(encodedData);
-```
-
-
-- json문자열로 바꿀거라면 아래처럼 stringify도 넣는다.
-
-```js
-const data = {
-  img: 'img'
-};
-
-// JSON 문자열로 변환
-const jsonData = JSON.stringify(data);
-
-// URL-encoded 형식으로 변환
-const encodedData = 'json=' + encodeURIComponent(jsonData);
-
-// XMLHttpRequest 객체 생성
-const xhr = new XMLHttpRequest();
-xhr.open('POST', 'your-url-here', true);
-xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-
-// 데이터 전송
-xhr.send(encodedData);
-```
-
-
-
-## <span style="color:#802548">_tomcat의 post 전송 시 body 크기 2MB 제한_</span>
-
-- 우선 tomcat은 post로 전송시에, 2mb가 넘으면 그냥 튕겨버린다. 그게 default다.
-- 따라서 controller에는 값이 들어오지 않는다. controller 자체에는 도달한다.
-- server.xml에 8080 connector에 maxPostSize="104786760" 같이 10MB로 올려줘야 2MB가 넘는 것도 들어온다.
-- base64UrlString은 2MB가 넘는 경우가 꽤 많으니 해당 부분을 잘 확인해야 한다.
-- 그런데 문제는 2MB를 넘기게 설정해도, 읽어오는데 하세월이라는 점이다.
-- 2MB넘는 base64String을 읽어오는데 3분 정도가 걸렸다. 이건 써먹을 수가 없다.
-
-
-
-
-## <span style="color:#802548">_js,css,font caching 방지하기_</span>
-
-- js script를 갈아끼워도 caching된 것이 남아있으면 caching된 것을 읽는다.
-- 따라서 변화를 로컬 혹은 운영에 반영해도 읽어오지 못하는 경우가 있다.
-- 이는 legacy도 마찬가지지만, npm 기반의 vue나 react도 마찬가지다.
-
-
-- vue의 경우, vue.config.js에 아래 내용을 추가해준다.
-
-```js
-module.exports = {
-  chainWebpack: (config) => {
-    config.output.filename('js/[name].[hash].js').end();
-    config.output.chunkFilename('js/[name].[hash].js').end();
-  },
-};
-```
-
-- vite기반의 경우, 기본적으로 파일에 hash가 추가되므로 알아서 방지된다.
-
-
-
-- 개발 시 특별한 옵션을 넣기 싫다면, 로컬에서는 그냥 개발자도구창을 열고 새로고침에 오른쪽 마우스 클릭하고 캐시 비우고 새로고침을 누른다.
-- js 방식으로 처리한다면 아래와 같다. html에서 script를 불러올 때 아래와 같이 날짜를 추가해준다.
-- src끝에 querystring을 달면 처음 반영시에는 caching이 방지될 지 몰라도, 똑같이 유지하면서 새로운 내용을 배포할 때는 caching을 방지하지 못한다.
-
-```html
-<script src="fqawrqwrrq?2015241"></script>
-```
-
-
-- 따라서 동적으로 아래와 같이 불러주는 js를 따로 만들수도 있다.
-- 안바뀐다는 확신이 있으면 version을 안 추가해줘도 된다.
-
-```js
-//photo.js
-(function() {
-  const version = new Date().getDate() + '' + (new Date().getHours());
-  document.write('<link rel="preload" as="font/woff2" href=/pconts/fonts/shcard/Srrr.woff2" corssorigin />\n'
-  + '<link rel="preload" as="style"  href="/pconts/css/shcard/fonts.css?ver=' + ver +'" />\n'
-  + '<link rel="preload" as="style"  href="/pconts/css/shcard/fonts.css?ver=20230114" />\n'
-  + '<link rel="preload" as="script"  href="/pconts/css/shcard/photoFunction.js?ver=' + ver +'" />\n'
-
-
-  )
-})();
-```
-
-- caching방지용으로 만들어둔 js를 html에 넣는다.
-- 제일 위에다가 놓아주자.
-
-```html
-<head>
-  <script src="/function/photo.js"></script>
-
-  <script src="/libary/tf.js"></script>
-  <script src="/libary/coco-ssd.js"></script>
-  <script src="/libary/fabric.js"></script>
-</head>
-<body>
-  .
-  .
-</body>
-```
-
-
-## <span style="color:#802548">_filter와 find의 차이점_</span>
-
-- filter를 쓰면 배열로 취급된다.
-- 따라서 index를 넣어서 가져와야 한다.
-- 만약 0번쨰를 설정하지 않고 진행하면 콘솔창에 오류는 안뜨는데, 오류는 찾을 수 없는 상황이 되어버린다.
-- 따라서 find과 filter의 차이를 반드시 외워두자. find는 객체, filter는 array다.
-
-```js
-const leftLengthDisplayingText = this.canvas.getObjects().filter((item)=> item.name.includes("text_length"));
-leftLengthDisplayingText[0].text = textBox.text.length;
-```
-
-- 반면에 find를 쓰면 object로 취급된다.
-- 따라서 index를 넣지 않고 가져와야 한다.
-- 여기서는 0번쨰를 설정하지 않고 진행해야 한다.
-
-```js
-const leftLengthDisplayingText = this.canvas.getObjects().filter((item)=> item.name.includes("text_length"));
-leftLengthDisplayingText.text = textBox.text.length;
-```
-
-- 또한 text를 설정하는 순간, 자동으로 split이 일어난다.
-- 그런데 length 속성은 number type이므로 오류가 난다.
-- 따라서 형변환을 해줘야 한다.
-
-```js
-leftLengthDisplayingText.text = String(textBox.text.length);
-```
-
-## <span style="color:#802548">_typing event가 일어나기 전의 텍스트 저장하기_</span>
-
-- 우선 텍스트에 관한 요건이 매우 복잡했다. 
-- 이전에 입력한 text 언어와 현재 입력한 text 언어의 양식이 다르면 막아달라는 것이었다.
-- 다만 이전text와 현재 입력된 text의 값이 달을 구분해서 진행해야 했으므로 flag값을 추가했다.
-- 여기서 새로 추가된 text를 가져오려면, 이전 text만큼을 빼줘야 했다. 따라서 previousTextLength - 1이 된것이다.
-- 그러면서 원본 객체에는 영향이 가지 않아야 했으므로 slice가 아닌 substring을 사용해 새로운 문자열을 만들었다.
-- 현재입력된 text는 과거 text의 길이만큼 잘라야 하므로 잘라서 가져온다.
-- 다만 \uAC00-\uD7AF정규식을 사용하니 한글 ㄱ이라던가 자음 모음 하나씩만 입력했을 때 한국어 체크가 안돼서 아래와 같이 변경했다.
-- 다만 전부지워서 0이 되는 경우에는 한글, 영어 어디로든 갈 수 있으니 정규식 검사를 하지 않게 했다.
-
-```js
-//한글이면 true, 아니면 false
-function verifyKoreanOrNot(text, flag) {
-  const previousTextLength = text.length;
-  const currentEventText = text.substring(previousTextLength - 1); //slice쓰면 원본객체도 영향을 받기때문에 쓰지 않음. 
-
-  if(text.length !== 0 && flag === 'prev') {
-    return /^[ㄱ-ㅎ가-힣ㅏ-ㅣ]+$/.test(text);
-  } else if(currentEventText.length !== 0 && flag ==='cur') {
-    return /^[ㄱ-ㅎ가-힣ㅏ-ㅣ]+$/.test(currentEventText);
-  }
-}
-
-//영어면 true, 아니면 false
-function verifyEnglishOrNot(text, flag) {
-  const previousTextLength = text.length;
-  const currentEventText = text.substring(previousTextLength - 1); //slice쓰면 원본객체도 영향을 받기때문에 쓰지 않음. 0번째 index부터니 1을 빼줌.
-
-  if(text.length !== 0 && flag === 'prev') {
-    return /^[a-zA-Z]+$/.test(text);
-  } else if(currentEventText.length !== 0 && flag ==='cur') {
-    return /^[a-zA-Z]+$/.test(currentEventText);
-  }
-}
-```
-
-
-- 이제 해당 정규식을 이용해 과거의 text와 현재 입력된 text의 언어를 검사하게했다.
-- 한 -> 영, 영 -> 한이면서 이전 text의 값이 있는 경우에만 언어 전환을 막는 로직을 발동시킨다.
-- 다만 return;을 쓰지 못하고 복잡하게 boolean 변수로 process를 control했다.
-  - 그 이유는 어쨌든 이전의 요건을 통과한 경우에는 prevText값은 무조건 보관해야 하기 때문이다.
-- 한->영, 영->한 전환 시 해당 문자는 입력하지 않은 처리를 하므로, 문자열 길이 보여주는 text도 입력하지 않은 처리를 반영했다.
-- 맨 마지막에 prevText 값을 저장하게 하여 로직을 사용할 때는 prevText값을 사용할 수 있게 적용하였다.
-  - 다만 text가 이전 text와 같은 경우에는 굳이 판별할 필요가 없으므로 제외한다.
-
-```js
-
-const self = this;
-function refrainKorEngMixing(previousText, textBox) {
-  let isPrevTextKorean = verifyKoreanOrNot(previousText.text, 'prev');
-  let isCurrentEventTextEnlgish = verifyEnglishOrNot(textBox.text, 'cur');
-  let isPrevTextEnglish = verifyEnglishOrNot(previousText.text, 'prev');
-  let isCurrentEventTextKorean = verifyKoreanOrNot(textBox.text, 'cur');
-
-
-  let isKorToEng = (isPrevTextKorean  && isCurrentEventTextEng);
-  let isEngToKor = (isPrevTextEnglish && isCurrentEventTextKorean)
-  if (isKoreToEng || isEngToKor) {
-    let isContinuingLogic = true;
-
-    if (!previousText.text) {
-      isContinuingLogic = false;
-    }
-
-    if (isContinuingLogic) {
-      textBox.text = textBox.text.slice(0, textBox.text.length - 1);
-
-      //한->영, 영->한 전환 시 해당 문자는 입력하지 않은 처리를 하므로, 문자열 길이 보여주는 text도 입력하지 않은 처리를 반영
-      if(textBox.name?.includes('left')) {
-        const leftLengthDisplayText = self.canvas.getObjects().find((item) => item.name.includes('text_length_left'));
-        leftLengthDisplayText.text = String(textBox.text.length);
-      } else {
-        const centerLengthDisplayText = self.canvas.getObjects().find((item) => item.name.includes('text_length_center'));
-        centerLengthDisplayText.text = String(textBox.text.length);
-      } 
-
-      self.canvas.discardActiveObject();
-      self.canvas.setActiveObject(textBox);
-    }
-
-  }
-
-  //이전텍스트 값을 저장
-  if (previousText.text !== textBox.text) {
-    previousText.text = textBox.text;
-  }
-}
-```
-
-- 하지만 위의 방식으론 공백의 경우를 잡을 수가 없다.
-- 우선 입력 시에도 공백을 허용하게끔 정규식에 공백도 추가해줘야한다.
-
-```js
-this.cavnas.on('text:changed', (e) => {
-
-  if (textBox.name?.includes('left')) {
-    const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55\s]+$/gi;
-    const isValidText = filterTextRetrieveValidationResult(regExp, textBox);
-
-    if (!isValidText) {
-      return;
-    }
-
-    limitLeftTextAmount(textBox);
-    refrainKorEngMixing(previousLeftText, textBox);
-  }
-})
-```
-
-- 공백을 받는 경우, 공백으로 인해 정규식이 전부 깨져버린다. 따라서 kor-eng 용 정규식에 넣을 텍스트는 공백을 전부 제거해준다.
-- 또한 현재 들어온 event 값이 공백인 경우, 이전에 보존한 텍스트 값을 바꾸지 않는 조건을 추가한다. 텍스트값에 공백이 포함되면 안되기 때문이다.
-- 이벤트 텍스트값도 trim한 값으로 만든다. 막 입력된 event input도 공백이 들어올 수 있기 때문이다.
-
-```js
-const self = this;
-function refrainKorEngMixing(previousText, textBox) {
-  let isPrevTextKorean = verifyKoreanOrNot(previousText.text.trim(), 'prev');
-  let isCurrentEventTextEnlgish = verifyEnglishOrNot(textBox.text.trim(), 'cur');
-  let isPrevTextEnglish = verifyEnglishOrNot(previousText.text.trim(), 'prev');
-  let isCurrentEventTextKorean = verifyKoreanOrNot(textBox.text.trim(), 'cur');
-    if (!previousText.text.trim()) {
-      isContinuingLogic = false;
-    }
-.
-.
-.
-  //이전텍스트 값을 저장. 공백값은 저장하지 않고 한글, 영어로만 값을 간직한다.
-  if (previousText.text !== textBox.text && !textBox.text.includes(' ')) {
-    previousText.text = textBox.text;
-  }
-}
-```
-
-
-
-- this를 쓰는 방식은 self = this 말고 아래와 같이도 쓸 수 있다.
-- 매개변수가 있어도 아래와 같이 bind로 묶는 게 가능한 이유는 매개변수는 그대로 두고 this만 binding하는 것이라 그렇다.
-
-```js
-function refrainKorEngMixing(previousText, textBox) {
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-}
-
-refrainKorEngMixing = refrainKorEngMixing.bind(this);
-```
-
-## <span style="color:#802548">_object와 원시형의 차이점_</span>
-
-- slice는 원본을 잘라버린다.
-- slice가 원본을 자르는 특성이 필요할 때가 있다.
-- 원본의 값을 바꿔야만 할 때다.
-
-- 그런데 그냥 바꾸는 건 적용되지 않고, 객체의 property로 만들어서 변경해줘야 한다.
-- 아래처럼 property로 만들어서 바꾸지 않으면, 바뀌지 않는다.
-- 원본을 함수의 parameter로 넘기는 순간, function stack에서 자체적으로 값을 만들어 사용하기 때문이다.
-- 아래처럼 만들어 버리면 previousText 값이 바깥에서 바뀌지 않는다.
-
-```js
-let previousLeftText = leftDefaultText
-let previoustCenterText = centerDefaultText
-
-function refrainKorEngMixing(previousText, textBox) {
-  .
-  .
-  .
-  if (previousText !== textBox.text) {
-    previousText = textBox.text;
-  }
-}
-```
-
-
-- 아래처럼 객체의 property로 저장해야 바깥에서도 바뀐 값을 사용할 수 있다.
-
-```js
-let previousLeftText = {
-  text: ''
-}
-let previoustCenterText = {
-  text: ''
-}
-
-function refrainKorEngMixing(previousText, textBox) {
-  .
-  .
-  .
-  if (previousText.text !== textBox.text) {
-    previousText.text = textBox.text;
-  }
-}
-```
-
-## <span style="color:#802548">_replace, slice/ 대리변수, substring_</span>
-
-- 다만 이때 조심해야 할 점이 있는데, 바로 slice와 substring을 사용할 때를 구분하는 것이다.
-- slice는 객체 자체 원본 property를 바꿔버린다. 따라서 원본 값이 바뀌는 걸 원하지 않으면 사용해선 안된다.
-- 원본 값이 바뀌는 걸 원하지 않는다면, substring으로 가져와서 사용하거나, 대리변수를 만들어야 한다.
-- 대리변수를 쓰는 방법은 아래 예시를 참고하자. 만약 대리변수를 쓰지 않으면 실제 이미지의 left 값이 바뀌어버린다.
-
-```js
-const imageObj = this.canvas.getObjects().find((obj) => obj.name?.includes('image'))
-
-let imgLeft = imageObj.left
-let imgTop = imageObj.top
-if (imageObj.angle === 0 || imageObj.angle === 360 || imageObj.angle === -360 ) {
-    imageObj.left = imageObj.oCoords.tl.x;
-    imageObj.top = imageObj.oCoords.tl.y;
-} 
-```                  
-
-
-- 따라서 속성 값을 바꾸지 않고, 대리 변수를 사용해 left, top값을 측정하는 로직으로 바꿨다.
-
-```js
-const imageObj = this.canvas.getObjects().find((obj) => obj.name?.includes('image'))
-
-let imgLeft = imageObj.left
-let imgTop = imageObj.top
-if(imageObj.angle === 0 || imageObj.angle === 360 || imageObj.angle === -360 ) {
-  imgLeft = imageObj.oCoords.tl.x;
-  imgTop = imageObj.oCoords.tl.y;
-} 
-```   
-
-- substring을 쓰는 것은 아래와 같다.
-- substring을 쓰면, textBox의 property인 text의 값은 건드리지 않기 때문에 문제가 없다.
-- 실제 event가 일어난 현재 text는 'textㄱ'고, 실제 입력된 값은 'ㄱ'라고 해보자.
-  - 현재 text인 'textㄱ'는 보존하고, 실제 입력된 값인 'ㄱ'만으로 한글-영어 여부 판별이 필요하다.
-  - 따라서 substring으로 새로운 문자열을 만드는 것이다.
-
-```js
-function verrifyEnglishOrNot(text, flag) {
-  const previousTextLength = text.length;
-  const currentEventText = text.substring(previousTextLength - 1); //slice쓰면 원본객체도 영향을 받기때문에 쓰지 않음. 0번째 index부터니 1을 빼줌.
-
-  if(text.length !== 0 && flag === 'prev') {
-    return /^[a-zA-Z]+$/.test(text);
-  } else if(currentEventText.length !== 0 && flag ==='cur') {
-    return /^[a-zA-Z]+$/.test(currentEventText);
-  }
-}
-```
-
-- 반면 replace, slice를 써야하는 상황도 있다.
-- 정규식을 통해 값을 확인해 걸러내는 경우에 필요하다.
-- 객체 원본 property 값 자체를 바꿔줘야 하는 경우 아래처럼 replace를 활용한다.
-
-```js
-const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi;
-  if (regExpt.test(textBox.text)) {
-    textBox.text = textBox.text.replace(regExp, '');
-    this.canvas.discardActiveObject();
-    this.canvas.ssetActiveObject(textBox);
-    return;
-  }
-```
-
-- slice를 활용하는 경우는 방금 입력한 값만 삭제하려고 할 때 많이 쓴다.
-- 글자의 최대 길이 제한이 있는 경우에 maxLength를 알기 쉬우니 특히 많이 쓴다.
-- 최대 제한이상의 글자를 쓰면, 글자수가 늘어나는 것을 글자수 text에 반영해줄 필요가 없다.
-- 따라서 최대제한 if문에는 적용하지 않고, 그 외의 경우에만 적용시킨다.
-- 문자열을 discard하고 다시 active 시키는 이유는 그렇게 안하면 편집모드 상태에선 text가 입력된 값을 그대로 보존하기 때문이다.
-
-```js
-const limitLeftTextAmount = (textBox) => {
-  if (textBox.text.length > 7) {
-    textBox.text = textBox.text.slice(0, 7);
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-  }  else {
-    const leftLengthDisplayText = self.canvas.getObjects().find((item) => item.name.includes('text_length_left'));
-    leftLengthDisplayText.text = String(textBox.text.length);
-  }
-}
-```
-
-
-## <span style="color:#802548">_text 검사 순서와 정규식_</span>
-- text에 관한 복잡한 로직은 이제 거의 정리됐다.
-- 먼저 욕설 검사를 먼저 진행한다.
-- 그리고 canvas자체에 event를 거는 것말곤 도리가 없으므로, event의 name을 보고 분기처리한다.
-- 분기처리를 하는경우 가장 먼저 한영만 입력가능한지, 숫자만 입력가능한지 확인한다.
-- 만약 해당 정규식에 위반되면 그 이후 로직인 최대숫자 제한, 한-영 영-한 전환 금지 로직은 실행조차 하지 않는다.
-- 그냥 그전에 먼저 문자열을 삭제시켜버린다.
-- 해당 문자 정규식 검사도 함수로 따로 뺄 수 있는데, 대신 빼게 되면 함수안에서 return시키기가 귀찮아진다.
-
-```js
-this.cavnas.on('text:changed', (e) => {
-  const textBox = e.target;
-  debouncedCheckProfanity(textBox);
-
-  if (textBox.name?.includes('left')) {
-    const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi;
-    if (regExpt.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regExp, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return;
-    }
-    limitLeftTextAmount(textBox);
-    refrainKorEngMixing(previousLeftText, textBox);
-  } else if(textBox.name?.includes('center')) {
-    const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi;
-    if (regExpt.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regExp, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return;
-    }
-    limitLeftTextAmount(textBox);
-    refrainKorEngMixing(previousLeftText, textBox);
-  } else {
-    const regExp = /[^0-9]+$/gi;
-    if (regExpt.test(textBox.text)) {
-        textBox.text = textBox.text.replace(regExp, '');
-        this.canvas.discardActiveObject();
-        this.canvas.ssetActiveObject(textBox);
+    if (!obj || obj.name !== 'cropZone') {
         return;
-      }
-      limitRightTextAmount(textBox);
     }
+
+    const img = getCurImage(this.canvas);
+
+    const imgLeft = img.left;
+    const imgTop = img.top;
+    const imgWidth = img.getScaledWidth();
+    const imgHeight = img.getScaledHeight();
+
+    //cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
+    const {x:rx, y:ry} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, -img.angle);
+    obj.left = rx;
+    obj.top = ry;
+
+    if (obj.left < imgLeft) {
+        obj.left = imgLeft;
+    }
+    if(obj.top < imgTop) {
+        obj.top = imgTop;
+    }
+
+    if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
+        obj.left = imgLeft + imgWidth - obj.getScaledWidth();
+    }
+    if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
+        obj.top = imgTop + imgHeight - obj.getScaledHeight();
+    }
+
+    const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
+    obj.left = x;
+    obj.top = y;
+
+    obj.setCoords();
 })
-```
 
+function rotatePoint(px, py, ox, oy, angle) {    
+    const radians = angle * (Math.PI / 180);
+    const translatedX = px - ox;
+    const translatedY = py - oy;
 
-- 그래도 아래처럼 좀 깔끔해지는 효과가 있다.
-- 핵심 식들에 이름을 주니까 이해하기 쉬워진다.
+    const rotatedX = translatedX * Math.cos(radians) - translatedY * Math.sin(radians);
+    const rotatedY = translatedX * Math.sin(radians) + translatedY * Math.cos(radians);
 
-```js
-function filterTextRetrieveValidationResult(regex, textBox) {
-  if (regex.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regex, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return false;
-    }
+    const finalX = rotatedX + ox;
+    const finalY = rotatedY + oy;
 
-    return true;
-}
-
-this.cavnas.on('text:changed', (e) => {
-  const textBox = e.target;
-  debouncedCheckProfanity(textBox);
-
-  if (textBox.name?.includes('left')) {
-    const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi;
-    const isValidText = filterTextRetrieveValidationResult(regExp, textBox);
-
-    if (!isValidText) {
-      return;
-    }
-
-    limitLeftTextAmount(textBox);
-    refrainKorEngMixing(previousLeftText, textBox);
-    
-  } else if(textBox.name?.includes('center')) {
-    const regExp = /[^ㄱ-ㅎ가-힣ㅏ-ㅣa-zA-Z\u3180\u119E\u11A2\u2022\u2025a\u00B7\uFE55]+$/gi;
-    const isValidText = filterTextRetrieveValidationResult(regExp, textBox);
-
-    if (!isValidText) {
-      return;
-    }
-
-    limitLeftTextAmount(textBox);
-    refrainKorEngMixing(previousCenterText, textBox);
-  } else {
-    const regExp = /[^0-9]+$/gi;
-    const isValidText = filterTextRetrieveValidationResult(regExp, textBox);
-
-    if (!isValidText) {
-      return;
-    }
-
-    limitRigthTextAmount(textBox);
-  }
-})
-```
-
-
-- 그런데 공백을 추가하는 과정에서 계속 오류가 나기 시작했다.
-- 그래서 원인을 찾기 위해 regex를 콘솔로 찍어보았다.
-- 그런데 말도 안되게 위의 콘솔 regex test는 true인데, if문의 regex test는 false가 나왔다.
-
-```js
-function filterTextRetrieveValidationResult(regex, textBox) {
-    console.log("regex.test(textBox.text)", regex.test(textBox.text));
-  if (regex.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regex, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return false;
-    }
-
-    return true;
+    return { x: finalX, y: finalY}
 }
 ```
 
-- 원인을 알아보니 regex는 g flag가 있는 경우, 경우에 따라 regex의 lastIndex가 달라지기 때문이라고 한다.
-- 따라서 regex를 호출할 때는 console.log로 값을 보면 안되는 것이었다.
-- 그래서 식을 다시 원복했다.
+- 이미지가 scaling된 상태일 수 있기 때문에, width와 height는 scaled된 값을 구해야 한다.
 
 ```js
-function filterTextRetrieveValidationResult(regex, textBox) {
-  if (regex.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regex, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return false;
+const img = getCurImage(this.canvas);
+
+const imgLeft = img.left;
+const imgTop = img.top;
+const imgWidth = img.getScaledWidth();
+const imgHeight = img.getScaledHeight();
+```
+
+- cropzone rect left, top 값을 각도에 맞춰 수정해준다.
+- 여기서 -angle로 전환하는 이유는 image를 (0,0)으로 맞춰 계산할 때 돌린 각도만큼 반대로 돌려야 하기 때문이라고 한다.
+
+```js
+//cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
+const {x:rx, y:ry} = rotatePoint(obj.left, obj.top,imgLeft, imgTop, -img.angle);
+obj.left = rx;
+obj.top = ry;
+```
+
+- Math의 cos, sin 함수는 반드시 degree가 아닌 radians 형태의 각도로 넣어야 한다.
+- 따라서 degree를 radians 값으로 변환해야 한다.
+    - 360도가 2 * PI * radians이므로, 1도는 PI * radians /180이다.
+    - angle만큼 곱해주면 angle만큼의 radians 값을 얻을 수 있다.
+- ox, oy는 image 객체의 left, top 값이다.
+- px, py는 rect 객체의 left, top 값이다.
+- rect 객체의 left, top 값에서 image 객체의 값을 빼는 이유는 image 객체의 left, top을 (0,0)이라는 점으로 놓기 위해서다.
+    -  그렇게 하면 rotation 계산이 매우 간결해지기 때문이다. 따라서 image (left, top)이 (0,0) 기준으로 변환된 rect X, Y 좌표값을 얻어낸다.
+    -  거기서부터 회전된 radians 값을 계산해서 다시한번 원점에서의 차이만큼의 좌표를 계산해낸다. 식은 그냥 외우는 게 나을듯 하다.
+    - 그리고 이를 원래 image의 (left, top)에 붙이면 degree만큼 돌아간 rect의 좌표값을 얻어낼 수 있다.
+
+```js
+function rotatePoint(px, py, ox, oy, angle) {    
+    const radiansConvertedFromDegree = angle * (Math.PI / 180);
+    const translatedX = px - ox;
+    const translatedY = py - oy;
+
+    const rotatedX = translatedX * Math.cos(radiansConvertedFromDegree) - translatedY * Math.sin(radiansConvertedFromDegree);
+    const rotatedY = translatedX * Math.sin(radiansConvertedFromDegree) + translatedY * Math.cos(radiansConvertedFromDegree);
+
+    const finalX = rotatedX + ox;
+    const finalY = rotatedY + oy;
+
+    return { x: finalX, y: finalY}
+}
+```
+
+- boundary 안에서만 움직이게끔 하는 코드다.
+- 이미지가 마치 (0,0)인 상황에서 rotate되지 않은 상황으로 만들어서 경계를 넘겼는지 계산하는 것이다.
+
+```js
+ if (obj.left < imgLeft) {
+    obj.left = imgLeft;
+}
+if (obj.top < imgTop) {
+    obj.top = imgTop;
+}
+if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
+    obj.left = imgLeft + imgWidth - obj.getScaledWidth();
+}
+if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
+    obj.top = imgTop + imgHeight - obj.getScaledHeight();
+}
+```
+
+- angle을 -로 돌려서 계산했던 행위를 되돌린다.
+- rect의 left, top 값을 원래대로 되돌리고 실제 좌표계에 반영해준다.
+
+```js
+const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
+obj.left = x;
+obj.top = y;
+
+obj.setCoords();
+```
+
+- scaling의 경우에는 코드가 약간 달라진다.
+- 다만 아직 오류가 있다. 위로 당기면 아래 rect가 커진다.
+
+```js
+this.canvas.on('object:scaling', (e) => {
+    const obj = e.target;
+
+    if (!obj || obj.name !== 'cropZone') {
+        return;
     }
 
-    return true;
-}
-```
+    const img = getCurImage(this.canvas);
 
-- 원인은 정규식 중 $의 문제였다. $는 문자열 끝만을 의미하는 것이다.
-- 다시말해 막 입력한 값에 대해서만 정규식이 발동하고 있던 셈이었다.
-- 아래 정규식은 문자열의 끝 부분에서 한글이 아닌 모든 문자를 찾고, 이 문자들을 제거하는 형태였다.
+    const imgLeft = img.left;
+    const imgTop = img.top;
+    const imgWidth = img.getScaledWidth();
+    const imgHeight = img.getScaledHeight();
 
-```js
-const regex = /[^ㄱ-ㅎ가-힣ㅏ-ㅣ]+$gi/;
-textBox.text = textBox.text.replace(regex, '');
-```
+    // Calculate the object's scaled dimensions and position
+    const scaledWidth = obj.getScaledWidth();
+    const scaledHeight = obj.getScaledHeight();
 
-- '서브 텍스트 입력' 중 서브만 더블클릭해 숫자로 바꾸는 경우, 전체 문자에 대해 정규식 적용이 필요했다.
-- 따라서 문자열 끝만을 의미하는 $를 지웠다. 그러자 원하는대로 정규식이 작동한다.
+    // Get object's current position
+    const { x: objLeft, y: objTop } = obj.getPointByOrigin('left', 'top');
 
-```js
-const regex = /[^ㄱ-ㅎ가-힣ㅏ-ㅣ]+gi/;
-```
+    // Rotate point to the image's coordinate system
+    let { x: rx, y: ry } = rotatePoint(objLeft, objTop, imgLeft, imgTop, -img.angle);
 
-- '서브 텍스트 입력' 일 때 앞의 서브만 더블클릭해서 숫자를 넣는 경우에, 지워지면서 1은 입력되지 않게 완성했다.
-
-```js
-const regex = /[^ㄱ-ㅎ가-힣ㅏ-ㅣ]+gi/;
-function filterTextRetrieveValidationResult(regex, textBox) {
-  if (regex.test(textBox.text)) {
-      textBox.text = textBox.text.replace(regex, '');
-      this.canvas.discardActiveObject();
-      this.canvas.ssetActiveObject(textBox);
-      return false;
+    // Boundary conditions
+    if (rx < imgLeft) {
+        rx = imgLeft;
+    }
+    if (ry < imgTop) {
+        ry = imgTop;
+    }
+    if (rx + scaledWidth > imgLeft + imgWidth) {
+        obj.scaleX = (imgLeft + imgWidth - rx) / obj.width;
+    }
+    if (ry + scaledHeight > imgTop + imgHeight) {
+        obj.scaleY = (imgTop + imgHeight - ry) / obj.height;
     }
 
-    return true;
-}
+    // Rotate point back to the canvas coordinate system
+    let { x, y } = rotatePoint(rx, ry, imgLeft, imgTop, img.angle);
+    obj.setPositionByOrigin(new fabric.Point(x, y), 'left', 'top');
+
+    // Force the crop zone to update its coordinates and scaling
+    obj.setCoords();
+});
 ```
 
 
 
-
-
-## <span style="color:#802548">_폰트사이즈에 맞춰 height 유지시키기_</span>
-
-- 폰트사이즈가 커질수록, height도 높아져 원래 높이를 유지하지 못하고 글자가 아래로 내려간다.
-- 이런 현상을 방지하려면 fontSize에 맞춰 top 크기도 조정되어야 한다.
-
-```js
-function limitCenterTextAmount (textBox) {
-  const previousFontSize = textBox.fontSize;
-
-  if(textBox.text.length === 1) {
-    textBox.fontSize = 52;
-  } else if(textBox.text.length === 2) {
-    textBox.fontSize = 42;
-  } else if(textBox.text.length === 3) {
-    textBox.fontSize = 38;
-  } else if(textBox.text.length === 4) {
-    textBox.fontSize = 33;
-  } else if(textBox.text.length === 5) {
-    textBox.fontSize = 28;
-  } else if(textBox.text.length === 6) {
-    textBox.fontSize = 25;
-  } else if(textBox.text.length === 7) {
-    textBox.fontSize = 22;
-  } else if(textBox.text.length === 8) {
-    textBox.fontSize = 18;
-  }
-
-  textBox.top = textBox.top - (previousFontSize - textBox.fontSize);
-}
-```
-
-- 위를 ES6 버전으로 바꾸면 아래와 같다.
-- property의 속성을 바꾸려면 destructuring이 아니라 직접 dot notation으로 접근해야 한다.
-- destructuring은 local variable을 만드는 것 뿐이다.
-
-```js
-function limitCenterTextAmount(textBox) {
-  const { fontSize: previousFontSize, text } = textBox;
-  const { length } = text;
-  
-  if (length === 1) {
-    textBox.fontSize = 52;
-  } else if (length === 2) {
-    textBox.fontSize = 42;
-  } else if (length === 3) {
-    textBox.fontSize = 38;
-  } else if (length === 4) {
-    textBox.fontSize = 33;
-  } else if (length === 5) {
-    textBox.fontSize = 28;
-  } else if (length === 6) {
-    textBox.fontSize = 25;
-  } else if (length === 7) {
-    textBox.fontSize = 22;
-  } else if (length === 8) {
-    textBox.fontSize = 18;
-  }
-
-  textBox.top = textBox.top - (textBox.fontSize - previousFontSize);
-}
-```
-
-- 아래와 같이 만들면 실제로 local variable은 previousFontSize가 변수명이 된다.
-
-```js
-const { fontSize: previousFontSize, text } = textBox;
-
-//
-const previousFontSize = textBox.fontSize;
-const text = textBox.text;
-```
 
 
 ## <span style="color:#802548">_미리보기 배율을 늘리면 여백 검사가 작동하지 않는 문제 해결_</span>
@@ -2038,110 +879,6 @@ const setViewport = () => {
   this.foregourndCanvas.zoomToPoint(viewportCenter, zoomValue);
   this.canvas.renderAll();
   this.foregroundCanvas.renderAll();
-}
-```
-
-
-## <span style="color:#802548">_api timeout 시 재시도하는 로직_</span>
-
-- model을 load해서 개/고양이 판독 api를 쏘는데, 이 경우 외부망을 통해 나간다.
-- 그런데 구글이 잘못돼서(???) 혹시 개/고양이 판독이 실패한 경우, 내부 모델을 활용해 판독을 하게끔 하는 요건이 있었다.
-- 그 경우 timeout 함수를 만든다. 성공이나 실패 시 타이머를 없앤다.
-
-```js
-function withTimeout(promise, timeout) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error('Operation timed out'));
-    }, timeout)
-
-    promise.then((value)=> {
-      clearTimeout(timer);
-      resolve(value);
-    }).catch((err)=> {
-      clearTimeout(timer);
-      reject(err);
-    })
-  })
-}
-```
-
-- 좀 복잡한 식이지만, 처음 api 전송이 2초안에 성공이든 실패든 응답이 없으면 내부 모델을 활용하는 식이다.
-
-```js
-try {
-  if (!loadedModel) {
-    loadedModel = await withTimeout(cocoSsd.load(), 2000);
-  }
-
-  return loadedModel;
-} catch (error) {
-  try {
-    //cocoSsd 내부 모델 로드
-    if (!loadedModel) {
-      loadModel = await cocoSsd.load({
-        base: 'lite_mobilenet_v2',
-        modelUrl: '/pet/js/json/models.json'
-      })
-    }
-    return loadedModel;
-  } catch (error) {
-    console.log('load model internal Error');
-  }
-} finally {
-  const model = loadedModel;
-  // const model = await cocoSsd.load();
-
-  // 이미지를 텐서로 변환
-  const tensor = tf.browser.fromPixels(imgObj);
-
-  // 모델에 이미지 전달하여 예측
-  const predictions = await model.detect(imgObj);
-
-  // 예측 결과 출력
-  console.log(predictions);
-
-  // 예측 결과 중 가장 높은 확률의 라벨 가져오기
-  const topPrediction = predictions[0]?.class;
-
-  return topPrediction;
-}
-```
-
-- 더 간단하게 아래처럼 바꿀 수 있다.
-
-```js
-async function loadAndPredict(imgObj) {
-  try {
-    if (!loadedModel) {
-      try {
-        loadedModel = await withTimeout(cocoSsd.load(), 2000);
-      } catch {
-        // 기본 모델 로드 시도
-        loadedModel = await cocoSsd.load({
-          base: 'lite_mobilenet_v2',
-          modelUrl: '/pet/js/json/models.json'
-        });
-      }
-    }
-
-    // 이미지를 텐서로 변환
-    const tensor = tf.browser.fromPixels(imgObj);
-
-    // 모델에 이미지 전달하여 예측
-    const predictions = await loadedModel.detect(imgObj);
-
-    // 예측 결과 출력
-    console.log(predictions);
-
-    // 예측 결과 중 가장 높은 확률의 라벨 가져오기
-    const topPrediction = predictions[0]?.class;
-
-    return topPrediction;
-  } catch (error) {
-    console.log('Model load or prediction error:', error);
-    return null;
-  }
 }
 ```
 
@@ -2307,633 +1044,6 @@ rightTextBox.set('left', rightTextBox.left - ( rightTextBox.width ));
 rightTextBox.set('top', rightTextBox.top - (bottomFontSize + leftText.fontSize + 5 + lineBorderSize + 5.5  + rightTextBox.fontSize));
 ```
 
-## <span style="color:#802548">_텍스트 길이를 보여주는 text도 만들기_</span>
-
-- 텍스트 길이를 보여주는 text도 만들어 달라는 추가요건이 들어왔다.
-- 텍스트 길이는 처음엔 파란색이다가 최대글자 수를 초과하면 빨간색으로 노출시켜달라는 요건이었다.
-- 다만 디자인 사양을 받은 건 없어 일단 임의로 내가 맞췄다. 나중에 다시 바꿔야될 거 같다.
-- select는 불가능해야 한다.
-
-```js
-const leftLengthTextLeftDistance = 40;
-const leftLengthTextTopDistance = 6;
-const leftLengthDisplayingText = new fabric.TextBox('0/7', {
-  fontSize: bottomSize,
-  fill: 'blue',
-  fontFamilty : "Malgun Gothic",
-  name: "text_length_left",
-  width: 40,
-  left: leftTextBox.left,
-  top: leftTextBox.top,
-  height: 100,
-  textAlign: 'left',
-  selectable: false,
-  ...defaultOptions
-})
-leftLengthDisplayingText.set('left', leftLengthDisplayingText.left + leftLengthTextLeftDistance );
-leftLengthDisplayingText.set('top', leftLengthDisplayingText.top + leftLengthTextTopDistance );
-```
-
-- 오른쪽도 똑같이 만들어준다.
-
-```js
-const rightLengthTextLeftDistance = 40;
-const rightLengthTextTopDistance = 6;
-const rightLengthDisplayingText = new fabric.TextBox('0/18', {
-  fontSize: bottomSize,
-  fill: 'blue',
-  fontFamilty : "Malgun Gothic",
-  name: "text_length_left",
-  width: 40,
-  left: leftTextBox.left,
-  top: leftTextBox.top,
-  height: 100,
-  textAlign: 'left',
-  selectable: false,
-  ...defaultOptions
-})
-rightLengthDisplayingText.set('left', rightLengthDisplayingText.left + rightLengthTextLeftDistance );
-rightLengthDisplayingText.set('top', rightLengthDisplayingText.top + rightLengthTextTopDistance );
-```
-
-- center도 똑같이 만들어준다.
-
-```js
-const centerLengthTextLeftDistance = 110;
-const centerLengthTextTopDistance = 15;
-const centerLengthDisplayingText = new fabric.TextBox('0/18', {
-  fontSize: bottomSize,
-  fill: 'blue',
-  fontFamilty : "Malgun Gothic",
-  name: "text_length_left",
-  width: 40,
-  left: leftTextBox.left,
-  top: leftTextBox.top,
-  height: 100,
-  textAlign: 'left',
-  selectable: false,
-  ...defaultOptions
-})
-centerLengthDisplayingText.set('left', centerLengthDisplayingText.left + centerLengthTextLeftDistance );
-centerLengthDisplayingText.set('top', centerLengthDisplayingText.top + centerLengthTextTopDistance );
-```
-
-
-- 해당 텍스트 길이를 보여주는 text는 레이어에 추가하지 않게끔 한다.
-- 레이어에 필요하지 않은 text기 때문이다.
-
-```js
-const LAYER_IGNORE = [
-  "text_length_left",
-  "text_length_right",
-  "text_length_center",
-]
-
-this.canvas.on("object:added", (e) => {
-  // 레이어 개수에서 cropZone 제외
-  const objects = this.canvas.getObjects();
-  // name이 "cropZone"인 객체를 제외한 객체들의 개수
-  const count = objects.filter(obj => obj.name !== "cropZone").length;
-  .
-  .
-
-  const name = e.target.name;
-  if (LAYER_IGONORE.includes(name)) return;
-
-});
-```
-
-- 이제 텍스트 길이를 제한하고 최대글자제한수를 넘으면 글자가 빨개지는 로직을 도입한다.
-- else문에 들어서는 순간 다시 정상 글자수이기에, 파란글씨로 바꾸고 글자수 변화를 반영한다.
-
-```js
-const limitLeftTextAmount = (textBox) => {
-  const languageMaxLength = 7;
-  const leftLengthDisplayingText = this.canvas.getObjects().find((item) => item.name.includes('text_length_left'));
-  if (textBox.text.length > languageMaxLength) {
-    leftLengthDisplayingText.set({fill:'red'});
-    textBox.text = textBox.text.slice(0, languageMaxLength );
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-  } else {
-    leftLengthDisplayingText.set({fill:'blue'});
-    leftLengthDisplayingText.text = String(textBox.text.length + '/' + languageMaxLength);
-  }
-}
-
-const limitCenterTextAmount = (textBox) => {
-  const languageMaxLength = 8;
-  const centerLengthDisplayingText = this.canvas.getObjects().find((item) => item.name.includes('text_length_center'));
-  if (textBox.text.length > languageMaxLength) {
-    centerLengthDisplayingText.set({fill:'red'});
-    textBox.text = textBox.text.slice(0, languageMaxLength );
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-  } else {
-    centerLengthDisplayingText.set({fill:'blue'});
-    centerLengthDisplayingText.text = String(textBox.text.length + '/' + languageMaxLength);
-  }
-}
-
-const limitRightTextAmount = (textBox) => {
-  const numberMaxLength = 18;
-  const rightLengthDisplayingText = this.canvas.getObjects().find((item) => item.name.includes('text_length_right'));
-  if (textBox.text.length > languageMaxLength) {
-    centerLengthDisplayingText.set({fill:'red'});
-    textBox.text = textBox.text.slice(0, languageMaxLength );
-    this.canvas.discardActiveObject();
-    this.canvas.setActiveObject(textBox);
-  } else {
-    rightLengthDisplayingText.set({fill:'blue'});
-    rightLengthDisplayingText.text = String(textBox.text.length + '/' + numberMaxLength);
-  }
-}
-```
-
-## <span style="color:#802548">_placeholder 기능 구현하기_</span>
-
-- HTML의 경우, input에 placeholder 기능이 property로 존재한다.
-- 따라서 별다른 노력 없이 구현이 가능하다.
-- 하지만 canvas api에서는 Text object만이 존재하는데, 해당 속성이 없다.
-- 따라서 어렵게 돌아가야 한다. text는 빈칸으로, 그 위에 placeholder 객체를 만들어두는 형태다.
-- 일단 클릭하면 placeholder는 사라지고, text는 active에서 바로 editing 상태로 들어간다.
-- 내용을 입력하지 않고 다른 text를 누르면 해당 text에는 placeholder text 객체를 다시 생성한다.
-- placeholder기 때문에 위치값은 Text 객체와 동일하게 설정해준다.
-
-```js
-const leftTextPlaceHolderObj = new fabric.Text(leftDefaultText, {
-  fontSize: bottomFontSize,
-  fill: 'black',
-  fontFamilty: "Malgun Gothic",
-  name: 'text_placeholder_left',
-  selectable:false,
-})
-leftTextPlaceHolderObj.set('left', leftTextBox.left);
-leftTextPlaceHolderObj.set('top', leftTextBox.top);
-leftTextPlaceHolderObj.set('width', leftTextBox.width);
-leftTextPlaceHolderObj.set('height', leftTextBox.height);
-
-const rightTextPlaceHolderObj = new fabric.Text(rightDefaultText, {
-  fontSize: bottomFontSize,
-  fill: 'black',
-  fontFamilty: "Malgun Gothic",
-  name: 'text_placeholder_right',
-  selectable:false,
-})
-rightTextPlaceHolderObj.set('left', rightTextBox.left);
-rightTextPlaceHolderObj.set('top', rightTextBox.top);
-rightTextPlaceHolderObj.set('width', rightTextBox.width);
-rightTextPlaceHolderObj.set('height', rightTextBox.height);
-
-const leftTextPlaceHolderObj = new fabric.Text(leftDefaultText, {
-  fontSize: bottomFontSize,
-  fill: 'black',
-  fontFamilty: "Malgun Gothic",
-  name: 'text_placeholder_center',
-  selectable:false,
-})
-centerTextPlaceHolderObj.set('left', centerTextBox.left);
-centerTextPlaceHolderObj.set('top', centerTextBox.top);
-centerTextPlaceHolderObj.set('width', centerTextBox.width);
-centerTextPlaceHolderObj.set('height', centerTextBox.height);
-```
-
-- 역시 layer에는 추가할 필요가 없으니 레이어에서는 뺴준다.
-
-```js
-const LAYER_IGNORE = [
-  "text_length_left",
-  "text_length_right",
-  "text_length_center",
-  "text_placeholder_left",
-  "text_placeholder_right",
-  "text_placeholder_center",
-]
-```
-
-- 이젠 event를 만들어주면 된다. 우선 placeholderObj를 클릭하는 순간, 사라지게 해야 한다.
-- 그러면서 동시에 원래 text를 active가 아닌 바로 editing 상태로 돌입시킨다.
-
-```js
-this.canvas.on('mouse:down', (e) => {
-  if (!e.target.name.includes('text_placeholder_')) {
-    return;
-  }
-
-  const placeHolderObj = e.target;
-  this.canvas.remove(placeHolderObj);
-
-  if (e.target.name.includes("text_placeholder_left")) {
-    const leftText = this.canvas.getObjects().find((item) => item.name.includes("text_left"));
-    leftText.enterEditing();
-  } else if (e.target.name.includes("text_placeholder_right")) {
-    const rightText = this.canvas.getObjects().find((item) => item.name.includes("text_right"));
-    rightText.enterEditing();
-  } else (e.target.name.includes("text_placeholder_center")) {
-    const centerText = this.canvas.getObjects().find((item) => item.name.includes("text_center"));
-    centerText.enterEditing();
-  }
-})
-```
-
-- 이제 아무 입력을 하지 않고 다른 text를 선택했을 때, 다시 placeholder를 만든다.
-- 혹시 처음부터 공백을 입력한 경우도 빈칸으로 간주하여 placeholder를 만들어놓는다.
-- 클릭을 했을 때 placeholder가 사라지므로, placeholder가 없는지 확인한다. placeholder가 없을 때만 다시만들면 되기 때문이다.
-- placeholder가 있는데 다시 만들면 계속 text가 겹쳐서 색이 진해진다. 뒤로가기, 앞으로가기 관리도 어려워진다.
-
-```js
-let placeholderArray = null;
-
-$btnText.onclick = () => {
-  const leftTextPlaceHolderObj = new fabric.Text(leftDefaultText, {
-    fontSize: bottomFontSize,
-    fill: 'black',
-    fontFamilty: "Malgun Gothic",
-    name: 'text_placeholder_left',
-    selectable:false,
-  })
-  leftTextPlaceHolderObj.set('left', leftTextBox.left);
-  leftTextPlaceHolderObj.set('top', leftTextBox.top);
-  leftTextPlaceHolderObj.set('width', leftTextBox.width);
-  leftTextPlaceHolderObj.set('height', leftTextBox.height);
-  .
-  .
-  placeholderArray = [leftTextPlaceHolderObj, rightTextPlaceHolderObj, centerTextPlaceHolderObj]
-}
-```
-
-- 왼쪽text를 눌렀을 때 오른쪽, 중앙 모두 검사해서 내용이 없으면 placeholder를 만든다.
-- 마찬가지로 오른쪽 text를 눌렀을 때, 왼쪽과 중앙 모두 검사해서 내용이 없으면 placeholder를 만든다.
-- 가운데도 마찬가지다.
-
-```js
-
-this.canvas.on('text:editing:entered', (e) => {
-  const leftText = this.canvas.getObjects().find((item) => item.name.includes("text_left"));
-  const rightText = this.canvas.getObjects().find((item) => item.name.includes("text_right"));
-  const centerText = this.canvas.getObjects().find((item) => item.name.includes("text_center"));
-  const leftPlaceholder = this.canvas.getObjects().find((item) => item.name.includes("text_placeholder_left"));
-  const rightPlaceholder = this.canvas.getObjects().find((item) => item.name.includes("text_placeholder_right"));
-  const centerPlaceholder = this.canvas.getObjects().find((item) => item.name.includes("text_placeholder_center"));
-
-  if (e.target.name.include('text_left')) {
-
-    if (!rightText.text.trim() && !rightPlaceholder) { 
-      this.canvas.add(placeholderArray[1]);
-    }
-
-    if (!centerText.text.trim() && !centerPlaceholder) {
-      this.canvas.add(placeholder[2]);
-    }
-  } else if (e.target.name.include('text_right')) {
-
-    if (!leftText.text.trim() && !leftPlaceholder) {
-      this.canvas.add(placeholderArray[0]);
-    }
-
-    if (!centerText.text.trim() && !centerPlaceholder) {
-      this.canvas.add(placeholder[2]);
-    }
-  } else {
-
-    if (!leftText.text.trim() && !leftPlaceholder) {
-      this.canvas.add(placeholderArray[0]);
-    }
-
-    if (!rightText.text.trim() && !rightPlaceholder) {
-      this.canvas.add(placeholder[1]);
-    }
-  }
-})
-```
-
-- enter가 안되게도 구현해야 한다. 줄바꿈을 못하게 해달라고 했다.
-- canvas api의 text object도 DOM이긴하지만, 개발자도구창엔 잡히지 않는 dom이다.
-- 따라서 js로만 포착 가능하다. 거기다 canvas api에는 enter event를 따로 포착하는 게 불가능하다.
-- document로만 포착해야함을 의미한다.
-- 그런데 canvas api로 만든 text도 Dom의 기준에서는 textarea다. 따라서 tagName으로 포착한다.
-
-```js
-document.addEventListener('keydown', function() {
-  if (e.key !=='Enter') {
-    return;
-  }
-
-  if (e.target.tagName === 'TEXTAREA') {
-    e.preventDefault();
-  }
-
-})
-```
-
-
-## <span style="color:#802548">_tempCanvas를 이용해 현재 canvas에서 필요없는 텍스트 길이, placeholder 지워서 서버에 저장하기_</span>
-
-- text length 라던가, placeholder 등은 서버에 저장되는 카드 이미지에서는 지워야 한다.
-- 따라서 현재 canvas가 아닌 tempcanvas를 활용해야 한다.
-- tempcanvas는 현재 canvas와 동일한 크기와 높이를 지니게 만든다.
-
-```js
-const modalCanvas = new fabric.Canvas("confirmation-canvas", {
-  width: modalWidth,
-  height: modalHeight,
-});
-
-const tempCanvas = new fabric.Canvas("temp-canvas", {
-  width: this.canvas.width,
-  height: this.canvas.height
-});
-```
-
-- canvas 자체를 데이터화해서 tempCanvas에 그려준다.
-- 그려줄 때 LAYER_IGNORE에 있는 것들은 전부 remove하게 한다. 그럼 length text와 placeholder를 지워버린다.
-- 그럼 지워진 canvas로 toDataURL()을 써서 base64Url을 만들 수 있다. 
-- 해당 URL로 image를 만들어 confirm용으로 소비자에게 보여줄 canvas에 그린다.
-- croppedImageData에는 tempCanvas의 zoom을 가져온다고 했는데, tempCanvas가 곧 원 canvas다.
-  - 따라서 this.canvas로 써도 상관없다.
-
-```js
-const canvasJsonData = this.canvas.toObject(["name"])
-
-tempCanvas.loadFromJSON(canvasJsonData, () => {
-  // 이미지의 사이즈 설정은 this.canvas의 값으로 설정, tempCanvas의 object를 이미지 url화
-  const deletedObject = tempCanvas.getObjects().filter((item) => LAYER_IGONORE.includes(item.name))
-
-  deletedObject.forEach(item => {
-      if(item.name == 'background') {
-          return;
-      }
-      tempCanvas.remove(item);
-  });
-
-  const canvasWrap = getEl("#confirm-container #container");
-  const _confirmCanvasElem = confirmCanvas.getElement();
-  canvasWrap.append(_confirmCanvasElem)
-
-  const background = new fabric.Rect({
-      name: "background",
-      left: 0,
-      top: 44,
-      width: this.canvas.width,
-      height: this.canvas.height,
-      fill: "#eee",
-      stroke: "#000",
-      strokeWidth: 0,
-      selectable: false,
-  });
-
-  const mainObject = new fabric.Rect({
-      name: "background",
-      left: this.canvas.width / 2,
-      top: this.canvas.height / 2 + 44,
-      originX: "center",
-      originY: "center",
-      width: viewWidth,
-      height: viewHeight,
-      fill: "#fff",
-      stroke: "#000",
-      strokeWidth: 0,
-      selectable: false,
-  });
-
-  const croppedImageData = tempCanvas.toDataURL({
-      left:
-          (mainObject.left - mainObject.width / 2) * tempCanvas.getZoom() +
-          tempCanvas.viewportTransform[4],
-      top:
-          (mainObject.top - mainObject.height / 2) * tempCanvas.getZoom() +
-          tempCanvas.viewportTransform[5],
-      width: viewWidth * tempCanvas.getZoom(),
-      height: viewHeight * tempCanvas.getZoom(),
-      multiplier: 1 / tempCanvas.getZoom(),
-  });
-
-  fabric.Image.fromURL(croppedImageData, (img) => {
-      // 이미지의 크기, 위치 등 설정
-      img.set({
-          left: tempCanvas.width / 2,
-          top: tempCanvas.height / 2 + 44,
-          originX: "center",
-          originY: "center",
-          scaleX: 1,
-          scaleY: 1,
-          selectable: false,
-      });
-      confirmCanvas.clear();
-
-      // canvas에 이미지 추가
-      confirmCanvas.add(background);
-      confirmCanvas.add(img);
-  });
-
-  fabric.Image.fromURL(cardImageUrl, (img) => {
-      img.set({
-          left: tempCanvas.width / 2,
-          top: tempCanvas.height / 2 + 44,
-          width: viewWidth,
-          height: viewHeight,
-          originX: "center",
-          originY: "center",
-          selectable: false,
-      });
-      confirmCanvas.add(img)
-  })
-})
-```
-
-## <span style="color:#802548">_web의 text 생성 토글/ mobile의 text 생성 토글_</span>
-
-- web의 구조는 텍스트를 누르면 tool이 헤더에 뜨는 구조다.
-- 따라서 boolean 변수 하나로 전부 통제가 가능했다.
-
-```js
-let isTextCreated = false;
-if (!isTextCreated) {
-    const cardobj = this.canvas.getObjects().filter((item) => item.name.includes("background"));
-    const bottomTextMargin = 7;
-    const sideMargin = 9;
-    const bottomFontSize = 7.5;
-
-    const leftTextBox = new fabric.TextBox('', {
-      fontSize : bottomFontSize,
-      fill: 'black',
-      fonFamilty: 'Malgun Gothic',
-      name: _.uniqueId("text_left"), //"text_left1"
-      width: 50,
-      left: cardObj[0].lineCoords.bl.x + 9,
-      top: cardObj[0].lineCoords.bl.y,
-      height: 100,
-      textAlign: 'left',
-      ...defaultOptions
-    })
-    .
-    .
-    //텍스트 생성
-    isTextCreated = !isTextCreated 
-} else {
-    //텍스트 제거
-    const textArray = this.canvas.getObjects().find((item) => item.name.includes("text_"));
-    for (const element of textArray) {
-      this.canvas.remove(element);
-    }
-
-    isTextCreated = !isTextCreated;
-}
-```
-
-- 그러나 모바일의 UI는 다르다.
-- text를 눌러도 확정 생성이 아니라, 한번더 확정 여부를 검사한다.
-
-```js
-
-```
-
-
-
-## <span style="color:#802548">_api 시간지연에 따른 모달창 띄우기_</span>
-- api 시간지연이 15초 이상 지속되면 모달창을 띄우는 기능을 만들어보자.
-- timer로 만들 setTimeout 함수를 만들어준다.
-
-```js
-let loadingTimer;
-
-let objects = this.canvas.getObjects();
-// 이미지 몇장인지 확인
-let count = 0;
-
-objects.forEach((obj) => {
-    if (obj.name && obj.name.startsWith('image_')) {
-        count++;
-    }
-});
-
-// 15초 후에 팝업을 띄우는 타이머 설정
-loadingTimer = setTimeout(() => openModal('modal09'), 15000);
-```
-
-- 응답이 15초 안에 오게끔 하려면 동기적으로 코드가 진행되게 해야 한다.
-- 따라서 api는 async await로 구성한다.
-
-```js
-const removeBg = async() => {
-    let loadingTimer;
-
-    let objects = this.canvas.getObjects();
-    // 이미지 몇장인지 확인
-    let count = 0;
-
-    objects.forEach((obj) => {
-        if (obj.name && obj.name.startsWith('image_')) {
-            count++;
-        }
-    });
-
-    // 15초 후에 팝업을 띄우는 타이머 설정
-    loadingTimer = setTimeout(() => openModal('modal09'), 15000);
-
-    const resImg = await requestBackgroundRemove(imgObj.getSrc()); 
-    clearTimeout(loadingTimer);
-}
-```
-
-- 그런데 api에서 error가 나게 되면 catch를 하지 않으면 후속 코드가 진행되지 않는다.
-- 따라서 실패 응답이 왔는데도 15초 뒤에 시간지연 모달창이 뜨게 된다.
-- 따라서 try ~ catch로 감싸줘야 한다. 
-
-```js
-const removeBg = async() => {
-    let loadingTimer;
-
-    let objects = this.canvas.getObjects();
-    // 이미지 몇장인지 확인
-    let count = 0;
-
-    objects.forEach((obj) => {
-        if (obj.name && obj.name.startsWith('image_')) {
-            count++;
-        }
-    });
-
-    // 15초 후에 팝업을 띄우는 타이머 설정
-    loadingTimer = setTimeout(() => openModal('modal09'), 15000);
-
-    try {
-        const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
-        // 서버로부터 응답은 png형태
-        const resImgSrc = 'data:image/png;base64,' + JSON.parse(resImg.response).img_str;
-
-        imgObj.setSrc(resImgSrc, () => {
-            this.canvas.requestRenderAll();
-            getEl('#loadingBox').style.display = 'none';
-            this.canvas.fire("object:modified", {target : imgObj})
-        });
-    } catch (error) {
-        alert(error);
-    }
-    clearTimeout(loadingTimer);
-}
-```
-
-## <span style="color:#802548">_promise로 감싸서 동기 코드로 만들기_</span>
-
-- 서버에서 배경을 제거하고 blob 객체를 준다.
-- 그런데 api는 await로 처리해놓고, 서버가 준 blob을 base64로 전환하는 function에는 await를 쓰지 않았다.
-- 문제는 reader의 onload, readAsDataURL이 비동기함수라는 점이다.
-- 그럼 서버에서 정상 응답을 줘도 절대로 제대로 이미지가 그려지지 않는다.
-- 비동기라서 resImgSrc가 계산돼서 저장되기 전에 아래 코드가 실행되고, 그럼 undefined가 된다.
-- 따라서 imgObj는 undefined를 setSrc하게 되니 오류가 나는 것이다.
-
-```js
-try {
-    const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
-    // 서버로부터 응답은 png형태
-    const resImgSrc = blobToDataURL(resultBlob);
-    console.log(resImgSrc);
-
-    imgObj.setSrc(resImgSrc, () => {
-        this.canvas.requestRenderAll();
-        getEl('#loadingBox').style.display = 'none';
-
-        // image 배경 제거시 object 수정 이벤트 발생
-        this.canvas.fire("object:modified", {target : this.canvas})
-        $removeAction01.checked = false;
-        $removeAction02.checked = false;
-        changeTool(TOOL.removebg, this.canvas)
-    });
-
-    imgObj.setSrc(resImgSrc, () => {
-        this.canvas.requestRenderAll();
-        getEl('#loadingBox').style.display = 'none';
-        this.canvas.fire("object:modified", {target : imgObj})
-    });
-} catch (error) {
-    alert(error);
-}
-
-function blobToDataURL(blob) {
-    const reader = new FileReader();
-    reader.onload = () => reader.result;
-    reader.onerror = console.log('error');
-    reader.readAsDataURL(blob);
-}
-```
-
-- 이를 피하려면 동기로 만들어줘야 한다. await를 쓸수있게 똑같이 Promise로 감싸주어야 한다는 의미다.
-
-```js
-const resImg = await requestBackgroundRemove(imgObj.getSrc()); // 배경제거api 요청
-// 서버로부터 응답은 png형태
-const resImgSrc = await blobToDataURL(resultBlob);
-
-function blobToDataURL(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-}
-```
 
 ## <span style="color:#802548">_모바일 웹, 모바일 앱을 모두 고려한 image 가져오기_</span>
 - 모바일 웹은 input type file으로 충분하지만, 모바일 앱은 input type file이 아니라 bridge 함수를 써야한다.
@@ -3311,199 +1421,3 @@ function base64ToBinary(base64) {
 }
 ```
 
-## <span style="color:#802548">_image 내에서만 cropzone 움직이게 하기_</span>
-- image와 동일한 크기의 rect를 만들어서 움직이는데, 그게 image zone에서만 움직이게 해달라는 이야기가 있었다.
-- 그걸 구현하지 못해서 도움을 구했다.
-- 핵심 기획은 회전이 된 경우는 
-
-
-```js
-this.canvas.on('object:moving', (e) => {
-    const obj = e.target;
-
-    if (!obj || obj.name !== 'cropZone') {
-        return;
-    }
-
-    const img = getCurImage(this.canvas);
-
-    const imgLeft = img.left;
-    const imgTop = img.top;
-    const imgWidth = img.getScaledWidth();
-    const imgHeight = img.getScaledHeight();
-
-    //cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
-    const {x:rx, y:ry} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, -img.angle);
-    obj.left = rx;
-    obj.top = ry;
-
-    if (obj.left < imgLeft) {
-        obj.left = imgLeft;
-    }
-    if(obj.top < imgTop) {
-        obj.top = imgTop;
-    }
-
-    if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
-        obj.left = imgLeft + imgWidth - obj.getScaledWidth();
-    }
-    if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
-        obj.top = imgTop + imgHeight - obj.getScaledHeight();
-    }
-
-    const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
-    obj.left = x;
-    obj.top = y;
-
-    obj.setCoords();
-})
-
-function rotatePoint(px, py, ox, oy, angle) {    
-    const radians = angle * (Math.PI / 180);
-    const translatedX = px - ox;
-    const translatedY = py - oy;
-
-    const rotatedX = translatedX * Math.cos(radians) - translatedY * Math.sin(radians);
-    const rotatedY = translatedX * Math.sin(radians) + translatedY * Math.cos(radians);
-
-    const finalX = rotatedX + ox;
-    const finalY = rotatedY + oy;
-
-    return { x: finalX, y: finalY}
-}
-```
-
-- 이미지가 scaling된 상태일 수 있기 때문에, width와 height는 scaled된 값을 구해야 한다.
-
-```js
-const img = getCurImage(this.canvas);
-
-const imgLeft = img.left;
-const imgTop = img.top;
-const imgWidth = img.getScaledWidth();
-const imgHeight = img.getScaledHeight();
-```
-
-- cropzone rect left, top 값을 각도에 맞춰 수정해준다.
-- 여기서 -angle로 전환하는 이유는 image를 (0,0)으로 맞춰 계산할 때 돌린 각도만큼 반대로 돌려야 하기 때문이라고 한다.
-
-```js
-//cropzone rect left, top 값을 이미지의 각도에 맞춰 수정
-const {x:rx, y:ry} = rotatePoint(obj.left, obj.top,imgLeft, imgTop, -img.angle);
-obj.left = rx;
-obj.top = ry;
-```
-
-- Math의 cos, sin 함수는 반드시 degree가 아닌 radians 형태의 각도로 넣어야 한다.
-- 따라서 degree를 radians 값으로 변환해야 한다.
-    - 360도가 2 * PI * radians이므로, 1도는 PI * radians /180이다.
-    - angle만큼 곱해주면 angle만큼의 radians 값을 얻을 수 있다.
-- ox, oy는 image 객체의 left, top 값이다.
-- px, py는 rect 객체의 left, top 값이다.
-- rect 객체의 left, top 값에서 image 객체의 값을 빼는 이유는 image 객체의 left, top을 (0,0)이라는 점으로 놓기 위해서다.
-    -  그렇게 하면 rotation 계산이 매우 간결해지기 때문이다. 따라서 image (left, top)이 (0,0) 기준으로 변환된 rect X, Y 좌표값을 얻어낸다.
-    -  거기서부터 회전된 radians 값을 계산해서 다시한번 원점에서의 차이만큼의 좌표를 계산해낸다. 식은 그냥 외우는 게 나을듯 하다.
-    - 그리고 이를 원래 image의 (left, top)에 붙이면 degree만큼 돌아간 rect의 좌표값을 얻어낼 수 있다.
-
-```js
-function rotatePoint(px, py, ox, oy, angle) {    
-    const radiansConvertedFromDegree = angle * (Math.PI / 180);
-    const translatedX = px - ox;
-    const translatedY = py - oy;
-
-    const rotatedX = translatedX * Math.cos(radiansConvertedFromDegree) - translatedY * Math.sin(radiansConvertedFromDegree);
-    const rotatedY = translatedX * Math.sin(radiansConvertedFromDegree) + translatedY * Math.cos(radiansConvertedFromDegree);
-
-    const finalX = rotatedX + ox;
-    const finalY = rotatedY + oy;
-
-    return { x: finalX, y: finalY}
-}
-```
-
-- boundary 안에서만 움직이게끔 하는 코드다.
-- 이미지가 마치 (0,0)인 상황에서 rotate되지 않은 상황으로 만들어서 경계를 넘겼는지 계산하는 것이다.
-
-```js
- if (obj.left < imgLeft) {
-    obj.left = imgLeft;
-}
-if (obj.top < imgTop) {
-    obj.top = imgTop;
-}
-if (obj.left + obj.getScaledWidth() > imgLeft + imgWidth) {
-    obj.left = imgLeft + imgWidth - obj.getScaledWidth();
-}
-if (obj.top + obj.getScaledHeight() > imgTop + imgHeight) {
-    obj.top = imgTop + imgHeight - obj.getScaledHeight();
-}
-```
-
-- angle을 -로 돌려서 계산했던 행위를 되돌린다.
-- rect의 left, top 값을 원래대로 되돌리고 실제 좌표계에 반영해준다.
-
-```js
-const {x, y} = rotatePoint(obj.left, obj.top, imgLeft, imgTop, img.angle);
-obj.left = x;
-obj.top = y;
-
-obj.setCoords();
-```
-
-- scaling의 경우에는 코드가 약간 달라진다.
-- 다만 아직 오류가 있다. 위로 당기면 아래 rect가 커진다.
-
-```js
-this.canvas.on('object:scaling', (e) => {
-    const obj = e.target;
-
-    if (!obj || obj.name !== 'cropZone') {
-        return;
-    }
-
-    const img = getCurImage(this.canvas);
-
-    const imgLeft = img.left;
-    const imgTop = img.top;
-    const imgWidth = img.getScaledWidth();
-    const imgHeight = img.getScaledHeight();
-
-    // Calculate the object's scaled dimensions and position
-    const scaledWidth = obj.getScaledWidth();
-    const scaledHeight = obj.getScaledHeight();
-
-    // Get object's current position
-    const { x: objLeft, y: objTop } = obj.getPointByOrigin('left', 'top');
-
-    // Rotate point to the image's coordinate system
-    let { x: rx, y: ry } = rotatePoint(objLeft, objTop, imgLeft, imgTop, -img.angle);
-
-    // Boundary conditions
-    if (rx < imgLeft) {
-        rx = imgLeft;
-    }
-    if (ry < imgTop) {
-        ry = imgTop;
-    }
-    if (rx + scaledWidth > imgLeft + imgWidth) {
-        obj.scaleX = (imgLeft + imgWidth - rx) / obj.width;
-    }
-    if (ry + scaledHeight > imgTop + imgHeight) {
-        obj.scaleY = (imgTop + imgHeight - ry) / obj.height;
-    }
-
-    // Rotate point back to the canvas coordinate system
-    let { x, y } = rotatePoint(rx, ry, imgLeft, imgTop, img.angle);
-    obj.setPositionByOrigin(new fabric.Point(x, y), 'left', 'top');
-
-    // Force the crop zone to update its coordinates and scaling
-    obj.setCoords();
-});
-```
-
-
-- js
-
-```js
-const { x: objLeft, y: objTop } = obj.getPointByOrigin('left', 'top');
-```
