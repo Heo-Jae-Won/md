@@ -295,31 +295,23 @@ public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDa
 		throws FileNotFoundException, IOException, GeneralSecurityException {
 	Calendar service = getServiceAuth();
 
-	// 선택한 날짜의 달을 기준으로 초일(firstDay)부터 말일(lastDay)까지 회사 google calendar 목록을 parallel하게 조회 
-	
-	List<CalendarEventRes> list = new ArrayList<>();
-	DateTime firstDay = new DateTime(firstDayOfMonth);
-	DateTime lastDay = new DateTime(lastDayOfMonth);
-	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> 
-																					{ 
-																						Calendar service = getServiceAuth();
-																						return service.events().list("openobjectnet@gmail.com").setTimeMax(lastDay).setTimeMin(firstDay)
-																																									.execute(); 
-																					}
-																			);
-	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> 
-																					{ 
-																						Calendar service = getServiceAuth();
-																						return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com").setTimeMax(lastDay)
-																																											.setTimeMin(firstDay).execute(); 
-																					}
-																			);
-	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> 
-																					{
-																						cur.putAll(prev);
-																						return cur;
-																					}
-													).join().getItems();							
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { 
+		return service.events().list("ddddd@gmail.com")
+								.setTimeMax(lastDay)
+								.setTimeMin(firstDay)
+								.execute(); 
+	});
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { 
+		return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+								.setTimeMax(lastDay)
+								.setTimeMin(firstDay)
+								.execute(); 
+	});
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+		cur.putAll(prev);
+		return cur;
+	}).join().getItems();	
 
 	for (Event event : items) {
 		CalendarEventRes calendarEventDto = new CalendarEventRes();
@@ -332,8 +324,345 @@ public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDa
 		list.add(calendarEventDto);
 	}
 
+	return list;						
+}						
+```
 
-	return list;
 
+
+- 하지만 구글에서 만든 Calendar 클래스가 스레드로부터 안전한지 확신할 수 없었습니다.
+- 스레드 안전 클래스가 아니면 멀티 스레드 환경에서 문제가 발생할 수 있었습니다.
+- 스레드로부터 안전하지 않은 공유 객체이기 때문에 race condition에 빠질 수 있다고 판단했습니다.
+- 따라서 공유 오브젝트가 아닌 각각의 스레드에서 개별적으로 오브젝트를 만드는 형태로 변경했습니다.
+
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { 
+		Calendar service = getServiceAuth();
+		return service.events().list("ddddd@gmail.com")
+								.setTimeMax(lastDay)
+								.setTimeMin(firstDay)
+								.execute(); 
+	});
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { 
+		Calendar service = getServiceAuth();
+		return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+								.setTimeMax(lastDay)
+								.setTimeMin(firstDay)
+								.execute(); 
+	});
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+		cur.putAll(prev);
+		return cur;
+	}).join().getItems();	
+
+	for (Event event : items) {
+		CalendarEventRes calendarEventDto = new CalendarEventRes();
+		calendarEventDto.setSummary(event.getSummary());
+		calendarEventDto.setDescription(event.getDescription());
+		calendarEventDto.setStartDateTime(event.getStart());
+		calendarEventDto.setEndDateTime(event.getEnd());
+		calendarEventDto.setEventId(event.getId());
+
+		list.add(calendarEventDto);
+	}
+
+	return list;								
 }
+```
+
+- 복구가 필요한 경우 exceptionally()를 사용합니다.
+- 람다식이므로 checked exception에는 대응할 수 없으므로 람다식 내에 try~catch 문장이 필요합니다.
+- 체크 예외를 CompletableFuture 클래스에서 요구하는 CompletionException으로 래핑합니다.
+
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { 
+		try {
+			Calendar service = getServiceAuth();
+			return service.events().list("ddddd@gmail.com")
+									.setTimeMax(lastDay)
+									.setTimeMin(firstDay)
+									.execute(); 
+		} catch (Exception ex) {
+				throw new CompletionException(ex);
+		}
+	}).exceptionally(ex -> {
+		return new Events();
+	});
+
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { 
+		try {
+			Calendar service = getServiceAuth();
+			return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+									.setTimeMax(lastDay)
+									.setTimeMin(firstDay)
+									.execute(); 
+		} catch (Exception ex) {
+				throw new CompletionException(ex);
+		}
+	}).exceptionally(ex -> {
+		return new Events();
+	});
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+		cur.putAll(prev);
+		return cur;
+	}).join().getItems();	
+
+	return items;						
+}
+```
+
+- 무한대기가 되어서는 안 되므로 타임아웃을 설정합니다.
+- orTimeout 메서드는 JDK1.9 이상 버전에서만 사용할 수 있습니다.
+
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+		throws FileNotFoundException, IOException, GeneralSecurityException {
+	Calendar service = getServiceAuth();
+
+	CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> { 
+		try {
+			Calendar service = getServiceAuth();
+			return service.events().list("ddddd@gmail.com")
+									.setTimeMax(lastDay)
+									.setTimeMin(firstDay)
+									.execute(); 
+		} catch (Exception ex) {
+				throw new CompletionException(ex);
+		}
+	}).orTimeout(5, TimeUnit.SECONDS) 
+	.exceptionally(ex -> {
+		return new Events();
+	});
+	CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> { 
+		try {
+			Calendar service = getServiceAuth();
+			return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+									.setTimeMax(lastDay)
+									.setTimeMin(firstDay)
+									.execute(); 
+		} catch (Exception ex) {
+				throw new CompletionException(ex);
+		}
+	}).orTimeout(5, TimeUnit.SECONDS) 
+	.exceptionally(ex -> {
+		return new Events();
+	});
+
+	List<Event> items =  companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+		cur.putAll(prev);
+		return cur;
+	}).join().getItems();	
+
+	return items;						
+}
+```
+
+- 1.8에서는 orTimeout이 없으므로 custom 클래스를 생성해야 합니다.
+
+```java
+ExecutorService executor = Executors.newCachedThreadPool();
+ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
+// Main API call future
+CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> {
+    try {
+        Calendar service = getServiceAuth();
+        return service.events().list("ddddd@gmail.com")
+                .setTimeMax(lastDay)
+                .setTimeMin(firstDay)
+                .execute();
+    } catch (Exception ex) {
+        throw new CompletionException(ex);
+    }
+}, executor);
+
+// Timeout future
+CompletableFuture<Events> timeoutFuture = new CompletableFuture<>();
+scheduler.schedule(() -> timeoutFuture.completeExceptionally(
+        new TimeoutException("API call timed out")), 5, TimeUnit.SECONDS);
+
+// Combine: use whichever completes first
+companyEventsCf = companyEventsCf.applyToEither(timeoutFuture, Function.identity())
+								.exceptionally(ex -> {
+									ex.printStackTrace();
+									return new Events(); // fallback on error or timeout
+								});
+```
+
+- 예외를 던져야 하는 경우 exceptionally() 대신 handle()을 사용합니다.
+- 람다식에서 하나라도 예외가 발생하면 thenCombine()도 예외를 발생시킵니다.
+	- 해당 예외는 CompletionException이므로 프런트엔드 측에서 처리할 수 있도록 BusinessException으로 래핑합니다.
+
+
+```java
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+        throws FileNotFoundException, IOException, GeneralSecurityException {
+    Calendar service = getServiceAuth();
+
+    CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(() -> {
+        try {
+            Calendar service = getServiceAuth();
+            return service.events().list("ddddd@gmail.com")
+                    .setTimeMax(lastDay)
+                    .setTimeMin(firstDay)
+                    .execute();
+        } catch (Exception ex) {
+            throw new CompletionException(ex); 
+        }
+    }).orTimeout(5, TimeUnit.SECONDS)  
+      .handle((result, ex) -> {
+          if (ex != null) {
+              throw new CompletionException(ex);
+          }
+          return result;  
+      });
+
+    CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(() -> {
+        try {
+            Calendar service = getServiceAuth();
+            return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+                    .setTimeMax(lastDay)
+                    .setTimeMin(firstDay)
+                    .execute();
+        } catch (Exception ex) {
+            throw new CompletionException(ex);  
+        }
+    }).orTimeout(5, TimeUnit.SECONDS)  
+      .handle((result, ex) -> {
+          if (ex != null) {
+              throw new CompletionException(ex);
+          }
+          return result;  
+      });
+
+    try {
+		List<Event> items = companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+			cur.putAll(prev);
+			return cur;
+		}).join();
+
+		return items;	
+	} catch (CompletionException ex) {
+		throw new BusinessException(ErrorEnum.CALENDAR_GOOGLE_FAILED); 
+	}
+}
+```
+
+## <span style="color:#802548">_람다식에서 checked exception wrapping하는 custom class 만들기_</span>
+
+- lambda expression에서 try ~ catch가 남발되면 보기 참 안 좋습니다.
+- 별도의 wrapper class를 만들어줍니다. 아래는 하나의 예시입니다.
+
+```java
+public class ConsumerExceptionWrapper {
+    @FunctionalInterface
+    public interface ConsumerWithException<T, E extends Exception> {
+        void accept(T t) throws E;
+    }
+    
+    public static <T, E extends Exception> Consumer<T> wrapper(ConsumerWithException<T, E> consumer) {
+        return arg -> {
+            try {
+                consumer.accept(arg);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        };
+    }
+}
+
+
+import static foo.bar.ConsumerExceptionWrapper.wrapper;
+
+public static void main(String[] args) {
+    getFilePaths().stream()
+            .map(Paths::get)
+            .forEach(wrapper(Files::deleteIfExists));
+}
+```
+
+- 우리는 supplier class를 사용하므로 그에 맞춰 바꿔줍니다.
+
+```java
+public class LambdaExceptionWrapper {
+    @FunctionalInterface
+    public interface SupplierWithException<T, E extends Exception> {
+        T get() throws E;
+    }
+
+    public static <T, E extends Exception> Supplier<T> wrapper(SupplierWithException<T, E> supplier) {
+        return () -> {
+            try {
+                return supplier.get(); //바뀐 부분. 
+            } catch (Exception e) {
+                throw new RuntimeException(e); //checked exception을 잡아도 runtimeException으로 바꿔준다.
+            }
+        };
+    }
+}
+
+```
+
+
+- lambda expresion 안에 try ~ catch는 전부 사라진 것을 확인할 수 있습니다.
+
+```java
+import static foo.bar.LambdaExceptionWrapper.wrapper;
+
+public List<CalendarEventRes> getEventList(String firstDayOfMonth, String lastDayOfMonth)
+        throws FileNotFoundException, IOException, GeneralSecurityException {
+
+    Calendar service = getServiceAuth();
+
+    // Wrapping the supplier with the exception handler
+    CompletableFuture<Events> companyEventsCf = CompletableFuture.supplyAsync(wrapper(() -> {
+        Calendar service = getServiceAuth();
+        return service.events().list("ddddd@gmail.com")
+                .setTimeMax(lastDay)
+                .setTimeMin(firstDay)
+                .execute();
+    })).orTimeout(5, TimeUnit.SECONDS)
+      .handle((result, ex) -> {
+          if (ex != null) {
+              throw new CompletionException(ex);
+          }
+          return result;
+      });
+
+    CompletableFuture<Events> holidayEventsCf = CompletableFuture.supplyAsync(wrapper(() -> {
+        Calendar service = getServiceAuth();
+        return service.events().list("ko.south_korea#holiday@group.v.calendar.google.com")
+                .setTimeMax(lastDay)
+                .setTimeMin(firstDay)
+                .execute();
+    })).orTimeout(5, TimeUnit.SECONDS)
+      .handle((result, ex) -> {
+          if (ex != null) {
+              throw new CompletionException(ex);
+          }
+          return result;
+      });
+
+    try {
+        List<Event> items = companyEventsCf.thenCombine(holidayEventsCf, (prev, cur) -> {
+            cur.putAll(prev);
+            return cur;
+        }).join();
+
+        return items;
+    } catch (CompletionException ex) {
+        throw new BusinessException(ErrorEnum.CALENDAR_GOOGLE_FAILED);
+    }
+}
+
 ```

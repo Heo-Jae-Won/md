@@ -483,7 +483,7 @@ function handleButtonClick() {
 
 ## <span style="color:#802548">_더 나은 에러로그_</span>
 - 개발 이후 close - beta에서 에러가 나서 에러를 찾느라 고생한 적이 있다.
-- 해당 현장은 에러를 처리하는 메뉴얼이 있었는데, 그 메뉴얼이 잘못되어서 고생하였다. 
+- 아래와 같은 에러처리 방식이 있다고 가정해보자.
 
 ```java
 public class Main {
@@ -492,9 +492,7 @@ public class Main {
 		try {
 			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
 		} catch (Exception e) {
-			StackTraceElement[] stackTrace = e.getStackTrace();
-			StackTraceElement element = stackTrace[0];
-			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage());
+            e.printStackTrace();
 		}
 	}
 	
@@ -514,7 +512,6 @@ public class Main {
 java.lang.IllegalArgumentException
 	at com.example.Main.calculate(Main.java:23)
 	at com.example.Main.main(Main.java:9)
-lineNumber: 23
 ```
 
 
@@ -533,13 +530,13 @@ public class Main {
 		
 		try {
 			int n = a.length;
+            if (k < 1 || k > n) {
+			    throw new IllegalArgumentException("Forbidden"); //23 line
+		    }
 			String abc ="fff";
 			abc = abc.substring(0,12); // 16 line
 		} catch (Exception e) {
 			e.printStackTrace();
-			StackTraceElement[] stackTrace = e.getStackTrace();
-			StackTraceElement element = stackTrace[0];
-			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage()+ "\nclass: " + element.getClassName());
 		}
 		
 	}
@@ -557,9 +554,6 @@ java.lang.StringIndexOutOfBoundsException: begin 0, end 12, length 3
 	at java.base/java.lang.String.substring(String.java:2707)
 	at com.example.Main.calculate(Main.java:16)
 	at com.example.Main.main(Main.java:8)
-lineNumber: 4604
-message: begin 0, end 12, length 3
-class: java.lang.String
 ```
 
 
@@ -570,12 +564,9 @@ public class Main {
 	public static void main(String[] args) throws InterruptedException {
 		char[] chars = {'a','b','c','d'};
 		try {
-			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
+			calculate(chars, 4, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
 		} catch (Exception e) {
 			e.printStackTrace();
-			StackTraceElement[] stackTrace = e.getStackTrace();
-			StackTraceElement element = stackTrace[0];
-			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage());
 		}
 	}
 	
@@ -583,56 +574,97 @@ public class Main {
 
        try {
 			int n = a.length;
+            if (k < 1 || k > n) {
+			    throw new IllegalArgumentException("Forbidden"); //20 line
+		    }
 			String abc ="fff";
-			abc = abc.substring(0,12); // 16 line
+			abc = abc.substring(0,12); // 23 line
         } catch (Exception e) {
-            throw new Exception("0001"); //18 line
+            throw new Exception("error"); //25 line
         }
 	}
 }
 ```
 
-- calculate의 16 line에서 exception이 났지만, 잡아서 18 line에서 던지기 때문에 바꿔치기된다.
+- calculate의 20 line에서 exception이 났지만, 잡아서 20 line에서 던지기 때문에 바꿔치기된다.
 - 따라서 어디서 exception이 났는지 도저히 알수가 없게 된다.
 - 짧으니까 다행이지만, 길어지면 어디서 오류가 났는지 찾을 수가 없다.
-- 명시적으로 throw를 던진다면 catch로 잡아서 다시 던지면 미궁으로 빠져버리게 되는 것이다.
+- exception이 발생한 것을 또 다시 catch로 잡아서 다시 던지면 stack이 미궁으로 빠져버리게 되는 것이다.
 
 ```
-java.lang.Exception: 0001
-	at com.example.Main.calculate(Main.java:18)
-	at com.example.Main.main(Main.java:9)
-lineNumber: 18
-message: 0001
+java.lang.Exception: error
+	at Main.calculate(Main.java:25)
+	at Main.main(Main.java:9)
 ```
 
-- 가장 중요한 것은, catch를 한 뒤에 또 exception을 던지면 안 된다는 점이다. 그런 식으로 하면 stackTrace가 꼬인다.
-- 그 다음으로는 line이 아닌, exception의 message를 아는 것이 중요하다.
-- 서비스 로직이라면, log.error를 활용하는 것이 좋은 선택이다.
-- 서비스의 실패가 아닌 Java api에서 예상치 못한 error를 막을 때를 대비해 전체에 try ~ catch를 씌워준다.
-- 전체는 맨 마지막에 try catch를 처리하는 Controller에서만 진행되면 충분하다.
+- 따라서 강제로 BusinessException도 Java API Exception도 모두 동일하게 call stack이 나오게 조정해준다.
+
 
 ```java
 public class Main {
-	public static void main(String[] args) throws InterruptedException {
-		char[] chars = {'a','b','c','d'};
-		try {
-			calculate(chars, 6, i -> i[0]==1 && i[1] == 1 && i[2] == 0);	//9 line
-		} catch (Exception e) {
-			e.printStackTrace();
-			StackTraceElement[] stackTrace = e.getStackTrace();
-			StackTraceElement element = stackTrace[0];
-			System.out.println("lineNumber: " + element.getLineNumber() + "\nmessage: " + e.getMessage());
-		}
-	}
-	
-	static void calculate(char[] a, int k , Predicate<int[]> decider) throws Exception {
+    public static void main(String[] args) {
+        char[] chars = {'a','b','c','d'};
+        try {
+            calculate(chars, 4, i -> i[0]==1 && i[1] == 1 && i[2] == 0);
+        } catch (StringIndexOutOfBoundsException e) {
+            // manually trim the stack trace to only your classes
+            StackTraceElement[] all = e.getStackTrace();
+            List<StackTraceElement> trimmed = new ArrayList<>();
+            for (StackTraceElement el : all) {
+                if (el.getClassName().equals("Main")) {
+                    trimmed.add(el);
+                }
+            }
+            e.setStackTrace(trimmed.toArray(new StackTraceElement[0]));
+            e.printStackTrace();
+        }
+    }
+
+    static void calculate(char[] a, int k , Predicate<int[]> decider) {
         int n = a.length;
-		if (k < 1 || k > n) {
-            log.error("business logic 오류입니다.")
-			throw new BuisinessException("Forbidden"); //23 line
-		}
+        if (k < 1 || k > n) {
+            throw new IllegalArgumentException("Forbidden"); //23 line
+        }
         String abc ="fff";
         abc = abc.substring(0,12); // 16 line
+	}
+}
+```
+
+
+- 가장 중요한 것은, catch를 한 뒤에 또 exception을 던지면 안 된다는 점이다. 그런 식으로 하면 stackTrace가 꼬인다.
+- Spring에서는 해당 기능들을 더 간편하게 사용할 수 있게 지원해준다. Spring이라면 sl4fj를 사용하자.
+- logging에 자바 API를 남길 이유가 없으므로 전부 제외하기 위해 logOnlyAppStack으로 감싸는 Facade pattern을 사용한다.
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class myClass {
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
+
+    public void doingBusinessLogic() {
+        char[] chars = {'a','b','c','d'};
+        try {
+            calculate(chars, 4, i -> i[0]==1 && i[1] == 1 && i[2] == 0);
+        } catch (Exception e) {
+            logOnlyAppStack("An error occurred in main()", e);
+        }
     }
+
+    private void calculate(char[] a, int k , Predicate<int[]> decider) {
+        String abc = "fff";
+        abc = abc.substring(0, 12); // this will throw
+    }
+
+    private void logOnlyAppStack(Exception e, Logger logger, String message) {
+        StackTraceElement[] filtered = Arrays.stream(e.getStackTrace())
+                                            .filter(el -> el.getClassName().startsWith("com.my"))
+                                            .toArray(StackTraceElement[]::new);
+
+        e.setStackTrace(filtered);
+        logger.error(message, e);
+    }
+
 }
 ```
