@@ -832,3 +832,117 @@ quill.on('text-change', function () {
 
 ## <span style="color:#802548">_board image upload compress하게 변경_</span>
 //TODO
+
+
+## <span style="color:#802548">_Reply에서 Distinct JPQL 제거_</span>
+
+- Distinct를 지우기 위해 Set을 활용하려면 EqualsAndHashCode를 재정의 해야한다.
+- replySeq를 기준으로 중복을 제거해주면 되기 때문에 아래처럼 써준다.
+
+```java
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@Entity
+@Table(name = "reply")
+@EqualsAndHashCode(of = "replySeq")
+public class ReplyEntity {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "reply_seq")
+    private Long replySeq;
+
+.
+.
+}
+```
+
+- 참고로 pageable을 넣어도 JPA에서 Page를 return해야만 Limit, offset이 붙는다. List를 return하면 안 된다.
+- DISTINCT keyword를 제거한다. 대신 Pageable에서 count를 가져올 때 별도의 query를 만들어줘야 한다.
+- JPQL에서 DISTINCT를 써야 JPA에서 알아서 중복을 처리해서 Pageable의 getTotalElements에서 paging이 제대로 처리된다.
+    - 하지만 그게 안된다면 아래처럼 countQuery를 직접 넣어주자. 
+    - 처음부터 countQuery는 넣어주는 게 좋다.
+
+```java
+public interface ReplyRepository extends JpaRepository<ReplyEntity, Long>{
+
+    @Query(value = """
+        SELECT r FROM ReplyEntity r 
+        LEFT JOIN FETCH r.childReplies c
+        WHERE r.board = :board 
+        AND (r.parentReply IS NULL OR r.parentReply IN 
+        (SELECT p FROM ReplyEntity p WHERE p.board = :board AND p.parentReply IS NULL))
+        ORDER BY COALESCE(r.parentReply.replySeq, r.replySeq)
+    """, countQuery = """
+        select count(r) FROM ReplyEntity r
+         WHERE r.board = :board 
+""")
+    Page<ReplyEntity> findRepliesByBoard(@Param("board") BoardEntity board, Pageable pageable);
+}
+```
+
+- JPQL에서 distinct를 지웠으니 Java에서 중복 객체를 제거해줘야 한다.
+- 페이징이라 순서도 중요하기 때문에 LinkedHashSet을 사용해준다.
+
+```java
+ public Page<ReplyDTO> getReplies(Long boardSeq, int page) {
+    Optional<BoardEntity> boardOpt = boardRepository.findById(boardSeq);
+    if (boardOpt.isEmpty()) {
+        throw new IllegalArgumentException("게시글이 존재하지 않습니다.");
+    }
+
+    Pageable pageable = PageRequest.of(page, 10, Sort.by(Sort.Direction.ASC, "createDate"));
+
+    // Fetch paginated parent and child replies in a single query
+    Page<ReplyEntity> replyPage = replyRepository.findRepliesByBoard(boardOpt.get(), pageable);
+    List<ReplyEntity> deduplicated = new ArrayList<>(new LinkedHashSet<>(replyPage.getContent()));
+    
+    // Convert to DTOs
+    List<ReplyDTO> replyDTOs = deduplicated.stream()
+                                        .map(ReplyDTO::toDTO)
+                                        .collect(Collectors.toList());
+
+    return new PageImpl<>(replyDTOs, pageable, replyPage.getTotalElements());
+    }
+```
+
+
+- LinkedHashSet class는 EqualsAndHasChode를 구현해야하므로 Entity class를 건드려야 한다.
+- 또한 해당 정렬 기준이 Entity에 명확하게 지정되기 떄문에 Enttiy를 이용하는 서비스에서 기준을 바꾸기 어렵다.
+- 그러나 Map을 이용하게 되면 LinkedhashMap을 만들면서 기준을 유연하게 바꿀 수 있다.
+- 따라서 아래처럼 Map을 사용하는 게 더 유연한 이용이 가능하다. 각 서비스별로 필요할 때마다 바꿀 수 있기 때문이다.
+
+```java
+public Page<ReplyDTO> getReplies(Long boardSeq, int page) {
+    Optional<BoardEntity> boardOpt = boardRepository.findById(boardSeq);
+    if (boardOpt.isEmpty()) {
+        throw new IllegalArgumentException("게시글이 존재하지 않습니다.");
+    }
+
+    Pageable pageable = PageRequest.of(page, 10, Sort.by(Sort.Direction.ASC, "createDate"));
+
+    // Fetch paginated parent and child replies in a single query
+    Page<ReplyEntity> replyPage = replyRepository.findRepliesByBoard(boardOpt.get(), pageable);
+
+    List<ReplyEntity> deduplicatedList = replyPage.getContent().stream()
+                                            .collect(Collectors.toMap(
+                                                ReplyEntity::getReplySeq,
+                                                Function.identity(),
+                                                (a, b) -> a,
+                                                LinkedHashMap::new
+                                            ))
+                                            .values()
+                                            .stream()
+                                            .toList();
+    
+    // Convert to DTOs
+    List<ReplyDTO> replyDTOs = deduplicatedList.stream()
+                                        .map(ReplyDTO::toDTO)
+                                        .collect(Collectors.toList());
+
+    return new PageImpl<>(replyDTOs, pageable, replyPage.getTotalElements());
+}
+```
