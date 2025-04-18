@@ -946,3 +946,104 @@ public Page<ReplyDTO> getReplies(Long boardSeq, int page) {
     return new PageImpl<>(replyDTOs, pageable, replyPage.getTotalElements());
 }
 ```
+
+
+- 대량의 데이터 + 복잡한 JOIN + 페이징이 필요한 경우에는 2번 조회 방식이 성능, 안정성 면에서 더 낫습니다.
+
+```
+JOIN 부풀기	r 하나가 c 여러 개를 가지면 row 수 폭발 (N*M)
+DISTINCT 정렬 부담	row가 많을수록 DB가 정렬 + 중복 제거 → 느림
+LIMIT/OFFSET 신뢰도↓	DB가 잘못된 row로 페이징 결과 반환 가능 (JOIN과 OFFSET이 충돌할 수 있음)
+메모리 소모	row가 많아질수록 서버 및 DB 자원 사용 ↑
+```
+
+```
+1차 쿼리: ID만 페이징으로 가져오기 (간단하고 빠름)
+SELECT r.id FROM reply r WHERE r.board_id = ? ORDER BY ... LIMIT 10 OFFSET 1000
+
+2차 쿼리: 가져온 ID로 실제 객체 + 연관 관계 조회
+SELECT * FROM reply r 
+LEFT JOIN child_reply c ON c.parent_id = r.id
+WHERE r.id IN (?, ?, ...)
+```
+
+row 폭발 없음	1차 쿼리는 단일 테이블에서 ID만 조회 → 빠름
+JOIN으로 인한 OFFSET 문제 없음	페이징은 ID 기준으로 정확하게 작동
+네트워크 최적화	필요한 엔티티만 정확히 조회
+유연한 확장	연관 관계를 나중에 추가해도 페이징 로직은 유지 가능
+
+SQL 2번 조회하는 게 더 빠를 수 있어?	Yes, 특히 대량 데이터 + 페이징 + JOIN이 있는 경우
+왜 더 빠름?	불필요한 JOIN row 제거, 페이징 정확도↑, 서버 메모리 부담↓
+언제 1쿼리가 나음?	JOIN 없고 데이터량 적을 때 (예: 관리자 페이지 목록 등)
+
+➡ r.id = 1 이 3개 row에 반복되면
+➡ JPA는 3개의 RecipeEntity 인스턴스를 만들지 않고,
+➡ DISTINCT가 있으면 내부적으로 중복 제거해서 1개만 유지합니다.
+
+DISTINCT 없이 받으면 List<RecipeEntity>에는 동일한 엔티티가 여러 번 들어가 있을 수 있으므로,
+Java에서 명시적으로 제거해주는 게 필요합니다.
+
+JPA는 JPQL에서 DISTINCT를 붙이면 다음과 같은 최적화를 수행합니다:
+
+쿼리 자체는 여전히 JOIN으로 인해 record 수가 많음
+
+엔티티의 식별자(PK)를 기준으로 중복을 제거
+
+JPA 내부 PersistenceContext (1차 캐시)에서 같은 엔티티는 하나만 유지
+
+자동으로 List<엔티티> 결과에는 중복 없이 반환됨
+
+→ 이 처리는 이미 최적화된 로직이라 Java로 수동 구현하는 것보다 빠름
+
+
+```java
+public static <T, K> Page<T> removeDuplicatesAndPage(List<T> list, Pageable pageable, Function<T, K> keyExtractor) {
+    List<T> distinctList = list.stream()
+        .collect(Collectors.toMap(
+            keyExtractor,
+            Function.identity(),
+            (e1, e2) -> e1,
+            LinkedHashMap::new
+        ))
+        .values()
+        .stream()
+        .toList();
+
+    int start = (int) pageable.getOffset();
+    int end = Math.min(start + pageable.getPageSize(), distinctList.size());
+
+    List<T> pagedList = distinctList.subList(start, end);
+    return new PageImpl<>(pagedList, pageable, distinctList.size());
+}
+```
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query("""
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    INNER JOIN r.userEntity u
+    WHERE u.userSeq = :userSeq
+""",  countQuery = """
+        select count(r) FROM RecipeEntity r
+        and u.userSeq = :userSeq
+""")
+```
+
+- 위는 join을 이미 시전한 userEntity 기준으로 userSeq를 쓰기 때문에 Recipe table의 index scan 조건으로 작동하지 못함. 따라서 전체 row scan 시전됨. 반면 아래처럼 하면 RecipeEntity의 userSeq를 기준으로 index scan을 수행할 수 있어 join할 row가 줄어듦. 다만 이렇게 해서 user가 Left join인지 inner join인지만 확인해보면 될듯? 
+- 그리고 나서 distinct 빼버렸을 때 잘되는지까지 test ㄱㄱ
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query("""
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    INNER JOIN r.userEntity u
+    WHERE r.UserEntity.userSeq = :userSeq
+""",  countQuery = """
+        select count(r) FROM RecipeEntity r
+        and u.userSeq = :userSeq
+""")
+```

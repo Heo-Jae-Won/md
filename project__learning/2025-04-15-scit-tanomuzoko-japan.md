@@ -961,6 +961,26 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
 };
 ```
 
+- DISTINCT がない場合は COUNTクエリを明確にして暗黙的なクエリを呼び出さないように処理します。
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query("""
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    INNER JOIN r.userEntity u
+    WHERE u.userSeq = :userSeq
+""",  countQuery = """
+        select count(r) FROM RecipeEntity r
+        and u.userSeq = :userSeq
+""")
+Page<RecipeEntity> findRecipesWithPagination(
+    @Param("userSeq") Long userSeq,
+    Pageable pageable
+);
+```
+
 - しかし、単にページネーションのためだけにエンティティクラスに @EqualsAndHashCode を付け加えるのは好ましくないと感じました。
 - セットクラスとマップクラスは、内部実装を確認したところ、CPU性能にそれほど大きな違いはないように思われたため、マップクラスによる実装も検討しました。
 - マップは、hashCode や equals に依存せずに処理できる点が利点です。
@@ -997,6 +1017,30 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
 ## <span style="color:#802548">_最適化： 大容量データに備えて SQL 切り替え_</span>
 
 
+- 上のSQLは一回で全部データを受け取ることができますが、JOIN が追加されます。
+- それと全体の
+
+```java
+@Query("""
+        SELECT r.recipeSeq FROM RecipeEntity r
+        WHERE r.userEntity.userSeq = :userSeq
+    """)
+    List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
+
+    @EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+    @Query(value = """
+        SELECT r FROM RecipeEntity r
+        INNER JOIN r.recipeInputKeywordEntityList k
+        INNER JOIN r.recipeOutputEntity j
+        WHERE r.recipeSeq IN :recipeIds
+        and r.isDeleted = false
+    """, countQuery = """
+            select count(r) FROM RecipeEntity r
+            WHERE r.recipeSeq IN :recipeIds
+            and r.isDeleted = false
+    """)
+    Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
+```
 
 ```java
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
@@ -1008,3 +1052,4 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
     return recipes;
 };
 ```
+
