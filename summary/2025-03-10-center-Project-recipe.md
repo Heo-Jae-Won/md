@@ -2794,40 +2794,122 @@ where
     ue1_0.user_seq=?
 ```
 
+- 하지만 위의 식에도 문제가 있다. where 조건문이 user의 user_seq로 걸리게 되면, recipe의 user_seq로 걸려야 사용 가능한 index scan 조건이 사용 불가능하다.
+- 따라서 첫 식에서 조회해야 하는 row 수모 증가하며 불필요한 scan도 증가한다.
+- 아래처럼 UserEntity에 관한 join은 빼주고, where 조건문에 recipe에서 user_seq를 가져와 index scan을 사용가능하게 바꿔준다.
 
-- 실제로 sql을 받아서 적어넣어보면, distinct keyword는 필요하지 않다.
-- distinct가 있든 없든 sql 상의 결과값은 동일하다.
-- DISTINCT를 JPQL에 넣은 이유는 JPQL의 distinct는 native sql의 distinct만이 아니라 다른 역할도 하기 때문이다.
-    - duplicated된 entity들을 제거하여 JAVA Object 관점에서 뽑기 좋게 만들어준다.
-    - 극한의 성능을 위해서라면 distinct를 빼고 JPA의 도움 없이 Java단에서 직접 entity들을 제거하고 합치는 작업을 해야한다.
-
-//TODO
 ```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+    @Query(value = """
+        SELECT DISTINCT r FROM RecipeEntity r
+        INNER JOIN r.recipeInputKeywordEntityList k
+        INNER JOIN r.recipeOutputEntity j
+        WHERE r.userEntity.userSeq = :userSeq
+    """,  countQuery = """
+        select count(r) FROM RecipeEntity r
+        where r.userEntity.userSeq = :userSeq
+    """)
+        Page<RecipeEntity> findRecipesWithPagination(
+            @Param("userSeq") Long userSeq,
+            Pageable pageable
+    );
+```
 
+- profileSQL=true option을 jdbc에 붙여 사용해 native sql을 얻어, 해당 실행 계획을 비교해보면 차이가 있다.
+- 첫번째 건이 한번의 불필요한 join을 거치게 되는 것을 확인할 수 있다.
+
+```
+first one
+
+1	SIMPLE	user	const	PRIMARY	PRIMARY	8	const	1	Using index; Using temporary; Using filesort
+1	SIMPLE	recipe_output_content	ALL	recipe_output_content_recipe_FK				3	
+1	SIMPLE	recipe_input_keyword	ref	PRIMARY	PRIMARY	8	project.recipe_output_content.recipe_seq	2	Using index
+1	SIMPLE	recipe	eq_ref	PRIMARY,recipe_user_FK	PRIMARY	8	project.recipe_output_content.recipe_seq	1	Using where
+
+
+second one 
+
+1	SIMPLE	recipe_output_content	ALL	    recipe_output_content_recipe_FK				3	Using temporary; Using filesort
+1	SIMPLE	recipe_input_keyword	ref	    PRIMARY	PRIMARY	8	project.recipe_output_content.recipe_seq	2	Using index
+1	SIMPLE	recipe	                eq_ref	PRIMARY,recipe_user_FK	PRIMARY	8	project.recipe_output_content.recipe_seq	1	Using where
+```
+
+- 더 최적화를 진행해보자. sql을 받아서 적어 넣어보면, distinct keyword는 필요하지 않다.
+    - distinct가 있든 없든 sql 상의 결과값은 동일하다.
+    - DISTINCT를 JPQL에 넣은 이유는 JPQL의 distinct는 native sql의 distinct만이 아니라 다른 역할도 하기 때문이다.
+    - duplicated된 entity들을 제거하여 JAVA Object 관점에서 뽑기 좋게 만들어준다.
+    - Java단에서 해결하게끔 SQL의 distinct를 제거한다.
+
+```java
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query(value = """
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    WHERE r.userEntity.userSeq = :userSeq
+""",  countQuery = """
+    select count(r) FROM RecipeEntity r
+    where r.userEntity.userSeq = :userSeq
+""")
+    Page<RecipeEntity> findRecipesWithPagination(
+        @Param("userSeq") Long userSeq,
+        Pageable pageable
+);
+```
+
+- 극한의 성능을 위해서라면 distinct를 빼고 JPA의 도움 없이 Java단에서 직접 entity들을 제거하고 합치는 작업을 해야한다.
+- JPQL의 distinct와 native sql의 distinct는 의미가 다르다.
+- JPA와 DB의 중복의 판단기준이 다르기 때문이다.
+
+```
+기준			SQL(DB)			JPA(Java)
+중복 판단 기준	row의 모든 컬럼 값	엔티티의 PK (예: recipeSeq)
+중복 제거 방법	DISTINCT로 모든 컬럼이 같은 row 제거	@Id 기준으로 같은 객체는 제거
+```
+
+- 따라서 natvie sql에 distinct가 불필요할 때는 아래처럼 Java 단에서 직접 중복 객체를 죽이는 작업을 실행한다.
+- PK를 기준으로 중복 기준 판단이기 때문에 PK를 기준으로 중복 객체를 삭제하며, 페이징에 순서가 중요하기 때문에 LinkedHashMap을 사용한다.
+
+```java
+Page<RecipeEntity> rawPages = recipeMyPageRepository.findRecipesWithPagination(userSeq, pageable);
+List<RecipeMyPageResponse> deduplicated = rawPages.getContent().stream()
+                                            .collect(Collectors.toMap(
+                                                    RecipeEntity::getRecipeSeq,
+                                                    Function.identity(),
+                                                    (a, b) -> a,
+                                                    LinkedHashMap::new
+                                                ))
+                                            .values()
+                                            .stream()
+                                            .map(RecipeMyPageResponse::toDTO)
+                                            .toList();
+
+return new PageImpl<>(deduplicated, pageable, rawPages.getTotalElements());
 ```
 
 - 아니면 아래처럼 distince를 쓰지 않고 두개의 query로 나눠서 가져갈 수도 있다.
-- 성능은 실행 계획으로 비교해보고 결정하면 된다.
+- 처음 최적화한 경우는 join이 여러개 겹치며 where clauses의 index scan이 발동하지 않는 경우가 존재하게 되는데, 여기선 그런 경우가 없다.
+- 따라서 2번을 조회해도 전체적으로 해당 쿼리가 더 좋다고 볼 수 있다.
 
 ```java
 public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long>{
-    @Query("""
-        SELECT r.recipeSeq FROM RecipeEntity r
-        WHERE r.userEntity.userSeq = :userSeq
-    """)
-    List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
+@Query("""
+    SELECT r.recipeSeq FROM RecipeEntity r
+    WHERE r.userEntity.userSeq = :userSeq
+""")
+List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
 
-    @EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
-    @Query(value = """
-        SELECT r FROM RecipeEntity r
-        INNER JOIN r.recipeInputKeywordEntityList k
-        INNER JOIN r.recipeOutputEntity j
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query(value = """
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    WHERE r.recipeSeq IN :recipeIds
+""", countQuery = """
+        select count(r) FROM RecipeEntity r
         WHERE r.recipeSeq IN :recipeIds
-    """, countQuery = """
-            select count(r) FROM RecipeEntity r
-            WHERE r.recipeSeq IN :recipeIds
-    """)
-    Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
+""")
+Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
 } 
 ```
 

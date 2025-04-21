@@ -965,7 +965,7 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
 
 ```java
 @EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
-@Query("""
+@Query(value = """
     SELECT r FROM RecipeEntity r
     INNER JOIN r.recipeInputKeywordEntityList k
     INNER JOIN r.recipeOutputEntity j
@@ -973,7 +973,7 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
     WHERE u.userSeq = :userSeq
 """,  countQuery = """
         select count(r) FROM RecipeEntity r
-        and u.userSeq = :userSeq
+        where r.userEntity.userSeq = :userSeq
 """)
 Page<RecipeEntity> findRecipesWithPagination(
     @Param("userSeq") Long userSeq,
