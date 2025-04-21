@@ -831,8 +831,7 @@ where
     SELECT DISTINCT r FROM RecipeEntity r
     INNER JOIN r.recipeInputKeywordEntityList k
     INNER JOIN r.recipeOutputEntity j
-    INNER JOIN r.userEntity u
-    WHERE u.userSeq = :userSeq
+    WHERE r.userEntity.userSeq = :userSeq
 """)
 Page<RecipeEntity> findRecipesWithPagination(
     @Param("userSeq") Long userSeq,
@@ -896,7 +895,7 @@ where
 
 ```java
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
-    Pageable pageable = PageRequest.of(currentPage, 3, Sort.by(Sort.Direction.ASC, "createdAt"));
+    Pageable pageable = PageRequest.of(currentPage, 10, Sort.by(Sort.Direction.ASC, "createdAt"));
     
     return recipeMyPageRepository.findRecipesWithPagination(userSeq, pageable)
                                     .map(RecipeMyPageResponse::toDTO);
@@ -913,8 +912,7 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
     SELECT r FROM RecipeEntity r
     INNER JOIN r.recipeInputKeywordEntityList k
     INNER JOIN r.recipeOutputEntity j
-    INNER JOIN r.userEntity u
-    WHERE u.userSeq = :userSeq
+    WHERE r.userEntity.userSeq = :userSeq
 """)
 Page<RecipeEntity> findRecipesWithPagination(
     @Param("userSeq") Long userSeq,
@@ -948,7 +946,7 @@ public class RecipeEntity {
 }
 
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
-    Pageable pageable = PageRequest.of(currentPage, 3, Sort.by(Sort.Direction.ASC, "createdAt"));
+    Pageable pageable = PageRequest.of(currentPage, 10, Sort.by(Sort.Direction.ASC, "createdAt"));
     Page<RecipeEntity> rawPage = recipeMyPageRepository.findRecipesWithPagination(userSeq, pageable);
 
     List<RecipeEntity> deduplicated = new ArrayList<>(new LinkedHashSet<>(rawPage.getContent()));
@@ -969,8 +967,7 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
     SELECT r FROM RecipeEntity r
     INNER JOIN r.recipeInputKeywordEntityList k
     INNER JOIN r.recipeOutputEntity j
-    INNER JOIN r.userEntity u
-    WHERE u.userSeq = :userSeq
+    WHERE r.userEntity.userSeq = :userSeq
 """,  countQuery = """
         select count(r) FROM RecipeEntity r
         where r.userEntity.userSeq = :userSeq
@@ -988,7 +985,7 @@ Page<RecipeEntity> findRecipesWithPagination(
 
 ```java
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
-    Pageable pageable = PageRequest.of(currentPage, 3, Sort.by(Sort.Direction.ASC, "createdAt"));
+    Pageable pageable = PageRequest.of(currentPage, 10, Sort.by(Sort.Direction.ASC, "createdAt"));
 
     Page<RecipeEntity> rawPage = recipeMyPageRepository.findRecipesWithPagination(userSeq, pageable);
 
@@ -1024,10 +1021,41 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
 
 ```java
 @Query("""
+    SELECT r.recipeSeq FROM RecipeEntity r
+    WHERE r.userEntity.userSeq = :userSeq
+""")
+List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
+
+@EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
+@Query(value = """
+    SELECT r FROM RecipeEntity r
+    INNER JOIN r.recipeInputKeywordEntityList k
+    INNER JOIN r.recipeOutputEntity j
+    WHERE r.recipeSeq IN :recipeIds
+    and r.isDeleted = false
+""", countQuery = """
+        select count(r) FROM RecipeEntity r
+        WHERE r.recipeSeq IN :recipeIds
+        and r.isDeleted = false
+""")
+Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
+```
+
+- ORDER BY を行う場合は 主キーを採番する段階で順序を決めておくと、後の処理での性能が向上します。
+- JOIN を行った後は、レコード数が増えるため、ORDER BY に必要なリソースも増加します。
+- 特に大容量データを扱う場合は、ORDER BY にかかるリソースを抑えることで、システムの応答性を改善できます。
+
+```java
+public interface RecipeMyPageRepository extends JpaRepository<RecipeEntity, Long>{
+    
+    @Query(value = """
         SELECT r.recipeSeq FROM RecipeEntity r
         WHERE r.userEntity.userSeq = :userSeq
+    """, countQuery = """
+        select count(r) FROM RecipeEntity r
+        WHERE r.userEntity.userSeq = :userSeq
     """)
-    List<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq);
+    Page<Long> findRecipeIdsByUser(@Param("userSeq") Long userSeq, Pageable pageable);
 
     @EntityGraph(attributePaths = {"recipeOutputEntity", "recipeInputKeywordEntityList"})
     @Query(value = """
@@ -1036,24 +1064,17 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
         INNER JOIN r.recipeOutputEntity j
         WHERE r.recipeSeq IN :recipeIds
         and r.isDeleted = false
-    """, countQuery = """
-            select count(r) FROM RecipeEntity r
-            WHERE r.recipeSeq IN :recipeIds
-            and r.isDeleted = false
     """)
-    Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
-```
+    List<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds);
+} 
 
-- ただし、大容量のデータを扱う場合は、JOIN を減らすことでデータベースが照会する量も少なくなるので、応答性を高めることができます。
-
-```java
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
     Pageable pageable = PageRequest.of(currentPage,  10, Sort.by(Sort.Direction.DESC, "createdAt"));
-    
-    List<Long> recipeIds = recipeMyPageRepository.findRecipeIdsByUser(userSeq);
-    Page<RecipeMyPageResponse> recipes = recipeMyPageRepository.findRecipesByIds(recipeIds, pageable).map(RecipeMyPageResponse::toDTO);
+    Page<Long> recipeIds = recipeMyPageRepository.findRecipeIdsByUser(userSeq, pageable);
 
-    return recipes;
+    List<RecipeMyPageResponse> recipes = recipeMyPageRepository.findRecipesByIds(recipeIds.getContent()).stream().map(RecipeMyPageResponse::toDTO).toList();
+
+    return new PageImpl<>(recipes, pageable, recipeIds.getTotalElements());
 };
 ```
 
