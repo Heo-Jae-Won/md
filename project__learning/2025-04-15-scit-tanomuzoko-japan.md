@@ -1017,8 +1017,10 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
 ## <span style="color:#802548">_最適化： 大容量データに備えて SQL 切り替え_</span>
 
 
-- 上のSQLは一回で全部データを受け取ることができますが、JOIN が追加されます。
-- それと全体の
+- 上のSQLは一回で全部データを受け取ることができますが、JOIN の数が多いです。
+- それを JOIN が少なくする必要があります。
+- SQL を二回に分けて大容量のデータを受け取るようにします。
+- 二回に分けて性能が悪くなるのではないかと思うかもしれません。
 
 ```java
 @Query("""
@@ -1041,6 +1043,8 @@ public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentP
     """)
     Page<RecipeEntity> findRecipesByIds(@Param("recipeIds") List<Long> recipeIds, Pageable pageable);
 ```
+
+- ただし、大容量のデータを扱う場合は、JOIN を減らすことでデータベースが照会する量も少なくなるので、応答性を高めることができます。
 
 ```java
 public Page<RecipeMyPageResponse> findAllRecipeByUser(Long userSeq, int currentPage) {
