@@ -250,14 +250,14 @@ public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
 	String osName = System.getProperty("os.name").toLowerCase();
 	if (osName.contains("win")) {
 
-		File newFile = new File(path + file.getOriginalFilename());
+		File newFile = new File(path + "window 용 패스" + file.getOriginalFilename());
 		if (!newFile.exists()) {
 			file.transferTo(newFile);
 		}
 
 	} else if (osName.contains("nix") || osName.contains("nux") || osName.contains("aix")) {
 
-		File newFile= new File(path + file.getOriginalFilename());
+		File newFile= new File(path + "linux 용 패스" + file.getOriginalFilename());
 		if (!newFile.exists()){
 			file.transferTo(newFile);
 		}

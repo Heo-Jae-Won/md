@@ -1212,6 +1212,7 @@ Id          |Operation                          |Name
 13          |    VIEW                           |
 14          |     TABLE ACCESS FULL             |SYS_TEMP
 ```
+
 - 다른 예시를 들어보자.
 - 데이터는 아래와 같다.
 ```

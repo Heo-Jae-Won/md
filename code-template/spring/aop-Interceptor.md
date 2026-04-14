@@ -1,5 +1,6 @@
 ## <span style="color:#802548">_1. logging을 위한 entity class_</span>
 - entity를 만들기 위해 아래와 같이 column을 구성한다.
+
 ```java
 @Entity
 @Getter
@@ -35,6 +36,7 @@ public class MemberLogger {
 ```
 ## <span style="color:#802548">_2. logging을 위한 repository class_</span>
 - logging은 저장 기능밖에 없기 때문에 저장하는 persist()만 만들어놓는다.
+
 ```java
 @Repository
 public class MemberActivityRepository {
@@ -51,6 +53,7 @@ public class MemberActivityRepository {
 
 ## <span style="color:#802548">_3. logging을 위한 service class_</span>
 - repository를 이용해 logging entity를 저장하는 service class를 만든다.
+
 ```java
 @Service
 @RequiredArgsConstructor
@@ -72,8 +75,10 @@ public class MemberActivityService {
 
 }
 ```
+
 ## <span style="color:#802548">_4. logging을 위한 util class_</span>
 - 아래와 같이 request에 값이 있는지 확인하고 가져온다.
+
 ```java
 if (RequestContextHolder.getRequestAttributes() == null) {
 	return "";
@@ -82,8 +87,10 @@ if (RequestContextHolder.getRequestAttributes() == null) {
 HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
 				.getRequest();
 ```
+
 - 아래와 같이 proxy ip가 있으면 proxy ip를 반환하고, 그게 아니라면 자신의 ip를 반환한다.
 - localhost는 0.0.0.0을 반환한다.
+
 ```java
 private static final String[] IP_HEADER_CANDIDATES = { "X-Forwarded-For", "Proxy-Client-IP", "WL-Proxy-Client-IP",
 			"HTTP_X_FORWARDED_FOR", "HTTP_X_FORWARDED", "HTTP_X_CLUSTER_CLIENT_IP", "HTTP_CLIENT_IP",
@@ -109,9 +116,11 @@ public static String getClientIpAddress() {
 		return request.getRemoteAddr();
 	}
 ```
+
 - userId의 경우 SecurityContext에서 얻어온다. 
 - 만약에 SecurityContextHolder에 값이 없다면 빈값을 반환한다. 
 - principal의 경우 로그인을 하지 않은 상태에서 SecurityContextHolder에서 꺼내면 String 형변환을 해야 하며, 값은 anonymousUser로 로그인이 된 상태라면 User로 형변환해야 하고, 값은 object라서 한 차례 더 들어가서 꺼내야 한다. 
+
 ```java
 public static String getUserId() {
 		String userId = null;
@@ -131,9 +140,11 @@ public static String getUserId() {
 
 	}
 ```
+
 - 참고로 controller에서 그냥 Principal principal로 값을 가져온다면 로그인을 하지 않았을 때 값이 null로 나온다. 
 - 즉, Authentication을 거치지 않은 경우에는 SecurityContextHolder를 거치면 annoymousUser, 안 거치면 null로  값이 달라진다.
 - 아래가 합본이다. 간단한 내용은 추가 설명하지 않았다.
+
 ```java
 package com.example.reservation.activityLogging;
 
@@ -262,6 +273,7 @@ public final class HttpRequestResponseUtils {
 ## <span style="color:#802548">_5. interceptor 활용하기_</span>
 - 아래와 같이 HandlerInterceptor를 implements한 class를 만들고 @Component를 붙여 bean으로 만든다. 
 - logging할 것들은 아래와 같은 것으로 만들었다. 
+
 ```java
 @Component
 @RequiredArgsConstructor
@@ -298,7 +310,9 @@ public class MemberActivityInterceptor implements HandlerInterceptor {
 
 }
 ```
+
 - 그리고 implements WebMvcConfigurer를 한 class에 addInterceptor() method를 override하여 custom interceptor를 구현한다.
+
 ```java
 @Configuration
 @EnableWebMvc
@@ -315,13 +329,16 @@ public class WebConfig implements WebMvcConfigurer {
 ```
 ## <span style="color:#802548">_6. aop 활용하기_</span>
 - 일단 pom.xml에 aop를 넣어준다.
+
 ```xml
 <dependency>
     <groupId>org.springframework</groupId>
     <artifactId>spring-aop</artifactId>
 </dependency>
 ```
+
 - main class에 @EnableAspectJAutoProxy를 달아준다. 그럼 이제 aop를 활용할 수 있다.
+
 ```java
 @SpringBootApplication
 @EnableAspectJAutoProxy
@@ -343,14 +360,18 @@ public class ReservationApplication {
 - within으로 package 전체를 대상으로 만든 뒤에, 내가 원하는 method만 따로 뺀다. 
 - method를 빼는 것은 !execution으로 한다. 맨 앞의 *는 return type인데, 뭐가 올 지 모르니 whildcard로 달아줬다. 
 - 한 칸 띄고 해당 method의 name을 써준다. 뒤에 (..)은 parameter의 갯수인데, 몇 개가 들어올 지 모르니 ..으로 달아준다.
+
 ```java
 @Pointcut("within(com.example.reservation.controller.*) && !execution(* com.example.reservation.controller.SignController.login(..))")
 ```
 - 그리고 advice의 인자로는 위에서 서술했던 exceptSignIn()으로 넣어준다.
+
 ```java
 @Before("exceptSignIn()")
 ```
+
 - 아래와 같은 형태다. 지금은 JoinPoint를 활용하지 않는다. 필요가 없기 때문이다.
+
 ```java
 @Pointcut("within(com.example.reservation.controller.*) && !execution(* com.example.reservation.controller.SignController.login(..))")
     public void exceptSignIn() {}
@@ -372,11 +393,13 @@ public class ReservationApplication {
 ```
 - 하지만 이제는 Joinpoint를 사용한다. Joinpoint를 활용해서 advice에 포함된 method의 argument를 가져온다. 
 - 따라서 아래 SignInRequest class와 HttpSession calss를 가져온다고 생각하면 된다.
+
 ```java
  public JwtResponse login(@RequestBody SignInRequest signInRequestDto, HttpSession session)
             throws Exception
 ```
 - returning은 result라고 명시하면 아래 method에서도 parameter 이름을 result로 똑같이 맞춰야 한다. 
+
 ```java
 @AfterReturning(pointcut = "signIn()", returning = "result")
     public void AfterRequest(JoinPoint joinPoint, Object result) {
@@ -384,11 +407,14 @@ public class ReservationApplication {
 ```
 - 로그인은 SingInRequest class가 첫번째로 들어오니 0번째 index를 가져온다. 
 - Object class라서 형변환이 필요하다. 해당 class로 형변환해주자. 나는 그게 SignInRequest class다.
+
 ```java
     Object[] args = joinPoint.getArgs();
     SignInRequest signInRequest = (SignInRequest) args[0]; 
 ```
+
 - 아래가 합본이다.
+
 ```java
 @Pointcut("execution(* com.example.reservation.controller.SignController.login(..))")
 public void signIn() {
@@ -412,7 +438,9 @@ public void AfterRequest(JoinPoint joinPoint, Object result) {
 
 }
 ```
+
 - 아래는 전체 합본이다.
+
 ```java
 @Component
 @Aspect
