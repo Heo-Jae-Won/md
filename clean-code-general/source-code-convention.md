@@ -102,3 +102,72 @@ HashMap<String, Object> output = new HashMap<>();
 
 
 
+## <span style="color:#802548">_git commit message 남기는 법_</span>
+
+- 잘 쓴 예시는 아래와 같다.
+```
+Convert template to US-ASCII to fix error
+
+I introduced some tests in a feature branch to match the contents of
+`/etc/nginx/router_routes.conf`. They worked fine when run with `bundle exec
+rake spec` or `bundle exec rspec modules/router/spec`. But when run as
+`bundle exec rake` each should block failed with:
+
+    ArgumentError:
+      invalid byte sequence in US-ASCII
+
+I eventually found that removing the `.with_content(//)` matchers made the
+errors go away. That there weren't any weird characters in the spec file. And
+that it could be reproduced by requiring Puppet in the same interpreter with:
+
+    rake -E 'require "puppet"' spec
+
+That particular template appears to be the only file in our codebase with an
+identified encoding of `utf-8`. All others are `us-ascii`:
+
+    dcarley-MBA:puppet dcarley$ find modules -type f -exec file --mime {} \+ | grep utf
+    modules/router/templates/routes.conf.erb:text/plain; charset=utf-8
+
+Attempting to convert that file back to US-ASCII identified the offending
+character as something that looked like a whitespace:
+
+    dcarley-MBA:puppet dcarley$ iconv -f UTF8 -t US-ASCII modules/router/templates/routes.conf.erb 2>&1 | tail -n5
+      proxy_intercept_errors off;
+
+      # Set proxy timeout to 50 seconds as a quick fix for problems
+      #
+    iconv: modules/router/templates/routes.conf.erb:458:3: cannot convert
+
+After replacing it (by hand) the file identifies as `us-ascii` again:
+
+    dcarley-MBA:puppet dcarley$ file --mime modules/router/templates/routes.conf.erb
+    modules/router/templates/routes.conf.erb: text/plain; charset=us-ascii
+
+Now the tests work! One hour of my life I won't get back..
+```
+
+- commit의 맨 앞에 나오는 전형적인 단어들은 아래와 같다.
+  - fix -> 올바르지 않은 동작을 고침
+  - add -> 기능, test, 문서를 추가
+  - remove -> 코드를 삭제
+  - use -> 뭔가를 사용해 구현
+  - refactor -> 리팩토링
+  - simplify -> refactor보단 약한 수정( if문 위치 옮기기.. field명만 바꾸기.. )
+  - update -> 수정/추가/보완
+  - improve -> 호환성/테스트커버리지/접근성 향상이 있을 때
+  - implement -> 클래스/모듈 단위로 코드를 추가
+  - revise -> 문서를 개정
+  - correct -> 문법 오류, 타입 변경, 이름 변경
+  - ensure  -> 오류처리가 없었는데 추가 등 기능을 보장
+  - prevent -> stackoverflow나 out of memory 등이 일어날 수 있는데 이를 막기 위해 코드를 수정한 경우
+
+
+<br/>
+
+
+- 파일 수정의 목적이 다르면 각자 개별 commit으로 넣어야 한다.
+  - 기능추가
+  - 주석보완
+  - import정리
+    - 위 3개는 모두 파일 수정 목적이 다르다.
+    - 개별 commit으로 넣어야 한다..
