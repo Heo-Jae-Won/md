@@ -84,11 +84,11 @@ service nginx start
 server {
 listen 80;
 listen [::]:80;
-server_name dpms.openobject.net;
+server_name dev.company.net;
 
 
 location / {
-  proxy_pass http://dpms.openobject.net:[포워딩한 WAS port];
+  proxy_pass http://dev.company.net:[포워딩한 WAS port];
   proxy_set_header X-Real-IP $remote_addr;
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
   proxy_set_header Host $http_host;
@@ -105,11 +105,11 @@ location / {
 server {
 listen 80;
 listen [::]:80;
-server_name dpms.openobject.net;
+server_name dev.company.net;
 
 
   location / {
-    proxy_pass http://dpms.openobject.net:[포워딩한 WAS port];
+    proxy_pass http://dev.company.net:[포워딩한 WAS port];
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header Host $http_host;
@@ -164,7 +164,7 @@ java -jar ~~~.jar nohup &
 - 대부분의 회사 repo는 private이다. jenkins에서 private repo는 ssh 배포로 진행된다. 따라서 개인키 공개키를 설정해야 한다.
 
 ```sh
-ssh-keygen -t rsa -b 4096 -C "ckdwhgood2@naver.com"
+ssh-keygen -t rsa -b 4096 -C "email"
 ```
 
 - 만들었으면 .pub이란 공개키를 github에 넣어준다.
@@ -351,7 +351,7 @@ pipeline {
                 script {
                     try {
                         git branch: 'dev', 
-                            credentialsId: 'b71cf906-cfb6-4a32-98a3-eec5e3990f8c',
+                            credentialsId: '${credential}',
                             url: '${srt_gitlab_backend_url}'
                         env.cloneResult=true
                         

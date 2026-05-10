@@ -1,141 +1,6 @@
----
-title:  "멘토링에서 배운 Spring 유지보수 기법(Legacy, Eclipse 기준)"
-search: false
-last_modified_at: 2023-06-22T22:28:00-05:00
-categories: 
-  - Spring
-toc: true  
-tags:
-  - Spring
-author: 허재원
----
 
-# 멘토링에서 배운 Spring 유지보수 기법(Legacy, Eclipse 기준)
 
-멘토링으로 배운 것 중 유지보수 관점으로 묶을 수 있는 것을 정리하였습니다. 여전히 부족한 점이 많으니 참고하여 읽어주시면 감사하겠습니다.
-
----
-
-<br>
-
-## <span style="color:#802548">_1. Spring의 3-tier방식_</span>
-
-<br>
-
-- 스프링은 controller, dao, service가 서로 맞물리는 구조입니다.
-
-  - Controller는 Presentation-tier(화면), Service는 Business-tier(로직), Dao는 Persistence-tier(데이터)입니다.
-
-  * 데이터를 받아오고(Dao), 데이터를 처리할 방식을 만들고(Service), 데이터를 화면에 연결(Controller)시킵니다.
-
-  - 3계층으로 구분시킨 이유는 각 영역을 독립시켜 유지보수에 용이하게 하기 위해서입니다.
-
-```mermaid
-flowchart LR
-	A[Controller]
-	B[Service]
-	C[Dao]
-	D[(Database)]
-	A-->B-->C-->D-->A
-```
-
-<br>
-
-그러한 관점에서 아래 코드는 controller에 business logic이 들어가 있고 dao도 호출하고 있기에, 적절하지 못한 소스코드 입니다.  
-Business logic은 Service 계층으로 넣고, Dao 또한 <span style="color:#506F90">Service 계층</span>에서 호출되는 구조로 변경되어야 합니다.
-
-```java
-@RestController
-@PostMapping("/api/boards/insert")
-public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
-		throws IllegalStateException, IOException {
-	MultipartFile file = multi.getFile("file");
-	String contentType = file.getContentType();
-
-	if (!contentType.contains("image/jpeg") && !contentType.contains("image/png")) {
-		throw new Error("이미지타입이 잘못되었습니다");
-	}
-
-	String osName = System.getProperty("os.name").toLowerCase();
-	if (osName.contains("win")) {
-
-		String path = "c:/upload/";
-		File newFile = new File(path + file.getOriginalFilename());
-		if (!newFile.exists()) {
-			file.transferTo(newFile);
-		}
-
-	} else if (osName.contains("nix") || osName.contains("nux") || osName.contains("aix")) {
-
-			String path= "/usr/local/apache-tomcat-8.5.85/webapps/upload";
-			File newFile= new File(path + file.getOriginalFilename());
-			if (!newFile.exists()){
-				file.transferTo(newFile);
-			}
-	}
-
-	insertDto.setBoardPhoto(file.getOriginalFilename());
-	boardDao.insert(insertDto);
-}
-```
-
-<br>
-
-3-tier 요구사항을 반영하여 아래와 같이 변화를 줄 수 있습니다.  
-Business-tier에 해당하는 Service class를 만들고 거기에 logic을 만듭니다. Service class에서 필요한 경우 Dao를 호출합니다.  
-저는 boardDao.insert(insertDto);로 게시물 등록 쿼리문을 호출했습니다.
-
-```java
-@Service
-public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
-		throws IllegalStateException, IOException {
-	MultipartFile file = multi.getFile("file");
-	String contentType = file.getContentType();
-	if (!contentType.contains("image/jpeg") && !contentType.contains("image/png")) {
-		throw new Error("이미지타입이 잘못되었습니다");
-	}
-	String osName = System.getProperty("os.name").toLowerCase();
-	if (osName.contains("win")) {
-
-		String path = "c:/upload/";
-		File newFile = new File(path + file.getOriginalFilename());
-		if (!newFile.exists()) {
-			file.transferTo(newFile);
-		}
-
-	} else if (osName.contains("nix") || osName.contains("nux") || osName.contains("aix")) {
-
-		String path= "/usr/local/apache-tomcat-8.5.85/webapps/upload";
-		File newFile= new File(path + file.getOriginalFilename());
-		if (!newFile.exists()){
-			file.transferTo(newFile);
-		}
-	}
-
-	insertDto.setBoardPhoto(file.getOriginalFilename());
-	boardDao.insert(insertDto);
-}
-```
-
-<br>
-그리고 서비스를 Presentation-tier에 해당하는 Controller class에서 호출합니다.
-
-```java
-@RestController
-@PostMapping("/api/boards/insert")
-	public ResponseEntity<String> insert(@Valid BoardDto insertDto, MultipartHttpServletRequest multi) throws ServiceException {
-
-		boardService.insertBoardInfo(insertDto, multi);
-
-		return  new ResponseEntity<String>(HttpStatus.OK);
-	}
-```
-
----
-
-<br>
-
-## <span style="color:#802548">_2. properties 파일을 활용해 하드 코딩 덜어내기_</span>
+## <span style="color:#802548">_properties 파일을 활용해 하드 코딩 덜어내기_</span>
 
 <br>
 
@@ -268,11 +133,8 @@ public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
 }
 ```
 
----
 
-<br>
-
-## <span style="color:#802548">_3. spring.profiles.active를 통해 local과 dev 분기처리_</span>
+## <span style="color:#802548">_spring.profiles.active를 통해 local과 dev 분기처리_</span>
 
 <br>
 
@@ -334,7 +196,7 @@ dev.properties파일은 서버에 맞게 설정합니다.
 
 ```java
 path=/usr/local/apache-tomcat-8.5.85/webapps/upload/
-origin=http://dpms.openobject.net:11111111111
+origin=http://dev.company.net:11111111111
 ```
 
 <br>
@@ -372,11 +234,8 @@ public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
 }
 ```
 
----
 
-<br>
-
-## <span style="color:#802548">_4.@ControllerAdvice를 활용해 Exception을 전역처리_</span>
+## <span style="color:#802548">_@ControllerAdvice를 활용해 Exception을 전역처리_</span>
 
 <br>
 
@@ -387,8 +246,8 @@ public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
 
 <br>
 
-3번 예제에 이어서 살펴보도록 하겠습니다. 우선 Exception message부터 하나의 파일로 모아보겠습니다.  
-앞으로는 아래의 enum에서 오류메시지를 관리하게 됩니다. 개별 오류 메시지들을 알기 위해 모든 Service class를 훑어볼 필요가 없습니다.
+- 3번 예제에 이어서 살펴보도록 하겠습니다. 우선 Exception message부터 하나의 파일로 모아보겠습니다.  
+- 앞으로는 아래의 enum에서 오류메시지를 관리하게 됩니다. 개별 오류 메시지들을 알기 위해 모든 Service class를 훑어볼 필요가 없습니다.
 
 ```java
 @Getter
@@ -403,9 +262,9 @@ public enum CommonErrorCode {
 
 <br>
 
-그 다음으로 Exception class를 만들어보겠습니다.  
-Service에 필요한 Exception을 던지는 class라서 ServiceException이라고 이름지었습니다.  
-이제 ServiceException은 new로 생성될 때 반드시 String class type의 argument를 받아야 합니다.
+- 그 다음으로 Exception class를 만들어보겠습니다.  
+- Service에 필요한 Exception을 던지는 class라서 ServiceException이라고 이름지었습니다.  
+- 이제 ServiceException은 new로 생성될 때 반드시 String class type의 argument를 받아야 합니다.
 
 ```java
 @Getter
@@ -424,8 +283,8 @@ public class ServiceException extends RuntimeException{
 
 <br>
 
-3번 예제의 Service class와 다르게 Error가 아니라 직접 구현한 ServiceException을 던지게 바뀌었습니다.  
-메시지도 하드코딩된 메시지가 아니라 BOARD_BAD_TYPE.getMessage()와 같이 enum의 String 값을 받아오게 바뀌었습니다.
+- 3번 예제의 Service class와 다르게 Error가 아니라 직접 구현한 ServiceException을 던지게 바뀌었습니다.  
+- 메시지도 하드코딩된 메시지가 아니라 BOARD_BAD_TYPE.getMessage()와 같이 enum의 String 값을 받아오게 바뀌었습니다.
 
 ```java
 @Service
@@ -459,10 +318,10 @@ public void insert(@Valid BoardDTO insertDto, MultipartHttpServletRequest multi)
 
 <br>
 
-그 다음으로는 전역으로 관리하기 위해 <span style="color:#506F90">@ControllerAdvice</span>를 만듭니다.  
-@ControllerAdvice를 달면 스프링 컨테이너에서 관리하는 대상(Component)이 됩니다.  
-@Rest가 달린 이유는 front framework를 쓰게되면 json으로 보내야 하기 때문입니다.  
-annotation이 RestController인 것만 대상으로 ServiceException을 잡아내게 됩니다.
+- 그 다음으로는 전역으로 관리하기 위해 <span style="color:#506F90">@ControllerAdvice</span>를 만듭니다.  
+- @ControllerAdvice를 달면 스프링 컨테이너에서 관리하는 대상(Component)이 됩니다.  
+- @Rest가 달린 이유는 front framework를 쓰게되면 json으로 보내야 하기 때문입니다.  
+- annotation이 RestController인 것만 대상으로 ServiceException을 잡아내게 됩니다.
 
 ```java
 @RestControllerAdvice(annotations = RestController.class)
@@ -482,8 +341,8 @@ public class ServiceExceptionAdvice{
 
 <br>
 
-간단하게 ExceptionDto를 만들었습니다.  
-error 메시지를 어떻게 가공하여 프론트에 전송할할 것인가에 따라 더 많은 field가 필요할 수도 있습니다.
+- 간단하게 ExceptionDto를 만들었습니다.  
+- error 메시지를 어떻게 가공하여 프론트에 전송할할 것인가에 따라 더 많은 field가 필요할 수도 있습니다.
 
 ```java
 @Data
@@ -495,8 +354,8 @@ public class ExceptionDto {
 
 <br>
 
-boot와 달리 자동으로 ComponentScan이 되지 않기 때문에 ComponentScan 대상임을 명시해주어야 합니다.  
-아래와 같이 WebServletConfig에 달아주었습니다.
+- boot와 달리 자동으로 ComponentScan이 되지 않기 때문에 ComponentScan 대상임을 명시해주어야 합니다.  
+- 아래와 같이 WebServletConfig에 달아주었습니다.
 
 ```java
 @ComponentScan(basePackages = { "com.example.controller","com.example.exception" })
@@ -506,11 +365,7 @@ public class WebServletConfig implements WebMvcConfigurer {
 }
 ```
 
----
-
-<br>
-
-## <span style="color:#802548">_5. 전역 Cors 허용 설정_</span>
+## <span style="color:#802548">_전역 Cors 허용 설정_</span>
 
 <br>
 
@@ -522,11 +377,11 @@ public class WebServletConfig implements WebMvcConfigurer {
 
 <br>
 
-먼저 @CrossOrigin을 사용할 수 있습니다.  
-다만 아래와 같이 모든 Controller class마다 달아주게 되면 cors가 바뀌면 매번 전부 다시 쳐서 바꿔주어야 합니다.
+- 먼저 @CrossOrigin을 사용할 수 있습니다.  
+- 다만 아래와 같이 모든 Controller class마다 달아주게 되면 cors가 바뀌면 매번 전부 다시 쳐서 바꿔주어야 합니다.
 
 ```java
-@CrossOrigin(origins="http://dpms.openobject.net:1111111111")
+@CrossOrigin(origins="http://dev.company.net:1111111111")
 @RestController
 public class BoardController {
 	.
@@ -537,8 +392,8 @@ public class BoardController {
 
 <br>
 
-따라서 annotation이 아닌 소스코드로 바꾸고, 전역으로 설정가능한 방식으로 변경합니다.  
-우선은 WebServletConfig에서 전역 설정이 가능합니다.
+- 따라서 annotation이 아닌 소스코드로 바꾸고, 전역으로 설정가능한 방식으로 변경합니다.  
+- 우선은 WebServletConfig에서 전역 설정이 가능합니다.
 
 ```java
 @Configuration
@@ -556,7 +411,7 @@ public class WebServletConfig implements WebMvcConfigurer {
 
 <br>
 
-여기서도 local.properties 파일을 활용해보겠습니다. 기억이 나지 않을 수 있으니 다시 가져왔습니다.
+- 여기서도 local.properties 파일을 활용해보겠습니다. 기억이 나지 않을 수 있으니 다시 가져왔습니다.
 
 ```java
 path=/upload/
@@ -565,7 +420,7 @@ origin=http://localhost:3000
 
 <br>
 
-@Value를 활용해 WebServletConfig를 아래와 같이 변경할 수도 있습니다.
+- @Value를 활용해 WebServletConfig를 아래와 같이 변경할 수도 있습니다.
 
 ```java
 @Configuration
@@ -678,21 +533,16 @@ public class MyWebAppInitializer implements WebApplicationInitializer {
 }
 ```
 
----
-
-## <span style="color:#802548">_6. encoding 전역 설정하기_</span>
-
-<br>
+## <span style="color:#802548">_encoding 전역 설정하기_</span>
 
 - content-type은 자원의 형식을 명시하기 위해 헤더에 실리는 정보입니다.
 
   - content-type에서 charset을 잘못 설정하면 한글의 경우 인코딩이 깨져서 가는 경우가 종종 발생합니다.
   - 따라서 한글이 깨지는 경우, encoding 방식을 바꿔야합니다.
 
-<br>
 
-이번에는 게시물 등록(insert)이 아니라 게시물 목록 조회(list)로 가져왔습니다.  
-content-type을 명시하기 위해 아래와 같이 header를 넣을 수 있습니다.
+- 이번에는 게시물 등록(insert)이 아니라 게시물 목록 조회(list)로 가져왔습니다.  
+- content-type을 명시하기 위해 아래와 같이 header를 넣을 수 있습니다.
 
 ```java
 @GetMapping("/api/boards")
@@ -709,11 +559,10 @@ public ResponseEntity<String> fetchList(int page, String searchType, String keyw
 }
 ```
 
-<br>
 
-또는 아래와 같이 header 설정 대신 produces를 활용할 수도 있습니다.  
-produces도 본질적으로 header를 설정하는 것이지만 약간 더 소스코드가 짧아집니다.  
-하지만 두 가지 모두 각 method마다 전부 동일하게 적어줘야 한다는 단점이 있습니다.
+- 또는 아래와 같이 header 설정 대신 produces를 활용할 수도 있습니다.  
+- produces도 본질적으로 header를 설정하는 것이지만 약간 더 소스코드가 짧아집니다.  
+- 하지만 두 가지 모두 각 method마다 전부 동일하게 적어줘야 한다는 단점이 있습니다.
 
 ```java
 @GetMapping(value = "/api/boards", produces = "application/json;charset=utf-8")
@@ -730,7 +579,7 @@ public ResponseEntity<String> fetchList(int page, String searchType, String keyw
 
 <br>
 
-따라서 아래와 같이 <span style="color:#506F90">messageConverter</span>를 활용한다면 한 곳에서 전역의 encoding을 관리할 수 있습니다.
+- 따라서 아래와 같이messageConverter를 활용한다면 한 곳에서 전역의 encoding을 관리할 수 있습니다.
 
 ```java
 @ComponentScan(basePackages = { "com.example.controller","com.example.exception" })
@@ -747,23 +596,16 @@ public class WebServletConfig implements WebMvcConfigurer {
 }
 ```
 
-<br>
 
-또는 build 단계에서 encoding을 utf-8로 설정하는 것도 방법입니다. 경우에 따라서는 두 방법 모두 동원해야 할 수도 있습니다.
+- 또는 build 단계에서 encoding을 utf-8로 설정하는 것도 방법입니다. 경우에 따라서는 두 방법 모두 동원해야 할 수도 있습니다.
 
-```java
-	<properties>
-	<project.build.sourceEncoding>utf-8</project.build.sourceEncoding>
-		<java-version>1.8</java-version>
-		.
-		.
-		.
-	</properties>
+```xml
+<properties>
+<project.build.sourceEncoding>utf-8</project.build.sourceEncoding>
+	<java-version>1.8</java-version>
+	.
+	.
+	.
+</properties>
 ```
 
----
-
-<br>
-
-여태까지 배우고 학습한 유지보수 기법을 예제를 통해 정리해보았습니다. 읽어주셔서 감사합니다.  
-다들 남은 한 해 건승하시고 행복하시길 소망합니다.

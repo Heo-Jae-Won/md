@@ -512,13 +512,5 @@ document.write(decodeURIComponent(document.URL.substring(pos)));
 	- CSP 헤더를 self로 고정 --> 임의로 삽입된 script 전부 run 안함.
 	- 중요 기능은 추가 인증하게 변경
 
-//TODO. CSRF token 도입
-```
-f
-```
-
-## <span style="color:#802548">_SSRF_</span>
-SSRF
-
 
 

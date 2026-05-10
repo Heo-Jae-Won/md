@@ -1,21 +1,5 @@
----
-title:  "프론트 팀원들에게 배운 Front 유지보수 기법(vue3 composition API 기준)"
-search: false
-categories: 
-  - Vue
-toc: true  
-tags:
-  - Vue
-author: 허재원
----
 
-프론트 팀원들에게 배운 것 중 유지보수 관점으로 묶을 수 있는 것을 정리하였습니다. 여전히 부족한 점이 많으니 참고하여 읽어주시면 감사하겠습니다.
-
----
-
-<br>
-
-## <span style="color:#802548">_1. axios api를 관리하는 파일 만들기_</span>
+## <span style="color:#802548">_axios api를 관리하는 파일 만들기_</span>
 
 <br>
 
@@ -71,11 +55,9 @@ export const boardInsert = (formData: FormData) => {
 };
 ```
 
-<br>
 
-## <span style="color:#802548">_2. 사용자 정의 interface 활용하기_</span>
+## <span style="color:#802548">_사용자 정의 interface 활용하기_</span>
 
-<br>
 
 - 위에서는 axios의 parameter type으로 FormData interface를 사용했습니다.
 - 그보다 자신이 사용할 property를 지정하는 custom interface를 만들어서 활용하면 내용이 더 명확해집니다.
@@ -228,9 +210,7 @@ async function handleFormSave() {
 
 <br>
 
-## <span style="color:#802548">_3. JS 내장 interface 활용하기_</span>
-
-<br>
+## <span style="color:#802548">_JS 내장 interface 활용하기_</span>
 
 - typescript를 활용하기 이전에는 아래와 같이 간단하게 file 값을 가져올 수 있었습니다.
 
@@ -323,9 +303,7 @@ function onEscapeKeydown($event: KeyboardEvent) {
 
 <br>
 
-## <span style="color:#802548">_4. component 분리 및 재사용하기_</span>
-
-<br>
+## <span style="color:#802548">_component 분리 및 재사용하기_</span>
 
 - 본래는 아래와 같이 기다란 component를 가지고 있었습니다.
 
@@ -494,7 +472,7 @@ function onEscapeKeydown($event: KeyboardEvent) {
       </v-main>
 ```
 
-## <span style="color:#802548">_5. v-for를 활용해 반복되는 template 코드 간소화하기_</span>
+## <span style="color:#802548">_v-for를 활용해 반복되는 template 코드 간소화하기_</span>
 
 <br>
 
@@ -576,29 +554,29 @@ export interface ScheduleRequest {
 
 - 그럼 마저 아래도 짧게 만들어 줍니다.
 
-```javascript
- <v-row no-gutters>
-      <v-col>
+```html
+<v-row no-gutters>
+    <v-col>
         <v-sheet class="pa-2 ma-2">
-          <v-select label="성인 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountAdult"></v-select>
+        <v-select label="성인 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountAdult"></v-select>
         </v-sheet>
-      </v-col>
-      <v-col>
+    </v-col>
+    <v-col>
         <v-sheet class="pa-2 ma-2">
-          <v-select label="어린이 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountChild"></v-select>
+        <v-select label="어린이 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountChild"></v-select>
         </v-sheet>
-      </v-col>
-      <v-col>
+    </v-col>
+    <v-col>
         <v-sheet class="pa-2 ma-2">
-          <v-select label="노인 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountElder"></v-select>
+        <v-select label="노인 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountElder"></v-select>
         </v-sheet>
-      </v-col>
-      <v-col>
+    </v-col>
+    <v-col>
         <v-sheet class="pa-2 ma-2">
-          <v-select label="중증 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountSevere"></v-select>
+        <v-select label="중증 사람 수" :items="[1, 2, 3]" v-model="headcountInfo.headCountSevere"></v-select>
         </v-sheet>
-      </v-col>
-  </v-row>
+    </v-col>
+</v-row>
 ```
 
 - 위의 부분에서도 반복되는 부분은 label과 v-model입니다. 따라서 아래와 같이 v-for에서 순회할 배열을 만들어줍니다.
@@ -614,14 +592,14 @@ const headcountFilteringItems = [
 
 - 그럼 아래와 같이 짧은 template으로 위의 긴 내용을 대체할 수 있습니다.
 
-```javascript
+```html
 <v-row no-gutters>
-                <v-col>
-                  <v-sheet class="pa-2 ma-2">
-                    <v-select v-for="(element, i) in headcountFilteringItems" :key="i" :label="element.label" :items="[1, 2, 3]" v-model="headcountInfo[element.value]"></v-select>
-                  </v-sheet>
-                </v-col>
-              </v-row>
+    <v-col>
+        <v-sheet class="pa-2 ma-2">
+        <v-select v-for="(element, i) in headcountFilteringItems" :key="i" :label="element.label" :items="[1, 2, 3]" v-model="headcountInfo[element.value]"></v-select>
+        </v-sheet>
+    </v-col>
+</v-row>
 ```
 
 - 그럼 다시 index signature를 생성해줍시다.
@@ -640,7 +618,7 @@ export interface HeadCount {
 
 - 그럼 최종적으로 아래와 같은 좀 더 간결해진 component가 만들어집니다.
 
-```javascript
+```html
 <v-app id="inspire">
       <v-main class="blue-grey lighten-4">
         <v-container class="mt-5" style="max-width: 700px" fill-height>
@@ -679,8 +657,8 @@ export interface HeadCount {
         </v-container>
       </v-main>
 
-      <schedule-result  />
-    </v-app>
+    <schedule-result  />
+</v-app>
 ```
 
 - 위에서 table을 따로 분리한 component를 사용하려면 아래와 같이 component를 components scope에 선언하고 import해야 합니다.
@@ -699,32 +677,31 @@ export default defineComponent({
 });
 ```
 
-## <span style="color:#802548">_6. props를 활용하기_</span>
-
-<br>
+## <span style="color:#802548">_props를 활용하기_</span>
 
 - 위에서 분리했던 table component에서 scheduleList라는 것을 활용하고 있습니다.
 - 이를 store에 저장해서 불러올 수도 있지만, 부모-자식 관계를 활용할 수도 있습니다.
 
-```javascript
-  <v-table>
+```html
+<v-table>
     <tr>
-      <td>출발역</td>
-      <td>도착역</td>
-      <td>출발시간</td>
-      <td>도착시간</td>
-      <td>기차번호</td>
-      <td>특실</td>
-      <td>일반실</td>
+        <td>출발역</td>
+        <td>도착역</td>
+        <td>출발시간</td>
+        <td>도착시간</td>
+        <td>기차번호</td>
+        <td>특실</td>
+        <td>일반실</td>
     </tr>
+
     <tr v-for="schedule in scheduleList" :key="schedule.scheduleNo">
-      <td>{{ schedule.departStation }}</td>
-      <td>{{ schedule.arriveStation }}</td>
-      <td>{{ schedule.scheduleDepartDatetime }}</td>
-      <td>{{ schedule.scheduleArriveDatetime }}</td>
-      <td>{{ schedule.scheduleTrainNo }}</td>
+        <td>{{ schedule.departStation }}</td>
+        <td>{{ schedule.arriveStation }}</td>
+        <td>{{ schedule.scheduleDepartDatetime }}</td>
+        <td>{{ schedule.scheduleArriveDatetime }}</td>
+        <td>{{ schedule.scheduleTrainNo }}</td>
     </tr>
-  </v-table>
+</v-table>
 ```
 
 - setup()에서는 아래와 같이 props를 선언하여 활용할 수 있습니다.
@@ -762,20 +739,20 @@ export default defineComponent({
 - props 값을 변경하기 보다는 자식 component에서 props를 활용해 새로운 변수를 만드는 것이 권장됩니다.
 
 ```javascript
-    setup(props) {
-       let sumHeadCount = props.headcountInfo.headCountAdult + props.headcountInfo.headCountChild + (props.headcountInfo.headCountElder ?? 0);
-      .
-      .
-      .
-      onBeforeUpdate(() => {
+setup(props) {
+    let sumHeadCount = props.headcountInfo.headCountAdult + props.headcountInfo.headCountChild + (props.headcountInfo.headCountElder ?? 0);
+    .
+    .
+    .
+    onBeforeUpdate(() => {
         sumHeadCount = props.headcountInfo.headCountAdult + props.headcountInfo.headCountChild + (props.headcountInfo.headCountElder ?? 0);
-      });
-    },
+    });
+},
 ```
 
 - child component에서 props를 선언했으므로 이제 parent component에서 child component로 props를 보낼 수 있습니다.
 
-```javascript
+```html
 <v-app id="inspire">
       <v-main class="blue-grey lighten-4">
         <v-container class="mt-5" style="max-width: 700px" fill-height>
@@ -792,7 +769,7 @@ export default defineComponent({
 - template의 경우 props.headcountInfo처럼 property에 접근하지 않아도 바로 활용할 수 있습니다.
 - headCountElder라는 property가 optional이라서 null-coalescing을 활용하였습니다.
 
-```javascript
+```js
   <v-table>
     <tr>
       <td>출발역</td>
