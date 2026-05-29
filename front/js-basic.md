@@ -1,150 +1,5 @@
----
-title:  "JS deep dive 요약"
-search: false
-categories: 
-  - JavaScript
-toc: true  
-tags:
-  - JavaScript
-author: 허재원
----
-
-JS deep dive 책을 읽으면서 알게 된 점에 대해 정리하였습니다. 
-
-## <span style="color:#802548">_1. variables_</span>
-### <span style="color:#FFCCFF"> variables </span>
-- 수학에서 변수란 변하는 수다.
-
-- 프로그래밍에서 변수란?
-
-
-```
-하나의 값을 담기 위한 메모리 공간이다.
-간단하게 숫자, 문자만 담을 수도 있지만, 더 많은 걸 담고 싶다면 배열, 객체 같은 자료구조를 사용한다.
-자료구조마다 특성이 다르므로, 상황에 맞는 자료구조를 활용해 변수를 만드는 게 좋다.
-```
-- JS에서는 어떻게 변수를 만들까?
-
-
-### <span style="color:#FFCCFF">declaration</span>
-- 변수의 키워드와 식별자를 선언하면 변수의 메모리 공간(주소)이 확보된다.
-
-- 메모리 공간이 확보된 것이지, 아직 data가 들어간 것은 아니다.
-
-
-```
-키워드는 var, let, const가 있다.
-식별자는 키워드 뒤에 나오는 변수명이다.
-해당 식별자는 메모리 주소와 binding되어 값을 저장할 수 있다.
-```
-### <span style="color:#FFCCFF">var</span>
-```
-legacy project(jsp)에서 보통 많이 보인다. 쓰지 않을 수 있다면 안 쓰는 게 좋다.
-```
-- function 단위 scope를 가진다. block scope가 무시된다.
-- Java에 익숙하다면 아래 console에서 openobject가 나올거라 기대할 것이다. if문에서 선언한 변수는 if문의 block 내에서만 효력을 가지기 때문이다.
-
-- 하지만 실제 결과는 open이다. fn scope라서 block문이 끝나도 변수가 살아있기 때문이다. 따라서 뒤에 있는 변수로 덮어씌워진다.
-
-
-```javascript
-function getCompanyName(companyName) {
-    var companyName = "openobject";
-    if (companyName === "openobject") {
-        var companyName = "open";
-    }
-    
-    return companyName
-}
-console.log( getCompanyName() ); //"open" 
-```
-
-- 그 문제를 해결하려면 let으로 바꿔주면 된다.
-
-- let은 var와 달리 식별자 이름이 같으면 오류를 내어 의도하지 않은 실수를 줄여준다.
-
-
-```javascript
-function getCompanyName(companyName) {
-    let companyName = "openobject";
-    if (companyName === "openobject") {
-        let companyName = "other"; //Identifier 'companyName' has already been declared
-    }
-    
-    return companyName
-}
-```
----
-### <span style="color:#FFCCFF">let</span>
-```
-선언만 하고 나중에 할당하는 식의 초기화가 가능하다.
-block scope를 지닌다.
-```
-- 선언만 한 변수는 JS 엔진이 undefined로 할당한다.
-- undefined라는 원시형은 length라는 instance properties를 갖지 않기 때문에 읽어올 수가 없다. 
-
-- length는 array와 string type에서 자주 사용되는 property다. undefined는 애초에 property를 갖고 있지 않다.
-- 따라서 Cannot read properties of undefined (reading 'length')라는 오류가 난다.
-
-
-```javascript
-let companyName;                // let company = undefined;와 동일
-console.log(companyName.length) //Cannot read properties of undefined (reading 'length')
-```
-
-- let은 block 단위라고 했던 것을 기억할 것이다.
-
-- 아래 companyIndustry 변수는 if문이 끝나면 사라진다. 그런데 return하려고 하면 오류가 날 것이다. 
-- block이 끝나 사라졌기에, return 시에는 companyIndustry가 선언하지 않은 변수(식별자)기 때문이다. 
-
-- const도 block단위이므로 똑같은 오류가 난다.
-
-
-```javascript
-function getCompanyName(companyName) {
-    let companyName = "openobject";
-    if (companyName === "openobject") {
-        let companyIndustry = "IT";
-    }
-    
-    return companyIndustry
-}
-console.log( getCompanyName() ); //companyIndustry is not defined 
-```
----
-### <span style="color:#FFCCFF">const</span>
-```
-선언과 할당이 한꺼번에 이뤄져야 한다. 즉, 한번만 할당이 가능하다.
-immutable한 것은 아니다. 객체의 property 조작이 가능하다.
-```
-- 선언과 할당이 한꺼번에 이뤄지지 않으면 오류를 낸다.
-
-- initializer는 초기화를 해주는 것이다. 초기화는 선언과 할당이 모두 완료됨을 의미한다.
-- 다시말해 missing initializer는 =를 쓰지 않았다는 것이다.
-- =를 써주면 오류가 다른 것으로 바뀐다. 마침내 값을 할당해주면 초기화가 이뤄져 오류가 사라진다.
-
-
-```javascript
-const companyIndustry;      // Missing initializer in const declaration 
-const companyIndustry =     //Unexpected end of input 
-const companyIndustry = 'IT';
-```
-
-- 말했듯 const keyword는 객체의 property 조작까지 불가능 한 것은 아니다.
-
-
-```javascript
-const company = {
-    name: 'nothing',
-    industry: 'IT'
-}
-
-console.log(company.name); //nothing
-company.name = "openobject";
-console.log(company.name); //openobject
-```
+## <span style="color:#802548">property manipulation prevention</span>
 - 생성 이후에 객체의 property 조작을 막으려면 특정한 method를 써야한다.
-
 - 보통 객체조작이 불가능하게 바꿀 때는 lodash library의 deepFreeze()를 사용하는 것이 추천된다.
 - 직접 구현도 가능하다. 아래는 인터넷에서 가져온 deepFreeze의 구현 사례다. 
 - 구현에 쓰인 method가 궁금하다면 JS의 prototype에 대해서 알아보도록 하자.
@@ -200,16 +55,11 @@ const TICKET_PRICE = {
 - JS 엔진이 {}뒤에 자동으로 ;를 삽입해준 뒤에 as를 식별자(변수명)로 해석하려 했기 때문이다.
 
 
-### <span style="color:#FFCCFF">assignment</span>
+## <span style="color:#802548">data type</span>
 - 여태까지 string 원시형 값을 할당할 떄는 ""를 사용했다. 
-```
-""와 같은 값을 넣기 위한 특정한 형식을 literal이라 한다. 
-리터럴이란 사람이 이해할 수 있는 문자나 약속된 기호를 사용해 값을 생성이다.
-```
+- ""와 같은 값을 넣기 위한 특정한 형식을 literal이라 한다. 
 - 하지만 생성자를 사용할 수도 있다. 다만 꼭 new 연산자가 필수인 것은 아니다.
-
 - 오히려 원시형을 만들고 싶다면 new를 붙여서는 안된다. new를 붙이면 원시형이 아니라 객체의 instance가 된다.
-
 
 ```javascript
 const str = String("B");    //생성자 방식
@@ -255,211 +105,10 @@ switch(str) {
 }
 ```
 
-- 보통 형변환을 명시적으로 보여주고자 할 때 생성자를 사용한다.
 
-
-```javascript
-const num = "123";
-const str = String(num); //생성자 방식. 
-const str = num + '';    //이렇게 해도 string이 됨.
-console.log(str);
-```
-
-- 대개 많은 경우 생성자보다는 literal로 할당하는 편이다.
-
-
-```javascript
-const str   = `C`;            //literal 방식
-const num   = 20;             //literal 방식
-const num   = 20.01;          //literal 방식
-const obj   = {};             //literal 방식
-const arr   = [];             //literal 방식
-const regex = /[A-Z]+/gi;     //literal 방식
-const bool  = true;           //literal 방식
-function fn(){}               //literal 방식
-```
-
-- 아래 같이 new를 호출해 생성자로 생성할 수도 있지만, 추천되지 않는다.
-
-
-```javascript
-const obj   = new Object();                     //생성자 방식
-const arr   = new Array("openobject", "IT");    //생성자 방식
-const regex = new RegExp("[A-Z]", "gi");        //생성자 방식
-const fn    = new Function();                   //생성자 방식
-```
-
-- 특히 function은 생성자로 만들면 보기도 어렵고 closure를 활용할 수가 없다.
-
-
-```javascript
-const add = new Function('x','y','return x + y');
-console.log( add(2,5) ); //7
-```
-
-## <span style="color:#802548">_2. value-expression-statement_</span>
-### <span style="color:#FFCCFF">statement</span>
-- 문은 프로그램을 구성하는 기본단위이다.
-- 문은 token으로 구성되는데, token은 더이상 나눌 수 없는 코드의 기본 요소다. 아래는 자주 쓰이는 token이다.
-```
-keyword - var, let ,const
-identifier - 변수명
-operator - 연산자
-literal - 값
-; - closing statement
-```
-- token을 한데 모으면 아래와 같은 statement가 만들어진다.
-
-
-```javascript
-const/*keyword*/ company/*identifier*/ =/*operator*/ "openObject"/*literal*/; /*semicolon*/
-```
-
-- statement를 잘못 쓰면 아래와 같은 오류가 날 수 있다.
-
-- 객체를 초기화하는 statement가 끝나지 않았는데 종결을 의미하는 ;을 써서 그렇다.
-- ;를 ,로 바꿔주면 오류가 사라진다.
-
-
-```javascript
-const company = {
-  name: 'openObject'; //unexpected token ;
-  industry: 'IT';
-}
-const company = {
-  name:     'openObject',
-  industry: 'IT'
-}
-```
-
-### <span style="color:#FFCCFF">expression</span>
-```
-식은 값으로 귀결될 수 있는 statement를 의미한다.
-연산자가 대표적이다.
-```
-```javascript
-const a = 5;
-a = a + 5;
-```
-
-
-- 몇 가지 자주 쓰이는 연산자들이 있다. 그 중의 하나가 삼항연산자다.
-
-
-```javascript
-const id = (a===1) ? 'id' : 'not id';
-```
-
-- 만약 truthy인 조건에서만 나오게 하고 싶다면 아래와 같이 줄 수 있다.
-
-
-```javascript
-const id = true && 'id';
-```
-
-- falsy에 대비해 default값을 주고 싶다면 아래와 같이 줄 수 있다.
-
-
-```javascript
-const id = response.id || 'id';
-```
-
-- null이나 undefined만 대비하고 싶다면 아래와 같이 줄 수 있다.
-
-
-```javascript
-const id = response.id ?? 'id';
-```
-
-### <span style="color:#FFCCFF">value</span>
-```
-값은 식이 평가되어 생성된 결과를 말한다.
-다시 말해 우변은 값이다. 함수도 JS에서는 값이다.
-```
-```javascript
-const exampleFunction = function(){
-  console.log('example');
-}
-const exampleNumber = 10;
-```
-- value가 들어올 곳에는 식과 값만 들어올 수 있다. statement는 들어올 수 없다.
-
-
-```javascript
-const obj = {
-	id: if(condition){ // Unexpected token 'if' 
-		'msg' 
-	}
-}
-
-const obj = {
-  id: response.id ?? 'id'
-}
-```
-
-- 객체의 property key와 value의 이름이 같다면 생략도 가능하다.
-
-
-```javascript
-const id = 'id';
-const obj = {
-  id,
-}
-```
-## <span style="color:#802548">_3. control flow statement_</span>
-
-### <span style="color:#FFCCFF">conditional statement</span>
-```
-조건문에는 if문과 switch문이 있다.
-```
-- if문의 기본 구성은 아래와 같다.
-
-
-```javascript
-function getUserType(type){
-	if(type ==='ADMIN'){
-		return '관리자';
-	}else if(type === 'INSTRUCTOR'){
-		return '강사';
-	}else if(type === 'STUDENT'){
-		return '수강생';
-	} 
-  .
-  .
-  .
-  .
-  .
-  .
-   else {
-
-  }
-}
-```
-- else if문이 길어보인다면 아래와 같이 switch문으로 바꿀수 있다.
-
-
-```javascript
-function getUserType(type){
-	switch(type) {
-    case "ADMIN":
-      return '관리자'
-    break;
-    case "INSTRUCTOR":
-      return '강사';
-    break;
-    case "STUDENT":
-      return '수강생';
-    break;
-    default:
-      return '해당 없음';
-  }
-}
-```
-
+## <span style="color:#802548">object형 conditional statement</span>
 - 만약 요구사항이 계속 바뀌어 추가될 거 같다면 object로 변경하여 관리할 수도 있다.
-
 - 그럼 if문이나 switch문을 늘리지 않고 객체의 property만 늘려나가면 된다.
-
 
 ```javascript
 function getUserType(type){
@@ -485,75 +134,97 @@ function getUserType(type){
 }
 ```
 
-- 코드 가독성을 위해 if문을 조작하는 방법의 다른 예시를 살펴보자.
-
-- 만약 if문이 계속 중첩되는 형태라면 depth가 깊어져 코드를 해석하는 데 어려움이 있다.
-
-
-```javascript
-function signIn(isLogin, user){
-	if(!isLogin){
-		if(!checkToken()){
-			if(!user.nickName){
-				return registerUser(user);
-			}else{
-				refreshToken();
-
-				return '로그인 성공';
-			}
-		}else{
-			throw new Error('No Token');
-		}
-	}
-}
-```
-- 가능하다면 early return, throw error로 좀 더 보기 쉬운 코드를 만드는 것이 좋다.
+# <span style="color:#802548">_객체 literal을 활용한 if문 줄이기_</span>
+- if문을 제거해보자.
 
 
-```javascript
-function signIn(isLogin, user){
-	if(isLogin){
-		return;
-	}
-
-	if(!checkToken){
-		throw new Error('No Token');
-	}
-
-	if(!user.nickname){
-		return registerUser(user);
-	}
-
-	refreshToken();
-
-	return '로그인 성공';
+```js
+function executePayment(paymentType) {
+    if (paymentType === "KAKAO_PAYMENT") {
+        return '카카오 결제 처리';
+    } else if (paymentType === "NAVER_PAYMENT") {
+        return '네이버 결제 처리';
+    } else if (paymentType === "COUPANG_PAYMENT") {
+        return '쿠팡 결제 처리';
+    } else if (paymentType === "PAYCO_PAYMENT") {
+        return '페이코 결제 처리';
+    } else if (paymentType === "APPLE_PAYMENT") {
+        return '애플 결제 처리'
+    }
 }
 ```
 
-- 다음으로 코드 가독성을 위해서는 부정연산자가 아닌 다른 방식으로 바꿀 수 있다면 바꾸는 게 좋다.
-
-- 일례로 isNaN으로 숫자인지 판단하려면 !를 붙여서 해야되는데, 이러면 생각을 여러번 해야 한다.
-
-
-```javascript
-if(!isNaN(3)){
-	console.log('숫자입니다');
-}
-```
-- !를 조건 앞에 붙이지 말고 method를 만들어 내부 구현으로 숨기자
-
-
-```javascript
-function isNumber(num){
-	return !Number.isNaN(num) && typeof num === 'number';
+- 복잡한 else if 문을 아래처럼 바꿔준다.
+```js
+const paymentMap = {
+    "KAKAO_PAYMENT" : "카카오 결제처리",
+    "NAVER_PAYMENT" : "쿠팡 결제 처리",
+    "PAYCO_PATYMENT" : "페이코 결제 처리",
+    "APPLE_PAYMENT" : '애플 결제 처리'
 }
 
-if(isNumber(3)){
-	console.log('숫자입니다');
+function executePayment(paymentType) {
+    return paymentType[paymentType]
 }
 ```
 
-### <span style="color:#FFCCFF">loop statement</span>
+# <span style="color:#802548">_객체 literal의 method를 활용한 if문 줄이기_</span>
+- 함수를 실행한다고 해도 동일하게 적용가능하다.
+
+
+```js
+function executePayment(paymentType) {
+    if (paymentType === "KAKAO_PAYMENT") {
+        payOnKakao();
+    } else if (paymentType === "NAVER_PAYMENT") {
+        sendLog();
+        payOnNaver();
+    } else if (paymentType === "COUPANG_PAYMENT") {
+        sendLog();
+        payOnCouPang();
+    } else if (paymentType === "PAYCO_PAYMENT") {
+        sendLog();
+        payOnPayco();
+    } else if (paymentType === "APPLE_PAYMENT") {
+        sendLog();
+        payOnApple();
+    }
+}
+executePayment("APPLE_PAYMENT");
+```
+
+
+```js
+const payment_map = {
+    KAKAO_PAYMENT() {
+        payOnKakao();
+    },
+    NAVER_PAYMENT() {
+        sendLog();
+        payOnNaver();
+    },
+    COUPANG_PAYMENT() {
+        sendLog();
+        payOnCouPang();  
+    }, 
+    PAYCO_PAYMENT() {
+        sendLog();
+        payOnPayco();
+    }, 
+    APPLE_PAYMENT() {
+        sendLog();
+        payOnApple();
+    }
+}
+
+function executePayment(paymentType) {
+    paymentMap[paymentType](); //반환이 함수니까 함수를 호출한 것.
+}
+
+executePayment('KAKAO_PAYMENT');
+```
+
+## <span style="color:#802548">고차함수로 loop statement 대체하기</span>
 - 반복분에는 for문과 while문이 있다.
 - 자주 쓰게 되는 것은 for문이다.
 
@@ -608,7 +279,6 @@ const intendedPriceList = getWonPrice(price);
 
 
 - 고차함수의 힘을 빌리면 callback function만 넣어주면 쉽게 처리가 가능하다.
-
 - 해당 기능은 js 내에서 이미 구현되어있어 빌리면 되는 것이다.
 
 
@@ -627,7 +297,127 @@ function getWonPrice(priceList){
 const intendedPriceList = getWonPrice(price); // [2000,3000,4000,5000]
 ```
 
-## <span style="color:#802548">_4. spread, destructuring문법_</span>
+
+
+# <span style="color:#802548">_비동기는 foreach에서 쓰면 안 된다._</span>
+- 같은 반복문이어도 foreach와 for of문은 결과가 다르다.
+- 아래 같이 for of 문을 쓰면 순서를 기다려 진행된다.
+
+```js
+const baseURL = "https://jsonplaceholder.typicode.com/todos";
+const urls = [1,2,5,10];
+
+(async function() {
+    for (let url of urls) {
+        console.log(`${url}요청 시작~`);
+        const res = await fetch(baseURL + url);
+        const result = await res.json();
+        console.log(`${url}요청 끝`);
+    }
+    console.log("전체 요청 끝");
+})();
+/*
+1 요청 시작~
+1요청 끝~
+2요청 시작~ 
+2요청 끝
+*/
+```
+- 반면에 foreach를 쓰면 한꺼번에 병렬로 fetch가 실행된다.
+- map도 마찬가지다. 따라서 map과 foreach에서는 절대 비동기를 쓰면 안 된다.
+
+```js
+const baseURL = "https://jsonplaceholder.typicode.com/todos";
+const urls = [1,2,5,10];
+
+(async function() {
+    urls.foreach(async (url) => {
+        console.log(`${url}요청 시작~`);
+        const res = await fetch(baseURL + url);
+        const result = await res.json();
+        console.log(`${url}요청 끝`);
+    }) 
+    console.log("전체 요청 끝");
+})();
+/*
+1요청 시작~
+2요청 시작~
+5요청 시작~
+10요청 시작~
+전체 요청 끝~
+
+1 요청 끝~
+10요청 끝~
+5요청 끝~
+2요청 끝~
+*/
+```
+
+
+# <span style="color:#802548">_고차함수로 for문과 if문을 줄이기_</span>
+- for문과 if문을 줄여보자.
+- 요구사항은 아래와 같다.
+
+```
+1. 0~100
+2. 소수점 제거
+3. '점' 문자 추가
+4. 출력
+```
+
+```js
+const grades = [80.55, 90, -95, -45, 44.3,  100, 177];
+
+const validGrades = [];
+for (let i = 0; i < grades.length; i++) {
+    if (grades[i] >= 0 && grades[i] <=100) {
+        const validGrade = Math.floor(grades[i]) + '점';
+        validGrades.push(validGrade)
+    }
+}
+
+for (let index = 0; index < validGrades.length; index++) {
+    console.log(validGrades[index]);
+}
+```
+
+- 고차함수를 활용하자.
+
+
+```js
+const validGrades = [];
+const positiveGrades = grades.filter( el => el >= 0 && e. <=100);
+const newGrades = positiveGrades.map( el => Math.floor(el) + '점');
+newgrades.foreach( el => console.log(el));
+```
+
+- method chaining을 사용해보자.
+
+
+```js
+const validGrades = grades.filter( el => el >= 0 && e. <=100);
+                            .map( el => Math.floor(el) + '점'); // 이걸 2개의 map으로 나눴다는 게 중요
+                            .foreach( el => console.log(el));
+```
+
+
+- 이제는 로직에 이름을 부여했다.
+- 로직에 이름을 주니 이해하기가 쉽다.
+
+
+```js
+const validScore = el => el >= 0 && e. <=100;
+const toInteger = el => Math.floor(el);
+const plusSuffix = el => el + '점';
+const print = el => console.log(el);
+
+const validGrades = grades.filter(validScore)
+                            .map(toInteger)
+                            .map(plusSuffix)
+                            .foreach(print);
+```
+
+## <span style="color:#802548">_spread, destructuring문법_</span>
 ```
 spread는 하나로 뭉쳐 있는 여러 값의 집합을 펼쳐서 개별 값의 목록으로 만든다.
 destructuring은 값을 각 변수에 할당한다. 
@@ -738,7 +528,6 @@ console.log(parsedURL);
 ```
 
 - 이제는 객체의 destructuring의 예시를 살펴보자.
-
 - ES5에서는 해당 문법이 없어 property에 접근할 시 .이나 []를 활용 한다.
 
 
@@ -889,43 +678,110 @@ const {x, ...rest} = {x: 1, y: 2, z: 3};
 console.log(x, rest); //1 {y:2, z:3}
 ```
 
-
-## <span style="color:#802548">_5. 함수_</span>
-### <span style="color:#FFCCFF">callback</span>
-```
-JS에서 함수는 객체다.
-따라서 property의 value가 될 수 있고, parameter로 함수를 넘길 수도 있다.
-이렇게 parameter로 넘겨진 함수를 callback함수라고 하며, 그 함수를 활용하는 원함수를 고차함수라고 한다.
-```
-
-- 널리 쓰이는 built-in 객체의 고차함수로는 Array의 reduce, filter, map이 있다.
-- 실제로 아래 같이 인터넷에서 고차함수 구현 예제를 볼 수 있다. 
-
-- 아래 예시는 요소의 문자열 길이를 배열로 하여 반환한다.
-
+- 배열을 받는 것도 아래와 같이 구조분해할당을 이용할 수 있다.
 
 ```javascript
-const strArray = ['Javascript', 'Python', 'PHP', 'Java', 'C'];
+function operateTime(inputs, operators, is){//배열의 index로 접근
+	inputs[0].split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
 
-function mapForEach(arr, fn) {
-  const newArray = [];
-  for(let i=0; i<arr.length; i++){
-    newArray.push(
-      fn(arr[i])
-    );
-  }
-  return newArray;
+	inputs[1].split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
 }
 
-const lenArray = mapForEach(strArray, function(item) {
-  return item.length;
-});
+function operateTime(inputs, operators, is){//구조 분해 할당으로 접근
+	const [firstInput,secondInput] = inputs
+	
+	firstInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
 
-// prints [10, 6, 3, 4, 1]
-console.log(lenArray);
+	secondeInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+}
+
+function operateTime([firstInput, secondeInput], operators, is){//parameter에 구조분해할당으로 넣기
+	firstInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+
+	secondeInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+}
 ```
 
-### <span style="color:#FFCCFF">method</span>
+- index를 처리하지 않아도 배열을 구조분해할당하면 된다.
+- 차례로 0번쨰, 1번쨰, 2번쨰 index로 인식된다.
+
+```javascript
+function clickGroupButton(){
+	const confirmButton = document.getElementsByTagNam('button')[0];
+	const cancelButton = document.getElementsByTagNam('button')[1];
+	const resetButton = document.getElementsByTagNam('button')[2];
+}
+
+function clickGroupButton(){
+	const [confirmButton, cancelButton, resetButton] = document.getElementsByTagNam('button');
+}
+```
+
+- 배열을 구조분해 할당으로 받아오는 또다른 예시다.
+
+```javascript
+function formatDate(targetDate){
+	const date = targetDate.toISOString().split('T').[0];
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+
+function formatDate(targetDate){
+	const [date] = targetDate.toISOString().split('T');
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+
+function head(arr){
+	return arr[0] ?? '' //배열에 요소가 없는데 [0]같이 index에 접근하면 error가 나니까 기본값 셋팅
+}
+
+function formatDate(targetDate){
+	const date = head(targetDate.toISOString().split('T'));
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+```
+
+- 객체의 일부인 배열도 당연히 destructuring이 가능하다.
+
+```javascript
+const orders = ['First', 'Second', 'Third'];
+
+const st = orders[0];
+const rd = orders[2];
+console.log(st); //First
+console.log(rd); //Third
+
+const [st1, , rd1] = orders;
+console.log(st1); //First
+console.log(rd1); //Third
+
+const {0:st2, 2:rd2} = orders;
+console.log(st2); //First
+console.log(rd2);  //Third
+```
+
+
+## <span style="color:#802548">property로 function 쓰기</span>
 ```
 property의 value로 함수가 들어가면 이를 method라고 칭한다.
 ```
@@ -947,9 +803,7 @@ const obj = {
 ```
 
 - method는 아래와 같이 간결하게 쓸 수도 있다.
-
 - 이를 concise method라고 한다.
-
 
 ```javascript
 const obj = {
@@ -959,8 +813,8 @@ const obj = {
   }
 }
 ```
-- method를 변수명에 할당해 일반함수로 만들어 호출할 수도 있다.
 
+- method를 변수명에 할당해 일반함수로 만들어 호출할 수도 있다.
 - 다만 이는 this와 연관되어 bug를 야기할 수 있다. this 부분에서 살펴보자.
 
 
@@ -976,311 +830,10 @@ const getName = person.getName;
 console.log(getName()) // 일반 브라우저에선 ''. codepen에서 test하면 CodePen
 ```
 
-### <span style="color:#FFCCFF">lexical scope</span>
-```
-lexical scope는 함수가 호출된 곳이 아니라, 정의된 곳을 기준으로 한다.
-```
-- 전역에 정의되었기에 전역 companyName을 가져온다.
 
 
-```javascript
-const companyName = 'openobject';
-function getCompanyName() {
-  const companyName = 'other';
-  getCompanyIndustry();
-}
 
-function getCompanyIndustry() {
-  console.log(companyName);
-}
-
-getCompanyName(); //openobject
-```
-- 하지만 아래에서는 getCompanyName()안에 정의되었다.
-
-- 따라서 해당 fn scope의 getCompanyName를 가져온다.
-
-
-```javascript
-const companyName = 'openobject';
-function getCompanyName() {
-  const companyName = 'other';
-
-  function getCompanyIndustry() {
-    console.log(companyName);
-  }
-
-  getCompanyIndustry();
-}
-
-
-getCompanyName(); //other
-```
-
-- 이 lexical scope를 기반으로 closure라는 방식의 함수 활용이 가능해진다.
-
-### <span style="color:#FFCCFF">closure</span>
-```
-클로저는 중첩함수가 외부함수보다 오래 살아남았을 때 + 상위함수를 참조할 때, closure라고 한다.
-즉 상위 함수가 종료되어도 상위 함수의 변수, parameter에 접근할 수 있는 함수다.
-```
-- 아래는 즉시실행함수를 활용한 closure의 예시다.
-
-
-```javascript
-const counter = (function(){
-    let num = 0;
-    return {
-        increase(){
-            return ++num;
-        },
-        decrease(){
-            return --num;
-        }
-    }
-}());
-
-console.log(counter.increase()) //1
-console.log(counter.increase()) //2
-console.log(counter.decrease()) //1
-console.log(counter.decrease()) //0
-console.log(counter.decrease()) //-1
-console.log(counter.decrease()) //-2
-console.log(counter.increase()) //-1
-```
-
-- 즉시 실행함수는 한 번만 실행되므로 increase가 호출될 때마다 num 변수가 초기화되는 일은 없다.
-
-- 즉시실행함수는 변수를 그냥 쓰는 것만으로도 함수가 호출된다.
-
-
-```javascript
-const counter = (function(){
-   console.log('abc')
-}());
-
-counter //abc
-```
-
-- 원래로 돌아와서 살펴보면 counter를 호출하는 순간 아래와 같은 객체를 return하는 것을 알 수 있다.
-
-
-```javascript
-const counter = (function(){
-    let num = 0;
-    return {
-        increase(){
-            return ++num;
-        },
-        decrease(){
-            return --num;
-        }
-    }
-}());
-
-console.log(counter);
-/*
-  {
-    increase(){
-        return ++num;
-    },
-    decrease(){
-        return --num;
-    }
-  }
-*/
-```
-
-- 따라서 increase와 decrease라는 method를 활용할 수 있게 된다.
-```javascript
-console.log(counter.increase()) 
-console.log(counter.decrease()) 
-```
-
-- 그렇다면 남는 것은 num이다. num은 어떻게 +가 되는 것일까? 
-- 위에서 말했듯 closure는 상위함수가 종료되어도 해당 lexical scope를 기억한다.
-- 여기서 lexical scope에서 중요한 것은 num이라는 변수다. 바로 이 변수가 기억된다는 의미다.
-
-- 따라서 counter.increase()가 호출되면 num이 1이 더해진 상태로 기억된다.
-- 똑같이 counter.decrease()가 호출되면 num이 1이 빠진 상태로 기억된다.
-
-
-```javascript
-console.log(counter.increase()); //1
-console.log(counter.decrease()); //0
-```
-
-- closure의 장점은 변수를 함수 안에 두고 사용하기 때문에 전역으로 만들 필요가 없다는 점이다.
-- 전역으로 만들 필요가 없다는 것은 누군가에 의해 수정될 가능성이 없다는 말과 동일하다. 더 안전하다는 의미다.
-
-
-- 해당 예시에 즉시실행함수를 쓰지 않았다면 어떻게 될까?
-- lexical 환경이 서로 달라 num이라는 변수가 공유되지 않는다.
-- num이라는 변수가 공유될 필요가 있다면 IIFE로 만들어 한번만 실행되게 해야 한다.
-
-
-```javascript
-const counter = function(){
-    let num = 0;
-    return {
-        increase(){
-            return ++num;
-        },
-        decrease(){
-            return --num;
-        }
-    }
-};
-
-console.log(counter().increase()) //1
-console.log(counter().increase()) //1
-console.log(counter().decrease()) //-1
-console.log(counter().decrease()) //-1
-console.log(counter().decrease()) //-1
-console.log(counter().decrease()) //-1
-console.log(counter().increase()) //1
-```
-
-- lexical 환경 공유까지 필요하지 않다면 IIFE로 만들 필요는 없다.
-
-- 아래는 일반함수의 closure 사례로, parameter가 closure를 받는다.
-
-
-```javascript
-function add(num1) {
-	return function sum(num2) {
-		return num1 + num2;
-	}
-}
-
-const addOne = add(1);
-
-addOne(3); //add(1)으로 add()에 1을 넘긴 상태에서 3을 sum()에 넣은 것. 4
-add(1)(3); //위와 동일
-```
-
-- 실제 아래와 같이 closure를 활용할 수 있다.
-
-- 원래는 아래와 같이 switch case를 활용하여 분기를 처리했다고 해보자.
-
-
-```javascript
-function log(value, level) {
-	switch(level) {
-		case "log":
-			console.log(value);
-			break;
-		case "info":
-			console.info(value);
-			break;
-		case "warn":
-			console.warn(value);
-			break;
-		case "error":
-			console.error(value);
-			break;
-	}
-}
-```
-
-- closure를 이용하면 아래와 같이 바꿀 수 있다.
-
-
-```javascript
-function log(value) {
-	return function (fn) {
-		fn(value);
-	}
-}
-
-const logFoo = log;
-
-logFoo('foo')((v) => console.log(v));
-logFoo('foo')((v) => console.info(v));
-logFoo('foo')((v) => console.warn(v));
-logFoo('foo')((v) => console.error(v));
-```
-
-- log에 인자를 붙이면 아래와 같이 좀 더 알아보기 쉬운 형태로 바뀐다.
-
-
-```javascript
-function log(value) {
-	return function (fn) {
-		fn(value);
-	}
-}
-
-const logFoo = log('foo');
-
-logFoo((v) => console.log(v));
-logFoo((v) => console.info(v));
-logFoo((v) => console.warn(v));
-logFoo((v) => console.error(v));
-```
-
-- 이를 IIFE로 바꾸면 아래와 같다.
-
-
-```javascript
-const logFoo = (function log(value) {
-	return function (fn) {
-		fn(value);
-	}
-}('foo'))
-
-logFoo((v) => console.log(v));
-logFoo((v) => console.info(v));
-logFoo((v) => console.warn(v));
-logFoo((v) => console.error(v));
-```
-
-
-- closure를 활용하는 것은 고차함수에도 쓰일 수 있다.
-
-- 아래와 같이 써있는 코드가 있다고 해보자.
-
-
-```javascript
-const arr = [1,2,3,'A','B','C'];
-const isNumber = (value) => typeof value === 'number';
-const isString = (value) => typeof value === 'string';
-arr.filter(isNumber);
-```
-
-- 아래와 같이 함수로 빼서 중복을 덜하게 만들 수 있다.
-
-
-```javascript
-function isTypeOf(type, value) {
-  return typeof value === type;
-}
-const isNumber = (value) => isTypeOf('number', value);
-const isString = (value) => isTypeOf('string', value);
-arr.filter(isNumber);
-```
-
-- 거기서 더 나아가 closure를 활용하면 앞으로 isTypeOf()에 string형태의 type만 넣어도 기능이 작동한다.
-
-- type검사가 자주 일어날수록 아래와 같이 바꾸는 것이 더 편할 것이다.
-
-
-```javascript
-function isTypeOf(type) {
-	return function (value) {
-		return typeof value === type;
-	}
-}
-function isTypeOf(type) {
-	return (value) => typeof value === type;
-}
-const isNumber = isTypeOf('number');
-const isString = isTypeOf('string');
-arr.filter(isNumber); //[1,2,3]
-arr.filter(isString);//['A','B','C']
-```
-
-### <span style="color:#FFCCFF">parameter</span>
+## <span style="color:#802548">parameter</span>
 ```
 parameter는 함수에 넘기는 추상적인 인자다.
 반면에 argument는 실제로 넘겨지는 구체적인 값이다.
@@ -1372,47 +925,9 @@ validateInputNumber('b'); // ''
 validateInputNumber('9'); //'9'
 ```
 
-### <span style="color:#FFCCFF">expression, statement</span>
-- 함수를 정의하는 데는 표현식, 선언문 두 가지가 있다.
-
-
-```
-변수에 할당하지 않고 function keyword를 쓰면 선언문이다.
-선언문은 hoisting되어 아래에 선언해도 최상단으로 끌어올려진다.
-```
-- 아래는 선언문이다.
-
-
-```javascript
-function getSomeThing() {
-
-}
-```
-
-- 변수에 함수를 할당하면 표현식이다. 다만 함수에 이름이 없는 경우가 많아 보통 익명함수다.
-
-
-```javascript
-const getSomeThing = function() {
-
-}
-```
-
-- 표현식은 화살표함수로 바꿔 쓸 수 있다.
-
-
-```javascript
-const getSomeThing = () => {
-
-}
-```
-- 표현식에서 화살표함수와 일반 표현식은 this에서 차이가 있다.
-
-- 우선 this에 관해 먼저 알아보자.
-
-
-### <span style="color:#FFCCFF">this</span>
+## <span style="color:#802548">this</span>
 - this binding이란 식별자와 값을 연결하는 과정이다. 
+
 ```
 this라는 식별자와 this가 가리킬 객체의 메모리 주소를 binding하는 것이다.
 this binding은 일반함수, 메서드, 생성자함수, call-apply-bind라는 4가지 맥락에 따라 의미가 다르다.
@@ -1442,7 +957,7 @@ const obj = {
 obj.foo();
 ```
 
-- callback함수도 일반함수의 형태라면 this가 window에 binding된다.
+- property의 method도 일반함수의 형태라면 this가 window에 binding된다.
 
 
 ```javascript
@@ -1514,8 +1029,7 @@ const obj = {
 obj.foo();
 ```
 
-- 참고로 method 호출의 경우, 일반 함수처럼 쓰지 않는 게 좋다.
-
+- 참고로 프로퍼티에 규정할 함수 호출의 경우, 일반 함수처럼 쓰지 않는 게 좋다.
 - 변수명에 할당하는 일반 함수로 바뀌게 되면 this가 window에 binding되는 것으로 바뀐다.
 
 
@@ -1533,40 +1047,71 @@ const getName = person.getName;
 console.log(getName()) // window객체의 name을 참조한다.
 ```
 
-## <span style="color:#802548">_6. DOM_</span>
+- this를 setTimeout같은 객체에 감싸게 되면 undefined가 뜨는 경우가 있다.
 
-### <span style="color:#FFCCFF">DOM 생성과정 </span>
-- DOM을 알기 위해서는 먼저 DOM이 생성되는 과정에 대해 알아야 한다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(function(){
+            console.log(this.time);
+        },1000);
+    }
+}
 
-
-```
-서버에서 받은 HTML문서는 바이트 형태다. meta태그의 charset을 보고 지정된 인코딩 방식을 기준으로 문자열로 변환한다. 보통 utf-8이다.
-변환된 HTML문서는 순수 텍스트이기 때문에, 브라우저가 이해할 수 있는 자료구조(객체)로 변환해 메모리에 저장한다.
-HTML 요소는 렌더링 엔진에 의해 파싱돼 노드 객체로 변환된다.
-HTML 요소의 attribute는 attribute node로, 텍스트 콘텐츠는 text node로 변환된다.
-```
-- 이러한 객체 Node들이 트리구조로 되어있는 것이 바로 DOM이다.
-- JS에서 DOM은 document를 통해서만 접근할 수 있다.
-```html
-<!DOCTYPE html>
-<html>
-    <body>
-        <ul>
-            <li id="apple">Apple</li>
-            <li id="banana">banana</li>
-            <li id="orange">orange</li>
-        </ul>
-        <script>
-            const $elem = document.getElementById('banana');
-             //document 문서노드 접근 -> getElementsById() 요소 노드 접근
-            console.log($elem.id); //banana
-            console.log($elem.textContent); //banana
-        </script>
-        </body>
-</html>
+myObj.info(); //undefined
 ```
 
-### <span style="color:#FFCCFF">live와 static </span>
+- js에서 this는 실행 timing에 결정되서 그런 것이다.
+- 따라서 this가 값이 있는 scope에서 지역변수로 저장하는 것도 방법이다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        const that = this; //여기서 this는 name값이 frongt다.
+        setTimeout(function(){
+            console.log(that.time);
+        },1000);
+    }
+}
+
+myObj.info(); //frongt
+```
+
+
+- 아니면 this 값을 특정한 형태로 강제하는 bind함수를 쓸 수도 있다.
+- 그러면 실행타이밍이 아니라 확실한 고정된 값에 묶인다.
+- function에 bind(this)를 하면 this가 myObj라는 객체에 묶인 새로운 함수를 반환한다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(function(){
+            console.log(this.name);
+        }.bind(this),1000);
+    }
+}
+
+myObj.info(); //frongt
+```
+
+
+- 아니면 ES6를 활용한 화살표함수를 쓰면 된다. 사실 제일 간단한 해결법이다.
+```js
+const myObj = {
+    name: 'frongt',
+    info() {
+        setTimeout(() => {
+            console.log(this.name)
+        },1000);
+    }
+}
+
+myObj.info(); //frongt
+```
+
+
+## <span style="color:#802548">live와 static </span>
 - 요소 노드의 static 상태는 attribute노드가 관리한다
 - 요소 노드의 live 상태는 DOM property가 관리한다.
 - 둘을 바꿔보면 차이점을 느낄 수 있다. 아래는 attribute노드를 바꾼 것이다.
@@ -1642,7 +1187,7 @@ for(let i = $li.length -1; i >= 0; i--){
 })
 ```
 
-### <span style="color:#FFCCFF">innerHTML</span>
+## <span style="color:#802548">innerHTML</span>
 - innerHTML은 사용하지 말고, textContent나 insertAdjacentText를 사용하자.
 
 - innerHTML은 xss공격에 취약하다. 파싱과정에서 그대로 실행될 수 있기 때문이다.
@@ -1698,7 +1243,7 @@ for(let i = $li.length -1; i >= 0; i--){
 </html>
 ```
 
-### <span style="color:#FFCCFF">data property</span>
+## <span style="color:#802548">data property</span>
 - 과거에는 자신이 원하는 형식의 attribute를 사용할 때 아래와 같이 사용했다. 
 
 
@@ -1734,66 +1279,10 @@ for(let i = $li.length -1; i >= 0; i--){
 </html>
 ```
 
-
-## <span style="color:#802548">_7. event_</span>
-```
-이벤트 핸들러는 이벤트가 발생했을 때 호출되는 함수며, 비동기이다.
-이벤트가 발생했을 떄 브라우저에게 이벤트 핸들러의 호출을 위임하는 게 이벤트 핸들러 등록이다
-```
-### <span style="color:#FFCCFF">event attribute</span>
-- 이벤트 핸들러를 등록하는 방법 중 HTML에 직접 attribute로 등록하는 방법이다.
-
-- React나 Vue같은 front framework에서 많이 쓰인다.
-
-
-```javascript
-<button onclick="sayHi('Lee')">click me!</button>
-function sayHi(name) {
-    console.log(`Hi! ${name}`);
-    console.log(`Hi! ${this}`); //일반함수여서 window. 
-}
-
-<button onclick="handleClick(this)">click me!</button>                     
-//attribute에서 직접 this를 사용하면 event의 target. button 자신
-<button onclick={sayHi('Lee')}>click me!</button>
-//React
-<button @onclick="sayHi('Lee')">click me!</button>
-//Vue
-```
-### <span style="color:#FFCCFF">event property</span>
-- 이벤트 핸들러를 등록하는 방법 중 하나로, 변수를 할당하듯이 활용한다.
-- 하지만 event handler 등록은 비동기라서 callback fn을 받는 것과 동일하다.
-
-
-```
-하나의 이벤트 핸들러만 바인딩 가능하다.
-this를 쓰면 이벤트를 바인딩한 DOM요소를 가리킨다.
-```
-
-
-```javascript
-<button>click me!</button>
-const $button = document.querySelector('button');
-
-$button.onclick = function() { 
-  //$button은 eventTarget. onclick은 on + 이벤트type
-    console.log('button click'); // function은 event handler
-}
-
-$button.onclick = null; //event 핸들러 제거
-```
-### <span style="color:#FFCCFF">eventListener</span>
+## <span style="color:#802548">eventListener 등록시 이름 있는 함수로</span>
 - 이벤트 핸들러를 등록할 때 바닐라 js에서 가장 많이 쓰이는 방식으로 callback fn 형태로 받는다.
-
-- Vue나 React에서도 동적으로 형성한 HTML은 이 방법을 많이 사용한다고 한다.
-
-
-```
-하나의 이벤트 핸들러 이상 바인딩이 가능하다.
-this를 쓰면 이벤트를 바인딩한 DOM요소를 가리킨다.
-remove를 하려면 함수를 식별자에 할당하는 형태여야 한다.
-```
-
+- 함수가 형태가 완전히 똑같아도, 함수를 내부에서 익명으로 선언하면 새로운 함수로 취급되어 메모리상에서는 서로 다른 주소를 가진 별개의 객체가 된다.
+- 따라서 event를 등록할 때는 반드시 이름이 있는 함수로 등록해주자.
 
 ```javascript
 $button.addEventListener('click',function() {
@@ -1811,7 +1300,7 @@ $button.removeEventListener('click', function() {
 $button.removeEventListener('click',onClick); //변수로 callback을 넣어서 제거 가능
 ```
 
-### <span style="color:#FFCCFF">bubbling</span>
+## <span style="color:#802548">bubbling</span>
 - 이벤트 phase는 캡처링, 타깃, 버블링이 있다.
 - 캡처링은 window -> document -> html -> body -> ul -> li로 event가 내려오는 과정이다.
 - 타깃은 event target에 이벤트가 실제 일어나는 단계다.
@@ -1975,7 +1464,6 @@ $button.removeEventListener('click',onClick); //변수로 callback을 넣어서 
 
 - 버블링을 막는 방법도 있다.
 - stopPropagation()는 이벤트 버블링을 중단시킨다.
-
 - 따라서 이벤트 위임 방식으로는 eventListener가 작동하지 않는다.
 
 
@@ -2008,73 +1496,7 @@ $button.removeEventListener('click',onClick); //변수로 callback을 넣어서 
 ```
 
 
-### <span style="color:#FFCCFF">custom event</span>
-- 커스텀 이벤트를 만들 수도 있다.
-- 기본값은 버블링X, cancelableX(preventDefault 호출해도 적용X)다.
-
-- 새로운 event type이라면 CustomEvent로 생성한다.
-- 기존의 Event에는 detail이라는 instance properties가 없지만, CustomEvent에는 존재한다.
-- 또한 addeEventListener()만으로는 안되고 dispatchEvent()라는 함수도 호출해야 한다.
-
-
-```html
-<!DOCTYPE html>
-<html>
-<body>
-    <button class="btn">Click me</button>
-    <script>
-        const $button = document.querySelector('.btn');
-
-        $button.addEventListener('click',e => {
-            console.log(e);
-            alert(`{e} Clicked`);
-        })
-
-        const customEvent = new CustomEvent('foo', {
-            detail: { //detail이라는 property
-                message: 'Hello'
-            }
-        });
-        $button.dispatchEvent(customEvent); 
-        //그냥 addEventListerner 등록만으로는 안 됨. dispatch 호출해야함.
-    </script>
-</body>
-</html>
-```
-
-- 아래는 mdn의 CustomEvent example이다.
-
-- 기존에 있는 event에 또 엮어서 customEvent를 만든다.
-
-
-```html
-<!DOCTYPE html>
-<html>
-<body>
-    <form>
-      <input>
-     </form>
-    <script>
-      const form = document.querySelector("form");
-      const input = document.querySelector("input");
-
-      form.addEventListener("awesome", (e) => console.log(e.detail.text()));
-      input.addEventListener("input", function () {
-        this.dispatchEvent(
-          new CustomEvent("awesome", {
-            bubbles: true,
-            detail: { text: () => input.value },
-          }),
-        );
-      });
-    </script>
-</body>
-</html>
-```
-
-## <span style="color:#802548">_8. 비동기_</span>
-
-### <span style="color:#FFCCFF">call stack, task queue, event loop</span>
+## <span style="color:#802548">call stack, task queue, event loop</span>
 - 우선 브라우저의 구성에 대해 이해할 필요가 있다.
 
 
@@ -2126,7 +1548,7 @@ step2
 - step3가 call stack에서 사라지고 나서 callback함수가 event loop에 의해 call stack으로 이동한다.
 - callback 함수인 console.log('step2')가 실행되고 call stack에서 pop된다.
 
-### <span style="color:#FFCCFF">setTimeout</span>
+## <span style="color:#802548">setTimeout</span>
 
 - rendering엔진은 JS엔진이 소스코드 평가-실행 상태인 경우 동작하지 않는다. 즉 call stack에 함수가 있으면 작동하지 않는다.
 - setTimeout을 사용하게 되면 event queue에서 callback 함수가 call stack으로 이동하는 시간 동안 call stack이 비어있다.
@@ -2371,7 +1793,7 @@ function execute() {
     }
 ```
 
-### <span style="color:#FFCCFF">debounce와 throttle</span> 
+## <span style="color:#802548">debounce와 throttle</span> 
 - setTimeout을 활용해 event handler를 덜 호출하게 만들 수 있다.
 - 아래와 같이 input이 바뀔 때마다 text가 바뀌게끔 해보자.
 
@@ -2515,7 +1937,7 @@ function execute() {
 - 다만 실무에서는 직접 구현보다는 lodash의 debounce()와 throttle()을 활용하는 게 더 좋다고 한다. 
 
 
-### <span style="color:#FFCCFF">주의점</span>
+## <span style="color:#802548">주의점</span>
 - setTimeout에서 주의할 점은 try ~ catch로 감싸면 안 된다는 점이다.
 - setTimeout은 비동기 함수라서 콜백함수가 호출되는 것을 기다리지 않고 종료된다.
 - setTimeout의 callback 함수는 event queue로 push되어 call stack으로 브라우저에 의해 push된다.
@@ -2535,447 +1957,523 @@ try {
 }
 ```
 
-### <span style="color:#FFCCFF">Promise</span>
-- promise는 비동기처리에 사용되는 객체다. setTimeout의 callback hell이라는 문제점을 극복하고자 하는 시도에서 탄생했다.
-
-- 주로 서버과 통신해 api response를 받아올 떄 쓰인다.
-- 문법은 아래와 같다.
 
 
-```
-성공(fulfilled)이라면 resolve()에 비동기처리 결과를 담는다.
-실패(rejected)라면 reject()에 비동기처리 결과를 담는다.
-```
-
-- 아래는 성공했을 경우에 대한 예시다.
-
+## <span style="color:#802548">_임시객체 없애기_</span>
+- 그저 반환만 하는 경우가 있다고 해보자.
+- 그럼 임시변수를 쓰지 않고 아래와 같이 바로 return하게 바꿀 수 있다.
 
 ```javascript
-function getData() {
-  return new Promise(function(resolve, reject) {
-    var data = 100;
-    resolve(data);
-  });
+function getElements(){
+	const obj = {};
+	obj.title=document.querySelector(".text");
+
+	return obj;
 }
 
-// resolve()에 argument로 넣은 data를 callback function의 parameter로 가져온다.
-getData().then(function(resolvedData) {
-  console.log(resolvedData); // 100
+function getElements(){
+	const obj = {
+		title : document.querySelector(".text")
+	};
+
+	return obj;
+}
+
+function getElements(){
+	return {
+		title : document.querySelector(".text")
+	};
+}
+```
+
+- 임시 객체를 없애는 다른 예시다.
+
+```javascript
+function getDateTime(targetDate){
+	let month = targetDate.getMonth();
+	let day = targetDate.getDate();
+	let hour = targetDate.Hours();
+
+	month = month >= 10 ? month : '0' + month;
+	day = day >= 10 ? day : '0' + day;
+	hour = hour >= 10 ? hour : '0' + hour;
+
+	return {
+		month,
+		day,
+		hour
+	};
+}
+
+function getDateTime(targetDate){
+	return {
+		month: month >= 10 ? month : '0' + month,
+		day: day >= 10 ? day : '0' + day,
+		hour: hour >= 10 ? hour : '0' + hour
+	};
+}
+```
+
+- overloading을 활용해 유연한 코드를 만들 수도 있다.
+- 위에는 argument가 있지만, 여기는 없다. 없으면 기본으로 현재일자가 들어간다.
+
+```js
+function getDateTime(){
+	const currentDateTime = getDateTime(new Date());
+
+	return {
+		month: currentDateTime.month + '분 전',
+		day: currentDateTime.day + '일 전',
+		hour: currentDateTime.hour + '초 전',
+	}
+
+}
+
+function getDateTime(){
+	const currentDateTime = getDateTime(new Date());
+
+	return {
+		month: computedKrDate(currentDateTime.month),
+		day: currentDateTime.day + '일 전',
+		hour: currentDateTime.hour + '초 전',
+	}
+
+}
+```
+
+
+## <span style="color:#802548">_type- 명시적으로 형변환하기_</span>
+- 아래와 같이 쓰면 암묵적 형변환이 된다.
+
+```javascript
+11 + '문자와 결합'	// '11문자와 결합' 
+!!'문자열' //true
+!!''	//false
+```
+
+- 그것보단 아래와 같이 명시적으로 형변환을 해줘야 유지보수가 좋다.
+- parseInt와 Number의 차이는 parseInt는 정수형만, Number는 소수까지 다 가져올 수 있다는 점이다.
+
+```javascript
+String(11+ '문자와 결합'); // String
+Boolean('문자열'); // true
+Boolean('') // false
+Number('11') // 11
+parseInt('9.9999', 10); //뒤에 10진수라고 꼭 알려주기. 
+```
+
+
+
+## <span style="color:#802548">_Number.isNaN_</span>
+- JS에서 다루는 숫자의 끝을 보려면 아래와 같다.
+
+```javascript
+Number.MAX_SAFE_INTEGER //9007199254740991. yyyymmddhhmmss의 문자열을 숫자로 형변환해 비교해도 충분.
+```
+
+```javascript
+isNaN(123) //false. false면 숫자라는 뜻.
+isNaN(123 + '테스트'); // false. false면 숫자. 근데 문자를 붙였는데도 false임..
+Number.isNaN(123 + '테스트') // true. true면 숫자 X. Number만 붙여주면 엄격한 검사를 함.
+Number.isNaN(123) // false. false면 숫자. Number만 붙여주면 엄격한 검사를 함.
+```
+
+
+## <span style="color:#802548">_falsy operator_</span>
+- 기본값을 주는 또다른 예시다.
+
+```javascript
+function favoriteDog(someDog){
+	let favoriteDog;
+	if(someDog){
+		favoriteDog = dog;
+	}else{
+		favoriteDog = '냐옹';
+	}
+
+	return favoriteDog + '입니다';
+}
+
+function favoriteDog(someDog){
+	return (someDog || '냐옹') + '입니다';
+}
+```
+
+- 아래는 여러 연산자들을 활용해 중첩 if문을 제거하는 사례다.
+
+```javascript
+const getActiveUserName(user,isLogin){
+	if(isLogin){
+		if(user){
+			if(user.name){
+				return user.name;
+			}else{
+				return '이름없음';
+			}
+		}
+	}
+}
+
+const getActiveUserName(user,isLogin){
+	if(isLogin && user){
+			if(user.name){
+				return user.name;
+			}else{
+				return '이름없음';
+			}
+	}
+}
+
+const getActiveUserName(user,isLogin){
+	if(isLogin && user){
+		return user.name || '이름없음';
+	}
+}
+```
+
+
+## <span style="color:#802548">_objet- shorthand property_</span>
+- shorthand property
+
+```javascript
+const firstName = 'poco';
+const lastName = 'jang';
+const person = {
+	firstName : 'poco',
+	lastName : 'jang',
+	getFullName: function(){ 
+		return this.firstName + '' + this.lastName;
+	}
+}
+
+const person = {
+	firstName,
+	lastName,
+	getFullName(){ //concise method 
+		return this.firstName + '' + this.lastName;
+	}
+}
+```
+
+## <span style="color:#802548">_object- property check_</span>
+- prototype 조작은 하지말자.
+- JS는 매우 많이 발전했고, JS 빌트인 객체를 건드는 게 위험하기 때문이다.
+- 특히 기존 JS의 빌트인 method는 절대 건들지 말자.
+- 특정 method를 지원하지 않는 브라우저에서만 polyfill정도 만드는 게 좋다.
+
+```javascript
+function Car(name,brand){
+	this.name = name;
+	this.brand = bran;
+}
+
+Car.Prototype.sayName = function(){
+	return this.brand + '-' + this.name;
+}
+```
+
+
+- 해당 객체에 property가 있는지 확인할 때는 그냥 hasOwnProperty를 쓰면 안된다.
+- call을 써야한다. 
+
+```javascript
+const person = {
+	name: 'jaewon'
+}
+person.hasOwnProperty('name'); //true
+
+const foo = {
+	hasOwnProperty: function(){
+		return 'hasOwnProperty';
+	},
+	bar: 'string'
+}
+foo.hasOwnProperty('bar'); //hasOwnProperty
+Object.prototype.hasOwnProperty.call(foo, 'bar') //true
+```
+
+- 매번 하기 귀찮다면 아래와 같이 util함수로 만드는 것도 좋다.
+
+```javascript
+function hasOwnProp(targetObj, targetProp){
+	 return Object.prototype.hasOwnProperty.call(targetObj,targetProp);
+}
+
+hasOwnProp(person, 'name'); //true
+const person = {
+	name: 'jaewon'
+}
+const foo = {
+	hasOwnProperty: function(){
+		return 'hasOwnProperty';
+	},
+	bar: 'string'
+}
+hasOwnProp(foo, 'hasOwnProperty'); //true
+```
+
+
+## <span style="color:#802548">_추상화_</span>
+```javascript
+setTimeout(()=>{
+	scrollToTop();
+},  3 * 60 * 1000)
+
+const COMMON_DELAY_MS = 3 * 60 * 1000;
+setTimeout(()=>{
+	scrollToTop();
+}, COMMON_DELAY_MS)
+
+
+const PRICE = {
+	MIN: 1000000,
+	MAX: 100000000
+}
+const PRICE = {
+	MIN: 1_000_000,
+	MAX: 100_000_000
+}
+
+getRandomPrice(0,10);
+getRandomPrice(PRICE.MIN,PRICE.MAX);
+
+
+function isValidName(name){
+	return carName.length >= 1 && carName.length <=5;
+}
+
+const CAR_NAME_LEN = Object.freeze({
+	MIN: 1,
+	MAX: 5,
 });
+const CAR_NAME_LEN = {
+	MIN: 1,
+	MAX: 5
+} as const;
+
+function isValidName(name){
+	return carName.length >= CAR_NAME_LEN.MIN && carName.length <= CAR_NAME_LEN.MAX;
+}
 ```
 
-- 아래는 비동기 처리 결과가 오류일 때에 대한 예시다.
-
+- DOM API 접근 추상화
 
 ```javascript
-function getData() {
-  return new Promise(function(resolve, reject) {
-    reject(new Error("Request is failed"));
-  });
+export const loader = () => {
+	const el = document.createElement("div)");
+	el.setAttrtibute("class",'loading d-flex justify-center mt-3');
+
+	const el2 = document.createElement('div');
+	el2.setAttribute("class","relative spinner-container");
+
+	const el3 = document.createElement("div");
+	el3.setAttribute('class','material spinner');
+
+	el.append(el2);
+	el2.append(el3);
 }
 
-// reject()의 결과 값 Error를 err에 받음
-getData().then().catch(function(err) {
-  console.log(err); // Error: Request is failed
-});
+
+const createLoader = () => {
+	const el = document.createElement("div)");
+	const el2 = document.createElement('div');
+	const el3 = document.createElement("div");
+
+	return {
+		el, el2, el3
+	}
+}
+
+
+const createLoaderStyle = ({el,el2,el3}) => {
+	el.setAttribute("class",'loading d-flex justify-center mt-3');
+	el2.setAttribute("class","relative spinner-container");
+	el3.setAttribute('class','material spinner');
+
+	return {
+		newEl: el, 
+		newEl2: el2, 
+		newEl3: el3
+	}
+}
+const loader = () => {
+	const {el, el2, el3} = createLoader();
+	const {newEl, newEl2,newEl3} = createLoaderStyle({el, el2, el3});
+
+	newEl.append(newEl2);
+	newE2.append(newEl3);
+}
+
+const myModal = () => {
+	return document.querySelector("#modal");
+}
+
+const changeColor = (element) => {
+	element.style.backgroundColor = "black";
+}
+
+const openModal = (element) => {
+	element.classList.add('--open');
+}
+
+const closeModal = (element) => {
+	element.classList.remove('--open')
+}
+
+openModal(myModal);
+changeColor(myModal);
+closeModal(myModal);
 ```
 
-- 아래는 실제 서버에 요청하는 request를 비동기로 보내는 간단한 예시다.
-- status가 200이면 성공이므로 resolve 처리한다.
 
-- resolve(성공)한 데이터를 then()으로 받는다. 
-
+## <span style="color:#802548">_HTML- NodeList_</span>
+- Node는 document 내의 모든 객체다.
+- elements는 tag에 둘러 싸인 객체다.
+- html, body, main, table, thead, th 모두 node다.
+- NodeList는 일반 배열로 형변환해주는 게 좋다.
 
 ```javascript
-const promiseGet = url => {
-    return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('GET', url);
-        xhr.send();
-
-        xhr.onload = () => { 
-          //onload는 event property 방식의 event handler.
-          //event queue에 callback 함수를 push
-            if(xhr.status === 200) {
-                resolve(JSON.parse(xhr.response));
-            } else {
-                reject(new Error(xhr.status));
-            }
-        }
-    })
-}
-
-promiseGet('https://jsonplaceholder.typicode.com/posts/1').then(res => console.log(res));
-/*
-{
-  "userId": 1,
-  "id": 1,
-  "title": "sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
-  "body": "quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto"
-}
-*/
+const arr = document.querySelectorAll('a'); //NodeList라서 배열의 method는 사용불가. entries(), forEach(), item(), keys(), values()만 존재
+const arrFromNode = [...arr];//일반 배열이라서 배열의 method 사용가능.
 ```
 
-- Promise에서는 catch에서 error를 처리한다.
 
-- then은 성공했을 떄의 처리를 담당한다.
-- finally는 어떤 경우에도 일어나야만 할 때 필요하다.
-
+## <span style="color:#802548">_function- pure function, parameter use_</span>
+- 함수의 parameter로 넣어서 바꾸자. 접근자 함수를 만들자. 순수함수로 바꾸자는 것이다.
+- 장점은 변화를 최소화하고, 새로운 기능을 쉽게 추가할 수 있다는 점이다.
 
 ```javascript
-promiseGet('https://jsonplaceholder.typicode.com/posts/1')
-    .then(res => console.log(res))
-    .catch(err => console.error(err))
-    .finally(() => console.log('Bye!'));
+function setValidToken(bool) {
+	model.isValidToken = bool;
+	ServerAPI.log();
+}
+
+function setIsLogin(bool){
+	model.isLogin = bool;
+	ServerAPI.log();
+}
+
+function login(){
+	setIsLogin(true)
+	setValidToken(true)
+}
+
+function logout(){
+	setIsLogin(false)
+	setValidToken(false)
+}
 ```
 
-- 위에서는 XMLHttpRequest를 사용했지만, 최신 api로 fetch가 있다.
-
-- fetch는 XMLHttpRequest와 기능이 같다. 다만 HTTP error의 경우, reject하지 않는다.
-- 대신 resolve()로 받은 response의 ok 값이 false로 온다. 따라서 서버에러를 catch가 아닌 then에서 처리해줘야 한다. 
-
+- 순수함수의 또다른 예시다.
 
 ```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
+let num1 = 10;
+let num2 = 20;
+function impureSum1() {
+	return num1 + num2;
 }
 
-function getResponse() {
-  request.get('https://jsonplaceholder.typicode.com/todos/1')
-    .then(response => {
-        if(!response.ok) {
-            throw new Error(response.statusText); 
-        }
-
-        return response.json();
-    })
-    .then(todos => console.log(todos))  
-    // response.json()을 받은게 todos
-    .catch(err => console.error(err)); 
-    //오프라인 네트워크 장애, CORS 설정 에러 등만 잡힘
+function impureSum2(newNum) {
+	return num1 + newNum;
 }
-getResponse();
+
+impureSum1(); //30
+
+num1 = 100;
+impureSum2(30); //130. 누가 저 변수를 변경하면 값이 변화해버림.
+
+function pureSum(num1, num2) { //인자로 넣어서 외부 변화를 신경쓰지 않고 진행하게 변경. 이건 원시형에만 해당
+	return num1 + num2;
+}
+
+pureSum(10, 20); //30
+num1 = 100;
+pureSum(10, 20); //30
+num1 = 50;
+pureSum(10, 20); //30
 ```
 
-- Promise를 동기처럼 처리하고 싶다면 async - await를 쓸 수도 있다.
-
-- async await의 경우, try ~ catch문에서 error를 처리하는 경우가 흔하다. 
-- .catch()보다 가독성이 좋기 때문이라고 한다.
-
+- 불변값으로 return해주는 것도 매우 좋은 선택이다.
 
 ```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
+const obj = { one: 1};
+function changeObj(targetObj) { //객체는 원시형처럼 바꾼다고 하면 바뀌어 버림.
+	targetObj.one = 100;
+
+	return targetObj;
+}
+changeObj(obj); 
+console.log(obj); // {one: 100}
+
+function makeNewObj(targetObj) { //새로운 객체를 반환하게 변경
+	return {...targetObj, one: 100};
 }
 
-async function getResponse() {
-  try{
-    const result = await request
-                            .get('https://jsonplaceholder.typicode.com/todos/1')
-                            .then(res => res.json()).catch(err => err);
-    console.log(result);
-  } catch(e) {
-    console.log(e);
-  }
-}
-
-getResponse(); 
-/*
-{
-  "userId": 1,
-  "id": 1,
-  "title": "delectus aut autem",
-  "completed": false
-}
-*/
-```
-
-- 아래의 예시를 살펴보자. async 함수 범위안의 console에는 찍히지만, 밖에서 console을 찍어 결과를 가져오면 결과를 가져오지 못한다.
-- console.log의 위치를 async 밖으로 빼내면 원하는 데이터가 나오지 않는 이유가 무엇일까?
-
-- 그 이유는 async fn 내부에서만 await 함수가 끝나는 것을 기다리기 때문이다. 
-- 즉 getResponse()의 await가 붙은 함수가 실행이 끝나 response가 올 때까지 기다려주지 않는다.
-
-
-```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
-}
-
-async function getResponse() {
-  try{
-    const result = await request.get('https://jsonplaceholder.typicode.com/todos/1').then(res => res.json());
-
-    return result;
-  } catch(e) {
-    console.log(e);
-  }
-}
-
-console.log(getResponse()); //Promise
-```
-
-- 그를 해결하려면 간단하다. getResponse()에도 await를 붙여준다.
-
-
-```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
-}
-
-async function getResponse() {
-  try{
-    const result = await request.get('https://jsonplaceholder.typicode.com/todos/1').then(res => res.json());
-
-    return result;
-  } catch(e) {
-    console.log(e);
-  }
-}
-
-console.log(await getResponse());
-/*
-{
-  "userId": 1,
-  "id": 1,
-  "title": "delectus aut autem",
-  "completed": false
-}
-*/
+makeNewObj(obj); //{one: 100}
+console.log(obj); //{one: 1}
 ```
 
 
-- 이와 똑같은 맥락으로 then문 이전과 이후를 나눠서 변수로 만들면 데이터가 나오지 않는다.
+## <span style="color:#802548">_function- arrow function_</span>
+- 화살표함수는 class를 만들 때도 거의 쓰지 않는다.
+- 정상 작동이 되지 않는다.
 
+```js
+class Person { 
+	this.name = name;
+	this.city = city;
 
-```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
+	parentMethod() {
+		console.log('parentMethod');
+	}
+
+	parentMethodArrow = () => { // super로 child에서 호출이 불가능하다. 생성자함수 내부에서 바로 초기화되기 때문이다.
+		console.log('parentMethodArrow');
+	}
+
+	overrideMethod = () => { //child에서 override해도 덮어씌워지지 않는다.
+		return 'Parent';
+	}
 }
 
-async function getResponse() {
-  try{
-    const result = await request.get('https://jsonplaceholder.typicode.com/todos/1');
-    console.log(result instanceof Response) //true
-    console.log(result instanceof Promise) //false
-
-    const data = result.then(res => res.json()); //result.then is not a function
-  } catch(e) {
-    console.log(e);
-  }
-}
-```
-
-- then문을 나눴다면 이미 resolve되어 Response 객체가 되었으므로 Response라는 prototype에 있는 json()을 통해 결과값을 받아와야 한다.
-
-- 하지만 아래와 같이 하면 그냥 Promise 객체만 도달한다. 결과값을 얻어오는 것도 비동기처리의 일환이라 그렇다.
-
-
-```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
-}
-
-async function getResponse() {
-  try{
-    const result = await request.get('https://jsonplaceholder.typicode.com/todos/1');
-    const data = result.json(); 
-    console.log(data)
-  } catch(e) {
-    console.log(e);
-  }
-}
-
-getResponse(); //Promise<pending>
-```
-
-- 비동기처리를 동기처럼 바꿔주기 위해 json() 함수에도 await를 붙여주면 값이 정상 출력된다.
-
-
-```javascript
-const request = {
-    get(url){
-        return fetch(url);
-    }
-}
-
-async function getResponse() {
-  try{
-    const result = await request.get('https://jsonplaceholder.typicode.com/todos/1');
-    const data = await result.json(); 
-    console.log(data)
-  } catch(e) {
-    console.log(e);
-  }
-}
-
-getResponse();
-/*
-{
-  "userId": 1,
-  "id": 1,
-  "title": "delectus aut autem",
-  "completed": false
-}
-*/
+new Child().childMethod(); // error. (intermediate value).parentMethodArrow is not a function
+new Child().overrideMethod(); //Parent
 ```
 
 
-- promise를 병렬로 가져오는 방법도 있다.
-- 아래의 예시를 살펴보자. 한꺼번에 병렬로 가져오면 1초면 되는 작업이다.
+- concise method로 활용해야 한다.
 
-- 하지만 동기로 처리되어 이전의 처리 결과를 기다리게 된다. 그럼 10초가 걸린다.
+```js
+class Person { 
+	this.name = name;
+	this.city = city;
 
+	parentMethod() {
+		console.log('parentMethod');
+	}
 
-```javascript
-function setTimeoutPromise(ms) {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => resolve(), ms);
-  });
+	parentMethodArrow(){ //concise method로 쓰면 된다.
+		console.log('parentMethodArrow');
+	}
+
+	overrideMethod(){ //concise method로 쓰면 된다.
+		return 'Parent';
+	}
 }
 
-async function fetchAge(id) {
-  await setTimeoutPromise(1000);
-  console.log(`${id} 사원 데이터 받아오기 완료!`);
-  return parseInt(Math.random() * 20, 10) + 25;
+class Child extends Parent {
+	childMethod(){
+		super.parentMethodArrow()
+	}
+
+	overrideMethod(){
+		return 'Child';
+	}
 }
 
-async function startAsyncJobs() {
-  let ages = [];
-  for (let i = 0; i < 10; i++) {
-    let age = await fetchAge(i);
-    ages.push(age);
-  }
-
-  console.log(
-    `평균 나이는? ==> ${
-      ages.reduce((prev, current) => prev + current, 0) / ages.length
-    }`,
-  );
-}
-
-startAsyncJobs();
+new Child().childMethod(); //parentMethodArrow
+new Child().overrideMethod(); //Child
 ```
 
-- 따라서 비동기 작업이 순차를 기다리지 않아도 되는 경우에는 아래와 같이 Promise.all을 사용하는 것이 더 좋다.
 
-
-```javascript
-function setTimeoutPromise(delay) {
-  return new Promise((resolve) => setTimeout(resolve, delay));
-}
-
-async function fetchAge(id) {
-  await setTimeoutPromise(1000);
-  console.log(`${id} 사원 데이터 받아오기 완료!`);
-  return Math.round(Math.random() * 20) + 25;
-}
-
-async function startAsyncJobs() {
-  const ids = Array.from({ length: 10 }).map((_, index) => index);
-
-  const promises = ids.map(fetchAge);
-
-  const ages = await Promise.all(promises);
-
-  console.log(
-    `평균 나이는? ==> ${
-      ages.reduce((prev, current) => prev + current, 0) / ages.length
-    }`,
-  );
-}
-
-startAsyncJobs();
-```
-
-- async - await는 비동기 함수 중 Promise 함수를 사용했을 때만 사용가능하다.
-- async 함수가 붙으면 반드시 resolve된 Promise를 return해야 하기 때문이다.
-
-- async keyword가 붙으면 await도 써주는 게 좋다.
-- 아래를 보면 await가 붙어있지 않다. 그러자 catch문에 error가 catch되지 않는다.
-- 색깔도 warn이라 노란색이어야 하는데 빨간색으로 나온다.
-
-
-```javascript
-async function thisThrows() {
-    throw new Error("Thrown from thisThrows()");
-}
-
-async function myFunctionThatCatches() {
-    try {
-        return thisThrows();
-    } catch (e) {
-        console.warn(e,'catch');
-    } finally {
-        console.log('We do cleanup here');
-    }
-    return "Nothing found";
-}
-
-async function run() {
-    const myValue = await myFunctionThatCatches();
-    console.log(myValue);
-}
-
-run(); //We do cleanup here
-/*
-  Uncaught (in promise) Error: Thrown from thisThrows()
-  at thisThrows (<anonymous>:2:11)
-  at myFunctionThatCatches (<anonymous>:7:16)
-  at run (<anonymous>:17:27)
-  at <anonymous>:21:1
-*/
-```
-
-- await를 쓰면 아래에서 error가 catch되는 모습을 볼 수 있다. 
-- 색깔도 warn으로 노란색이다.
-
-
-```javascript
-async function thisThrows() {
-    throw new Error("Thrown from thisThrows()");
-}
-
-async function myFunctionThatCatches() {
-    try {
-        return await thisThrows();
-    } catch (e) {
-        console.warn(e, 'catch');
-    } finally {
-        console.log('We do cleanup here');
-    }
-    return "Nothing found";
-}
-
-async function run() {
-    const myValue = await myFunctionThatCatches();
-    console.log(myValue);
-}
-
-run();  
-/*
-  Error: Thrown from thisThrows()
-  at thisThrows (<anonymous>:2:11)
-  at myFunctionThatCatches (<anonymous>:7:22)
-  at run (<anonymous>:17:27)
-  at <anonymous>:21:1 'catch'
-*/
-//We do cleanup here
-//Nothing Found
-
-```
-
-- 즉 async를 쓰면 await도 써야 try ~ catch에서 error catch가 정상으로 작동한다고 볼 수 있다.
 
