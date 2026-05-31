@@ -297,3 +297,31 @@ function fetchList() {
 }
 ```
 
+
+## <span style="color:#802548">_ts HTML manipulation_</span>
+
+- querySelector로 할 때는 id나 class보다는 element를 주면 좋다.
+- interface를 ts가 알아서 추론해주어 그 interface의 method를 쓸 수 있다.
+- id나 class를 쓰면 any type이라서 generics로 덮어 써야 method를 쓸 수 있다.
+
+```javascript
+const form = document.querySelector<HTMLFormElement>('#form');
+form.addEventListener("submit",function(e){//e가 뭘 의미하는 지 암. submit에 addEventLister기 때문.
+    e.preventDefault();
+    console.log("SUBMITTED");
+})
+
+const handleSubmit = function(e /*e: subMitEvent()로 써줘야 함. */){ //e가 뭘의미하는 지 ts가 모름. context가 없기 때문. 따라서 error
+    
+    e.preventDefault();
+    console.log("SUBMITTED");
+}
+form.addEventListener("submit",handleSubmit); 
+```
+
+- localStorage는 문자열만 갖고 있다. 그래서 객체를 넣을 수가 없다.
+- 그래서 stringify로 바꿔서 넣고, parse로 꺼내 쓴다.
+
+```javascript
+localStorage.setItem('todos', JSON.Stringify(toods));
+```

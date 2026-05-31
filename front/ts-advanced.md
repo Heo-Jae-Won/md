@@ -1,84 +1,6 @@
-## <span style="color:#802548">_ts- config, caution_</span>
-- noImplicitAny 설정
-- strictNullChecks 설정
-- NoImplictthis 설정
-- noEmitonError 설정
-
-- 만약 ts 예제 오류 재현이 안된다?
-- tsconfig.json을 살펴보자. 서로의 tsconfig.json이 다르면 오류가 재현되지 않을 수 있다.
-
-<br >
-
-
-- 문자열 값을 가진 enum은 추천하지 않는다. js로 transpile 시에 코드가 크게 바뀌기 때문이다.
-- 문자열 값을 가진 union type으로 변형해주자.
-```js
-type authenticationStatus = 'AUTHENTICATED' | 'NOTOWNED' | 'NOTAUTHENTICATED';
-```
-
-- runtime에 필요한 것은 dependency에 깐다.
-- compile시에 필요한 것은 devDependency에 깐다.
-```
-npm install react
-npm install --save-dev @types/react
-```
-
-- ts를 깐 경우 3가지 모두 버전이 맞아야 한다.
-
-```
-ts 버전 - typescript 3.1.x
-lib 버전 - 특정 library 10.4.x
-lib type 버전 - 특정 library의 type 10.4.x
-```
-
-## <span style="color:#802548">_runtime에 type 정보를 유지하는 방법- tagged union_</span>
-- typescript 오류는 compile 오류가 아니다.
-  - type check 오류다.
-  - 그런데 runtime에는 type check가 불가하다.
-  - runtime에 type 정보를 유지하는 기법을 tagged union이라고 한다.
-    - kind가 바로 type 정보다.
-```js
-interface Square {
-    kind: 'square';
-    width: number;
-}
-
-interface Rectangle {
-    kind: 'rectangle';
-    height: number;
-    width: number;
-}
-```
-
-- ts의 type은 runtime에 존재하지 않는다. compile time에만 존재한다.
-- 그런데 instance의 type은 runtime에만 존재한다. 
-- 브라우저가 원래 갖고있는 string, regExp 등의 type은 알 수 있지만, 사용자 정의 class는 알 수 없다.
-- 따라서 shape instanceof Rectangle로는 instance가 해당 type인지 알 수가 없다. js를 parsing하는 브라우저 엔진은 모른다.
-```js
-type Shpae = Square | Rectangle;
-function calculateArea(shape: Shape) {
-    if (shape instanceof Rectangle) { 
-        shape //Rectangle type이어야 하지만.. 실제론 알 수 없다.
-    } else {
-        shape //Square type이어야 하지만.. 실제론 알 수 없다.
-    }
-}
-```
-
-- 그럴 때 위에 써놓았던 type 정보를 담은 key를 활용할 수 있다.
-```js
-type Shpae = Square | Rectangle;
-function calculateArea(shape: Shape) {
-    if (shape.kind ==='rectangle') { 
-        shape //Rectangle type
-    } else {
-        shape //Square type
-    }
-}
-```
-
 ## <span style="color:#802548">_function declaration- generics, extends_</span>
 - ts에서는 함수를 2개 이상 overloading하여 구현할 수 없다.
+
 ```js
 function add(a: number, b: number) {
     return a + b; //compile error. Duplicate function implementation
@@ -92,6 +14,7 @@ function add(a: string, b: string) {
 - 2개의 overloading된 type을 갖는 fn을 선언은 가능하다.
   - 구현이 아닌 선언만 한다.
   - 구현부는 위에서 말한 것처럼 선택해서 하나만 구현해야 한다.
+
 ```js
 function add(a: nubmer, b: number) : number;
 function add(a: string, b: string) : string;
@@ -102,6 +25,7 @@ function add(a,b) {
 
 - 하나의 parameter가 아니라 다양한 type을 받는 경우에는 union type의 문제으로 선언한다.
 - generics와 조건부 타입을 써서 유연하게 받을 수 있게 구성한다.
+
 ```js
 function add<T extends number | string>(x: T): T extends string ? string : number;
 function add(x: any) {
@@ -120,6 +44,7 @@ function double(x: number | string) {
 ```
 
 - string을 extends한 것은 string literal 간의 union type도 포함이다.
+
 ```js
 function getKey<K extends string>(val: any, key: K) {
     ...
@@ -134,6 +59,7 @@ getKey({}, 12); //error.
 ```
 
 - number를 extends한 것도 number literal 간의 union type을 포함한다.
+
 ```js
 function getKey<K extends number>(val: any, key: K) {
    console.log(key);
@@ -147,6 +73,7 @@ getKey({}, Math.random() < 0.5 ? 1 : Math.random() < 0.7 ? '1' : 3); //error
 
 - 위의 extends의 내용을 발전시키면 아래와 같다.
 - keyof로 K를 한정하여 가져오면 어떤 interface든 그 조합의 union을 커버할 수 있다.
+
 ```js
 function sortBy<K extends keyof T, T>(vals: T[], key: K): T[] {
     return vals;
@@ -168,9 +95,6 @@ sortBy(pts,Math.random() < 0.5 ? 'y' : 't'); //error.Argument of type '"y" | "r"
 sortBy(pts,Math.random() < 0.5 ? 'x' : Math.random() < 0.7 ? 'y' : 'z');
 ```
 
-
-<br >
-
 - 만약 fn의 parameter를 object로 받는다면, type을 선언하는 방식은 아래와 같다.
 
 ```js
@@ -180,102 +104,16 @@ interface emailFunction {
 ```
 
 - email 함수를 위와 같이 선언했다면 비구조화 할당해서 사용한다면 아래와 같다.
+
 ```js
 function email({person, subject, body} : {person: Person, subject: string, body: string})
 ```
 
 
-## <span style="color:#802548">_duck typing_</span>
-- typescript는 duck typing의 언어다.
-- 객체가 다른 객체의 변수와 method를 가지면, 해당 객체 타입도 다른 객체 type으로 간주된다.
-  - runtime에는 쓸모가 없지만, type check 시에 유용하다.
-
-
-```js
-interface NamedVector {
-    name: string,
-    x: number,
-    y: number
-}
-
-interface Vector2D {
-    x: number,
-    y: number
-}
-```
-
-- NamedVector가 Vector2D를 그대로 갖고 있다면, Vector2D type으로도 취급가능하다.
-- Java의 다형성과 비슷하다. ts에서는 duck typing 특성이라고 한다.
-```js
-function calculateLength(v: Vector2D) {
-    ....
-}
-
-const v: NamedVector = { x: 3, y: 4, name: 'Zee'};
-calculateLength(v); //분명 Vector2D type으로 parameter가 들어와야 하지만, 괜찮다. 왜? duck typing이니까.
-```
-
-- 이를 활용해 test code를 쉽게 짤 수 있다.
-- duck typing을 의식하지 않고 만든 코드다.
-- DB의 type이 구체적으로 박혀있어서 다른 DB로 test할 때 방해가 된다.
-```js
-interface Author {
-    first: string,
-    last: string,
-}
-
-function getAuthors(database: PostgreDB) : Author[] {
-    const authorRows = database.runQuery('SELECT FIRST, LAST...');
-}
-```
-
-- 이를 duck typing을 이용해 바꿔보자.
-- runQuery를 key로 갖고, any[]를 value로 갖는다면 어떤 DB로든 갈아끼울 수 있다.
-```js
-interface Author {
-    first: string,
-    last: string,
-}
-
-interface DB {
-    runQuery(sql: string): any[]
-}
-
-function getAuthors(database: DB) : Author[] {
-    const authorRows = database.runQuery('SELECT FIRST, LAST...');
-}
-```
-
-- duck typing에는 문제도 도사리고 있다.
-- Vector2D를 받았어야 하는데, Vector3D를 type도 받을 수 있다는 점이다.
-- 다른 해결 방법은 tagged union이다. 다만 완벽하진 않다. 실수를 줄이는 정도다.
-```js
-interface Vector3D {
-    x: number,
-    y: number,
-    z: number,
-    _brand: '3D'
-}
-interface Vector2D {
-    x: number,
-    y: number,
-    _brand: '2D'
-}
-
-function calculateLengthL1(v: Vector3D) {
-     return Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z);
-}
-
-const vector2D = {
-    x: 1,
-    y: 2,
-}
-calculateLengthL1(vector2D); //error. 개발자가 직접 _brand:'3D'넣어줘야..
-```
-
-## <span style="color:#802548">_key순회 type check error_</span>
+## <span style="color:#802548">_key순회를 하면서 더하면 안되고, 직접 필요한 property를 더해줘야한다_</span>
 - Object.keys()로 객체를 순회하는 경우, key가 문자열로 return된다.
 - 따라서 아래 axis는 type이 늘 string이다. 그런데 Vector3D는 string type의 key를 가지지 않는다.
+
 ```js
 
 interface Vector3D {
@@ -298,6 +136,7 @@ function calculateLengthL1(v: Vector3D) {
 
 - 해당 상황을 회피하기 위해서 index signiture를 집어넣을 수 있다.
 - 그러나 그렇게 되면 아무 key나 들어가도 상관없게 된다.
+
 ```js
 interface Vector3D {
     x: number,
@@ -319,6 +158,7 @@ calculateLengthL1({x:123,y:11,z:14,abc:123}) //abc는 유효한 key가 아니지
 ```
 
 - 이 경우에는 element 요소를 순회할 게 아니라 직접 필요한 것만 더해줘야 한다.
+
 ```js
 interface Vector3D {
     x: number,
@@ -328,6 +168,16 @@ interface Vector3D {
 
 function calculateLengthL1(v: Vector3D) {
     return Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z);
+}
+
+//destructure
+function calculateLengthL1({x, y, z}: Vector3D) {
+    return Math.abs(x) + Math.abs(y) + Math.abs(z);
+}
+
+// 이건 안 됨. 타입을 줘버렸기에 Vector3D가 아니게 됨. 따라서 Vector3D type이 아니므로 compile check 시 오류가 남.
+function calculateLengthL1({x: number, y: number, z: number}: Vector3D) {
+    return Math.abs(x) + Math.abs(y) + Math.abs(z);
 }
 ```
 
@@ -344,6 +194,7 @@ function calculateLengthL1(v: Vector3D) {
 
 - index signature는 특별한 경우가 아니면 쓰지 않는 것이 좋다.
 - 아래와 같은 interface가 있다고 해보자.
+
 ```js
 interface Schedule {
     date: string,
@@ -352,6 +203,7 @@ interface Schedule {
 ```
 
 - 만약 해당 속성에 대괄호로 접근하려 한다면 오류가 난다.
+
 ```js
 const a: Schedule = {
     date:'2023-01-21',
@@ -364,6 +216,7 @@ a['date']; // Element implicitly has an 'any' type because expression of type 's
 - 그 때 index signature를 도입하면 문제가 해결된다. 하지만 임시방편이다.
 - 아래와 같은 index signature는 string 형식의 key면 무엇이든 받는다.
   - 그것이 실제 Schedule interface에 존재하지 않아도 말이다.
+
 ```js
 interface Schedule {
     date: string,
@@ -384,6 +237,7 @@ a['ddd']; //error 안 남.
 - 해당 현상을 해결하기 위해서는 아래와 같은 방법을 모색할 수 있다.
 - as keyof를 사용하는 것이다.
 - 그럼 모든 변수에서가 아니라, 딱 저기에서만 as를 사용하기에 더 나은 선택이다.
+
 ```js
 interface Schedule {
     date: string,
@@ -396,6 +250,7 @@ interface Schedule {
 - 하지만 이 역시 element.value가 headcountInfo의 key가 아닌 게 들어와도 type check를 해주지 않는다.
 - scheduleArriveStation인데 scheduleArriveStatino으로 오타를 내도 as를 썼기에 오류가 없다.
 - as를 쓰면 type check가 작동하지 않기 때문이다. 오타에 취약하다.
+
 ```js
 const stationFilteringItems = [
   { label: '출발역', value: 'scheduleDepartStation' },
@@ -408,6 +263,7 @@ const stationFilteringItems = [
 - 그것은 즉 keyof로 규정해줘야 문제를 해결할 수 있다는 것이다.
 - 바로 type check를 통해 오타를 인지하는 모습을 볼 수 있다.
 - 또한 자동완성 서비스도 받을 수 있다. value라고 치고 컨트롤 엔터를 누르면 ScheduleRequest의 key가 자동완성 추천에 뜬다.
+
 ```js
 interface StationFilteringItem {
   label: string;
@@ -422,6 +278,7 @@ const stationFilteringItems: StationFilteringItem[] = [
 - 원래 있던 key를 가져오는 경우는 as keyof로 바로 해결가능하다.
 - 아래와 같은 경우다. axis는 무조건 해당 객체의 key이기 때문에 as를 써도 된다.
 - 내가 직접 객체로 넣는 것도 아니기에 오타를 걱정할 필요도 없다.
+
 ```js
 for (const axis of Object.keys(v)) {
         const coord = v[axis as keyof Vector3D];
@@ -433,6 +290,7 @@ for (const axis of Object.keys(v)) {
 - index signature를 써야만 할 때도 있다.
 - 데이터가 어떻게 들어오는 지 모르는 것들일 때다.
 - 예를 들자면 excel, csv 등이다. 어떤 column 이름이 들어올 지 모르기 때문이다.
+
 ```js
 function parseCSV(input: string): {[columnName: string]: string}[] {
     const lines = input.split('\n');
@@ -449,6 +307,7 @@ function parseCSV(input: string): {[columnName: string]: string}[] {
 ```
 
 - 만약에 열 이름을 안다면 interface를 만들면 된다.
+
 ```js
 interface ProductRow {
     productId: string;
@@ -462,6 +321,7 @@ const products = parseCSV(csvData) as unknown as ProductRow[];
 
 - 더 안전하게 할 수도 있다. 
 - 아래와 같이 undeinfed type을 return type으로 추가해준다.
+
 ```js
 function safeParseCSV(input: string): {[columnName:string]: string | undefined}[] {
     return parseCSV(input);
@@ -478,6 +338,7 @@ for(const row of safeRows) {
 ```
 
 - index signature가 가진 또 하나의 단점은 예약어에 취약하다는 점이다.
+
 ```js
 function countWords(text: string) {
     const counts: {[word: string] : number} = {};
@@ -492,6 +353,7 @@ console.log(countWords('Objects have a constructor'));
 ```
 
 - constructor와 같은 예약어를 쓰면 예기치 않은 결과를 초래한다.
+
 ```
 {
     Objects: 1,
@@ -502,6 +364,7 @@ console.log(countWords('Objects have a constructor'));
 ```
 
 - map과 set을 이용하면 예기치 않은 결과를 피할 수 있다.
+
 ```js
 function countWords(text: string) {
     const counts = new Map<string, number>();
@@ -578,6 +441,7 @@ Boolean X / boolean O
 - 타입 선언이 좋은 이유는 함수에서 더 확실하게 드러난다.
 - type선언을 해놓고 쓰면 함수 표현식에 해당 return type으로 표시해준다.
 - 그럼 parameter에 type을 적지 않아도 context가 제공되니까 상관이 없다.
+
 ```js
 function rollDice(sides: number): number {}
 
@@ -1779,4 +1643,103 @@ const element = document.querySelector('input') as HTMLElement;
 addKeyListener(element,(e) => {
     console.log(e, this.innerHTML); //Property 'innerHTML' does not exist on type 'void'.
 })
+```
+
+
+## <span style="color:#802548">_enum이 아닌 as const_</span>
+
+- const가 아닌 enum을 쓰면 자동완성을 지원해준다.
+
+```JS
+enum OrderStatus {
+    PENDING   = 10,
+    SHIPPED   = 41,
+    DELIVERED = 153,
+    RETURNED  = 524
+}
+
+const myStatus = OrderStatus.DELIVERED;
+function isDelivered(status: OrderStatus) {
+
+    return status === OrderStatus.DELIVERED
+}
+
+isDelivered(OrderStatus.RETURNED);
+```
+
+- 하지만, enum은 ts에서 compile 되고 나서 사라지지 않고 남아 js에 영향을 미친다.
+- 따라서 as const를 많이 사용한다. 
+
+```javascript
+const enum ArrowKeys {
+    UP = "up",
+    DOWN = "down",
+    LEFT = "left",
+    RIGHT = "right",
+    ERROR = 500
+}
+
+const ArrowKeys = {
+    UP = "up",
+    DOWN = "down",
+    LEFT = "left",
+    RIGHT = "right",
+    ERROR = 500
+} as const
+```
+
+
+## <span style="color:#802548">_try catch 시 error 다루기_</span>
+
+- 에러를 다룰 때 error는 unknown type이다.
+- if문으로 걸러도 {} type이 되기 때문에 property가 없다.
+
+```js
+try {
+     
+} catch( error) {
+    if (error) {
+        error.message; //property message does not exist on type '{}'
+    }
+}
+```
+
+
+- error를 if문에서 Error로 바꿔도 어차피 까먹는다.
+
+```js
+try {
+
+} catch (error) {
+    if( error as Error) {
+        error.message; //error is of type 'unknown'
+    }
+}
+```
+
+
+- 그럴 땐 변수로 만들어 놔야 한다.
+- type assertion은 변수에 적용해야만 타입이 assertion한 type으로 유지된다.
+
+```js
+try {
+
+} catch( error) {
+    const err = error as Error;
+    if (err) {
+        err.message; //no error
+    }
+}
+```
+
+- as를 안 쓰는 게 더 좋다.
+
+```js
+try {
+
+} catch ( error) {
+    if ( error instanceof Error) {
+        error.message;
+    }
+}
 ```
