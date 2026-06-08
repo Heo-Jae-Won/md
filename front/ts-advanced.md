@@ -1,28 +1,4 @@
 ## <span style="color:#802548">_function declaration- generics, extends_</span>
-- ts에서는 함수를 2개 이상 overloading하여 구현할 수 없다.
-
-```js
-function add(a: number, b: number) {
-    return a + b; //compile error. Duplicate function implementation
-}
-
-function add(a: string, b: string) {
-    return a + b; //compile error. Duplicate function implementation
-}
-```
-
-- 2개의 overloading된 type을 갖는 fn을 선언은 가능하다.
-  - 구현이 아닌 선언만 한다.
-  - 구현부는 위에서 말한 것처럼 선택해서 하나만 구현해야 한다.
-
-```js
-function add(a: nubmer, b: number) : number;
-function add(a: string, b: string) : string;
-function add(a,b) {
-    return a + b
-}
-```
-
 - 하나의 parameter가 아니라 다양한 type을 받는 경우에는 union type의 문제으로 선언한다.
 - generics와 조건부 타입을 써서 유연하게 받을 수 있게 구성한다.
 
@@ -35,7 +11,7 @@ function add(x: any) {
 function double(x: number) {
     return  add(x); //number로 해석
 }
-function double(x: number) {
+function double(x: string) {
     return  add(x); //string으로 해석
 }
 function double(x: number | string) {
@@ -94,101 +70,6 @@ sortBy(pts,Math.random() < 0.5 ? 'y' : 'z');
 sortBy(pts,Math.random() < 0.5 ? 'y' : 't'); //error.Argument of type '"y" | "r"' is not assignable to parameter of type 'keyof Point'. Type '"r"' is not assignable to type 'keyof Point'.
 sortBy(pts,Math.random() < 0.5 ? 'x' : Math.random() < 0.7 ? 'y' : 'z');
 ```
-
-- 만약 fn의 parameter를 object로 받는다면, type을 선언하는 방식은 아래와 같다.
-
-```js
-interface emailFunction {
-    email(options: {person: Person, subject: string, body: string});
-}
-```
-
-- email 함수를 위와 같이 선언했다면 비구조화 할당해서 사용한다면 아래와 같다.
-
-```js
-function email({person, subject, body} : {person: Person, subject: string, body: string})
-```
-
-
-## <span style="color:#802548">_key순회를 하면서 더하면 안되고, 직접 필요한 property를 더해줘야한다_</span>
-- Object.keys()로 객체를 순회하는 경우, key가 문자열로 return된다.
-- 따라서 아래 axis는 type이 늘 string이다. 그런데 Vector3D는 string type의 key를 가지지 않는다.
-
-```js
-
-interface Vector3D {
-    x: number,
-    y: number,
-    z: number
-}
-
-function calculateLengthL1(v: Vector3D) {
-    let length = 0;
-    for (const axis of Object.keys(v)) {
-        const coord = v[axis]; //Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Vector3D'.
-                                //No index signature with a parameter of type 'string' was found on type 'Vector3D'.
-        length +=Math.abs(coord);
-    }
-    return length;
-}
-
-```
-
-- 해당 상황을 회피하기 위해서 index signiture를 집어넣을 수 있다.
-- 그러나 그렇게 되면 아무 key나 들어가도 상관없게 된다.
-
-```js
-interface Vector3D {
-    x: number,
-    y: number,
-    z: number
-    [key: string]: number,
-}
-
-function calculateLengthL1(v: Vector3D) {
-    let length = 0;
-    for (const axis of Object.keys(v)) {
-        const coord = v[axis];
-        length +=Math.abs(coord);
-    }
-    return length;
-}
-
-calculateLengthL1({x:123,y:11,z:14,abc:123}) //abc는 유효한 key가 아니지만.. type check 통과
-```
-
-- 이 경우에는 element 요소를 순회할 게 아니라 직접 필요한 것만 더해줘야 한다.
-
-```js
-interface Vector3D {
-    x: number,
-    y: number,
-    z: number
-}
-
-function calculateLengthL1(v: Vector3D) {
-    return Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z);
-}
-
-//destructure
-function calculateLengthL1({x, y, z}: Vector3D) {
-    return Math.abs(x) + Math.abs(y) + Math.abs(z);
-}
-
-// 이건 안 됨. 타입을 줘버렸기에 Vector3D가 아니게 됨. 따라서 Vector3D type이 아니므로 compile check 시 오류가 남.
-function calculateLengthL1({x: number, y: number, z: number}: Vector3D) {
-    return Math.abs(x) + Math.abs(y) + Math.abs(z);
-}
-```
-
-- 말했듯 Object.keys()는 늘 문자열을 return하기에 문자열 key만 나온다.
-- 실제 js runtime에서 key는 늘 문자열 취급이다.
-  - a[2]과 a['2']이 똑같다.
-- 그러나 ts에서는 다르다. a[2]와 a['2']는 다르다.
-  - Object.keys()로 객체의 속성을 살펴보고 이용하려고 하지말자.   
-  - 그럴 때는 차라리 for in 문을 쓰자.
-  - 만약 배열 객체라면 for of 문을 쓰자.
-
 
 ## <span style="color:#802548">_index signature_</span>
 
@@ -386,273 +267,82 @@ console.log(countWords('Objects have a constructor'));
 ```
 
 
-## <span style="color:#802548">_typeof, type assertion_</span>
-- ts에서 type은 값들의 집합이라고 생각하면 이해하기 쉽다.
-  - 아래 오류는 해당 type은 다른 type의 부분집합이 될 수 없다는 의미라고 이해할 수 있다.
-  - 즉 type check에 실패했기 때문에 고쳐야한다는 의미다.
-```
-'12' 형식의 인수는 'string' 형식의 매개변수에 할당될 수 없습니다.
-'number[] 타입은' '[number, number]' 타입의 0, 1 속성에 없습니다.
-```
 
-- ts의 typeof를 쓰면 값과 타입에 대해 다른 연산이 일어난다.
-- type의 typeof는 js코드로 사용이 불가능하다.
-- const같은 값의 typeof는 js코드로 사용이 가능하다.
-  - 참고로 class는 js에서 함수로 구현되므로 값의 관점에서 typeof를 하면 function
-  - class로 만든 instance의 typeof는 object다.
-```js
-type t1 = typeof p; //js 코드로 변환 불가능. Person 같이 사용자 정의 type도 노출됨.
-const t1 = typeof p; //js runtime의 type 정보. string, number, object, function 등 6개 type 중 1개. interface나 type은 아님
-
-class ScienceFacility {
-    constructor() {
-        this.units = ['Science Vessl'];
-    }
-
-    getUnits() {
-        return this.units;
-    }
-}
-
-let scienceFacility = new ScienceFacility();
-scienceFacility.getUnits();
-
-const t1 = typeof ScienceFacility;  // class
-const t2 = typeof scienceFacility ; // instance
-console.log(t1); //fucntion
-console.log(t2); //object
-```
-
-- 아래의 type은 모두 instance가 지닌 값이라는 관점이 아니라, ts에서 다루는 type과 관련된다.
-- 타입 단언과 타입 선언은 아래와 같이 쓴다.
-```js
-const bob = {} as Person /* const bob = <Person>{} */   //타입 단언
-/* const bob =ref<>();와는 다르다. 해당 문법은 generics를 사용한 것이다.*/
-const bob: Person = {};                                 //타입 선언
-```
-
-- 참고로 객체형 type은 선언하면 안 된다. 
-```
-String X / string O
-Number X / number O
-Boolean X / boolean O
-```
-
-- 타입 선언이 좋은 이유는 함수에서 더 확실하게 드러난다.
-- type선언을 해놓고 쓰면 함수 표현식에 해당 return type으로 표시해준다.
-- 그럼 parameter에 type을 적지 않아도 context가 제공되니까 상관이 없다.
+## <span style="color:#802548">_key순회를 하면서 더하면 안되고, 직접 필요한 property를 더해줘야한다_</span>
+- Object.keys()로 객체를 순회하는 경우, key가 문자열로 return된다.
+- 따라서 아래 axis는 type이 늘 string이다. 그런데 Vector3D는 string type의 key를 가지지 않는다.
 
 ```js
-function rollDice(sides: number): number {}
-
-type DiceRollFn = (sides: number) => number;
-const rollDice: DiceRollFn = sides => {};
-```
-
-- 그럼 의미에서는 함수 선언보다는 함수 표현식이 좋다.
-- 함수 선언은 parameter에 type을 다 넣어줘야 한다.
-- 함수 표현식으로 쓰고 함수 전체에 type을 쓰면 좋은 이유가 더 있다.
-- 함수가 호출된 곳이 아니라, 함수가 정의한 곳에서 오류가 나서 오류 해결이 빨라진다.
-```js
-async function checkedFetch(input: RequestInfo, init?: RequestInit) {
-    const response = await fetch(input, init);
-}
-
-const checkedFetch: typeof fetch = async(input, init) => {
-    const response = await fetch(input, init);
-}
-```
-
-- 이제 타입 단언을 알아보자.
-  - 가장 큰 단점으로는 잉여속성 체크가 안 된다는 점이다.
-  - type check가 부실하다는 의미다.
-```js
-interface Options {
-    title: string;
-    darkMode?: boolean;
-}
-
-const o = {
-    darkmode: true,
-    title: 'Ski Free'
-} as Options;   //darkmode라고 했으면 원래 잉여 속성 체크가 돼서 darkmode라는 key가 없다고 떠야한다.
-                //하지만 타입 선언을 했으므로 안 나온다.
-```
-
-- return variable에 타입 단언을 하는 것은 type check를 속이는 것일 뿐이다.
-  - runtime에서는 무의미하다. 
-  - 그럴 땐 ts가 아닌 js의 형변환을 사용하는 것이 좋다.
-```js
-//bad
-function asNumber(val: number | string) {//val은 string도 될 수 있으니 as number로 썼다.
-    return val as number;
-}
-
-//good
-function asNUmber(val: number | string) : boolean {
-    return typeof(val) === 'string' ? Number(val) : val;
-}
-```
-
-- 다만 type 단언이 필요한 경우가 있다.
-- 바로 DOM 객체를 다룰 때다.
-  - element는 HTMLElement를 return한다.
-  - 그러나 HTMLElement가 아니라 HTMLInputElment를 return해야 한다.
-  - 그래야 value라는 property에 접근 가능하기 때문이다.
-- 그 때 타입 단언을 사용한다.
-```js
-const element = document.querySelector('#input');
-
-const element = document.querySelector('#input') as HTMLInputElement;
-```
-
-## <span style="color:#802548">_임시변수 쓰지 않기_</span>
-- 변수 대입으로 해도 잉여속성 체크가 안된다.
-- 임시 변수를 사용하는 것은 피해야 한다.
-```js
-interface Options {
-    title: string;
-    darkMode?: boolean;
-}
-
-const intermediate = {
-    darkmode: true,
-    title: 'Ski Free'
-} 
-
-const o : Options = intermediate; //darkmode라서 key가 없다는 오류가 떠야하지만 뜨지 않는다.
-```
-
-- 객체의 속성을 임시변수를 꺼내서 사용하는 것도 위험하다.
-- polygon.bbox 값이 변경되면, bbox와 다른 값을 참조할 수 있다.
-- 그게 type마저 변화시키는 것이라면 혼란을 초래할 수 있다.
-```js
-const {bbox} = polygon; //임시변수로 꺼냄.
-if (!bbox) {
-    calculatePlygonBbox(polygon);
-}
-```
-
-- 계산 로직 등으로 값, type 변화가 일어난다면, 변수를 아예 만들지 않는게 낫다.
-```js
-if (!polygon.bbox) {
-    calculatePlygonBbox(polygon);
-}
-```
-
-## <span style="color:#802548">_interface_</span>
-- interface는 중복을 제거하는 데 있어서도 꽤나 중요하다.
-```js
-function distance(a: {x: number, y: number} , b: {x: number, y: number}) {
-    return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
-}
-```
-
-- 그냥 x, y보다는 강타입으로 묶을 수 있고, 이름을 부여할 수 있게 interface를 만든다.
-```js
-interface Point2D {
+interface Vector3D {
     x: number,
-    y: number
+    y: number,
+    z: number
 }
-function distance(a:Point2D, b:Point2D) {}
+
+function calculateLengthL1(v: Vector3D) {
+    let length = 0;
+    for (const axis of Object.keys(v)) {
+        const coord = v[axis]; //Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Vector3D'.
+                                //No index signature with a parameter of type 'string' was found on type 'Vector3D'.
+        length +=Math.abs(coord);
+    }
+    return length;
+}
+
 ```
 
-- 만약 몇 개의 property는 optional 하게 받고 싶다면, 해당 property를 optional로 만들 수도 있지만, interface의 extends를 활용할 수도 있다.
-- PersonWithBirthDate는 firstName, lastName, birth 3개를 갖게 된다.
+- 해당 상황을 회피하기 위해서 index signiture를 집어넣을 수 있다.
+- 그러나 그렇게 되면 아무 key나 들어가도 상관없게 된다.
 
 ```js
-interface Person {
-    firstName: string;
-    lastName: string;
+interface Vector3D {
+    x: number,
+    y: number,
+    z: number
+    [key: string]: number,
 }
 
-interface PersonWithBirthDate extends Person {
-    birth: date
+function calculateLengthL1(v: Vector3D) {
+    let length = 0;
+    for (const axis of Object.keys(v)) {
+        const coord = v[axis];
+        length +=Math.abs(coord);
+    }
+    return length;
 }
+
+calculateLengthL1({x:123,y:11,z:14,abc:123}) //abc는 유효한 key가 아니지만.. type check 통과
 ```
 
-- 이를 type으로 보여주면 아래와 같다.
-```js
-type PersonWithBirthDate = Person & {birth: Date};
-```
-
-- interface를 사용하면 더 알아보기 쉽게 만들 수 있다.
-- people의 return type은 {name:'string'}[]이다. 이게 뭔지 이해하기 어렵다.
-```js
-const people = ['alice','bob','jan'].map((name) => ({name}));
-```
-
-- interface를 사용해서 바꿔보자.
-- name이란 element가 아니라 map()의 return type을 Person으로 해줘야 한다.
-```js
-interface Person {
-    name: string    
-}
-
-const people = ['alice','bob','jan'].map((name) => {
-    const person: Person = {name};
-    return person;
-});
-
-const people = ['alice','bob','jan'].map((name: Person) => {name}); //error
-
-const people = ['alice','bob','jan'].map((name) : Person => ({name})); //ok
-```
-
-- interface에 필수 속성이 추가됐을 때, 자동으로 오류가 나게 하는 방법이 있다.
-- 아래와 같이 규정된 interface와 변수가 있다.
+- 이 경우에는 element 요소를 순회할 게 아니라 직접 필요한 것만 더해줘야 한다.
 
 ```js
-interface ScatterProps {
-    x: number[];
-    y: number[];
-    onClick (x: number, y: number, index:number) => void;
+interface Vector3D {
+    x: number,
+    y: number,
+    z: number
 }
 
-const REQUIRES_UPDATES = {
-    x: true,
-    y: true,
-    onClick: false
-}
-```
-
-- 여기서 interface에 doubleClick 속성을 추가했다.
-- 만약 REQUIRES_UPDATES 변수가 ScatterProps의 interface key를 가져오려했다면, 의도한 대로 동작하지 않는다.
-- 현재 onDoubleClick이 추가됐지만, 변수에는 추가되지 않았다. 그래도 오류가 없다. 변수는 ScatterProps type이 아니기 때문이다. 
-- 주석으로 어디어디에 수정해야한다고 알려줄 수도 있지만, 매우 나쁜 방법이다.
-```js
-interface ScatterProps {
-    x: number[];
-    y: number[];
-    onClick (x: number, y: number, index:number) => void;
-    // 더 추가되면 REQUIRES_UPDATES 변수 수정 요구됨.
-    onDoubleClick: ~~
+function calculateLengthL1(v: Vector3D) {
+    return Math.abs(v.x) + Math.abs(v.y) + Math.abs(v.z);
 }
 
-const REQUIRES_UPDATES= {
-     x: true,
-    y: true,
-    onClick: false
-    //error 나지 않음.
-}
-```
-
-- 그렇다고 ScatterProps type으로 줄 수도 없다. 결과값들은 boolean으로 받고 싶기 때문이다. 
-- 그럴 때 아래와 같이 keyof를 사용할 수 있다.
-
-```js
-const REQUIRES_UPDATES:{[k in keyof ScatterPropㄵ3s]: boolean} = {
-    x: true,
-    y: true,
-    onClick: false,
-    //Property 'onDoubleClick' is missing in type 
+//destructure
+function calculateLengthL1({x, y, z}: Vector3D) {
+    return Math.abs(x) + Math.abs(y) + Math.abs(z);
 }
 
+// 이건 안 됨. 타입을 줘버렸기에 Vector3D가 아니게 됨. 따라서 Vector3D type이 아니므로 compile check 시 오류가 남.
+function calculateLengthL1({x: number, y: number, z: number}: Vector3D) {
+    return Math.abs(x) + Math.abs(y) + Math.abs(z);
+}
 ```
 
 
 ## <span style="color:#802548">_특정 interface pattern_</span>
-- 기존의 interface에서 일부 property만 가져오고 싶을 떄 사용하는 pattern이다.
+- Record, Pick, Partial 라는 interface 패턴이 있다.
+- 기존의 interface을 활용해서 임시로 만드는 interface들이다.
+
 - 보통의 interface를 아래와 같이 쓴다.
 ```js
 interface State {
@@ -723,16 +413,19 @@ interface OptionsUpdate {
 
 - 하지만 이건 역시 type mapping이 안 된다.
 - 자동으로 받아오게 해보자.
+
 ```js
 type OptionsUpdate = {[k in keyof Options]?: Options[k]};
 ```
 
 - 이걸 아래와 같이 추상화할 수 있다.
+
 ```js
 type Partial<T> = {[P in keyof T]?: T[P]};
 ```
 
 - 이를 이용해서 아래와 같이 쓸 수 있다.
+
 ```js
 type OptinosUpdate = Partial<Options>
 ```
@@ -741,6 +434,7 @@ type OptinosUpdate = Partial<Options>
 - 특정한 값으로만 이뤄지는 type을 손쉽게 만드는 방법도 있다.
 - 바로 Record다.
 - 아래와 같이 interface를 만들었는데, 이게 일회용이다.
+
 ```js
 interface point3D {
     x: number;
@@ -750,20 +444,24 @@ interface point3D {
 ```
 
 - 그럼 더 간단하게 Record를 쓰면 된다.
+
 ```js
 type Point3D = Record<'x' |'y'|'z',number>;
 ```
 
 - Record 패턴은 아래와 같다.
 - 모든 key가 들어갈 수 있지만, 각 key의 type은 하나로 고정이다.
+
 ```js
 type Record<K extends keyof any, T> = {
     [P in K]: T;
 };
 ```
 
-- 만약 함수의 returnType을 명명된 type으로 하고 싶다면?
+- 위의 Record, Pick, Optional은 기존의 interface를 활용했다.
+- 그것과 별개로, 만약 함수의 returnType을 명명된 type으로 하고 싶다면?
 - 직접 쓸 수도 있다. 아래와 같이 api 정보를 모두 알아와야 한다.
+
 ```js
 function getUserInfo(userId: string) {
 
@@ -785,54 +483,24 @@ type getUserInfo = {
 
 - 하지만 이건 너무 노가다다. 
 - 노가다 대신 ReturnType을 쓸 수 있다.
+
 ```js
 type getUserInfo = ReturnType<typeof getUserInfo>;
 ```
 
 - ReturnType은 아래와 같다. 
 - parameter는 아무거나 받고, return type도 아무거나 받을 수 있다.
+
 ```js
 type ReturnType<T extends (...args: any) => any> = T extends (...args: any) => infer R ? R : any;
 ```
 
-## <span style="color:#802548">_타입 추론 차이- let과 const_</span>
-- const의 경우, let보다 더 정밀하게 type을 추론한다.
-- 값이 바뀔 수 없기 때문이다.
-```js
-let x ='x'; //string type
-const x = 'x'; // 'x' type
-```
-
-- 이는 강점이 될 수도 있지만, 너무 엄격한 type checking은 방해가 될 때도 있다.
-- 배열은 (string | number)[]로 타입이 check되는데, tuple을 쓰려고 의도했다.
-```js
-const mixed = ['1',2];
-```
-
-- 그럴 때 명시적 type 선언을 해주자.
-```js
-const x: string = 'x';
-
-const mixed: [string, number] = ['1',2];
-```
-
-- 물론 명시적 type을 남발하는 게 좋은 것은 아니다.
-- 그런 코드가 많을수록 refactoring이 어려워진다.
-- typescript의 자동추론에 맡기는 게 좋다.
-
-- 객체의 경우에는 as const를 활용할 수 있다.
-- as const를 쓰면 key-value 조차 절대 바뀌지 않는 상수가 된다.
-```js
-const v3 = {
-    x:1,
-    y:2
-}
-```
 
 ## <span style="color:#802548">_객체의 타입형성- object_</span>
 - js와 달리 ts는 객체를 한꺼번에 만들어야 한다.
 - 그 이유는 ts는 처음 객체를 만들 때 type을 결정하는 경우가 대다수기 때문이다.
 - 나중에 property를 동적으로 추가하면 안 된다.
+
 ```js
 const abc = {};
 abc.x = 'y'; //error. abc는 {} type이기 때문에 property를 추가할 수 없다.
@@ -867,6 +535,7 @@ president: {
 ```
 
 - 만약 optional property가 되길 원했다면 아래와 같이 helper 함수를 써야 한다.
+
 ```js
 function addOptional<T extends object, U extends object>(a: T, b: U | null): T & Partial<U> {
     return {...a, ...b}
@@ -881,6 +550,7 @@ const president = addOptional(
 ```
 
 - union type이 아니라 optional property를 가진 type으로 나온다.
+
 ```
 president {
     middle?: string
@@ -889,41 +559,11 @@ president {
 }
 ```
 
-## <span style="color:#802548">_객체의 타입형성- function_</span>
-- 함수의 returnType을 명시해두면, 호출된 곳이 아니라, 함수가 정의된 곳에서 오류가 난다.
-- 그럼 오류를 잡기가 좋다.
 
-- 아래는 return type을 명시하지 않았을 때다.
-- number 형식에 then 속성이 없습니다라는 오류가 뜬다.
-- 함수를 호출한 곳에 알아먹기 어려운 오류가 뜬다. 
-
-
-```js
-function getQuote(ticker: string) {
-    .
-    .
-    .
-    return cache[ticker]
-}
-getQuote('MSFT').then(consiedBuying); //number 형식에 then 속성이 없습니다
-```
-
-- 그럼 return type을 줘보자.
-- 그러자 이제 제대로 표시된다.
-- number 형식은 Promise(number)형식에 할당 불가능하다라는 오류가 정의부에서 뜬다.
-```js
-function getQuote(ticker: string) : Promise<number>{
-    .
-    .
-    .
-
-    return cahce[ticker]; // number 형식은 Promise<number>형식에 할당 불가능하다.
-}
-```
-
-## <span style="color:#802548">_객체의 타입 판별 함수 만들기_</span>
+## <span style="color:#802548">_type guard 함수 만들기_</span>
 - type을 판별하는 함수를 도입할 수 있다.
 - 아래와 같은 형태다.
+
 ```js
 function isCertainType(parameter: wantedType): parameter is wantedType {
     return must-have property in parameter; //무조건 boolean return
@@ -931,7 +571,6 @@ function isCertainType(parameter: wantedType): parameter is wantedType {
 ```
 
 - 실제 예시는 아래와 같다.
-
 
 ```js
 function isInputElement(el: HTMLElement): el is HTMLInputElment {
@@ -948,6 +587,7 @@ function getElementContent(el: HTMLElement) {
 
 - 이같은 type guard 함수를 사용하면, 고차함수에서도 undefined를 거를 수 있다.
 - 아래처럼 filter 안에서 !== undefined 조건절로는 type이 string[]로 만들 수 없다.
+
 ```js
 const jackson5 = ['Jackie', 'Tito', 'Jermnire','marion','Michael'];
 const members = ['Janet', 'Michael'].map(who => jackson5.find(n => n === who)); // 이 경우 members의 type은 (string | undefined)[]
@@ -955,6 +595,7 @@ const filteredMembers = ['Janet', 'Michael'].map(who => jackson5.find(n => n ===
 ```
 
 - 아래와 같은 type guard 함수를 넣어줘야 한다.
+
 ```js
 function isDefined<T>(x: T | undefined): x is T {
     return x !== undefined
@@ -968,6 +609,7 @@ const filteredMembers = ['Janet', 'Michael'].map(who => jackson5.find(n => n ===
 - 어느 경우에도 필요한 값 같은 경우도 따로 변수를 두지 않고 배열, 객체로 포괄해서 만들자.
 - max가 없을 때 if문을 만드는 것을 까먹고 넣지 않았다.
 - 그러자 undefined 오류가 뜬다.
+
 ```js
 function extent(nums: number[]) {
     let min, max;
@@ -990,6 +632,7 @@ const span = max - min; //max is possibly undefined
 
 
 - 그걸 아래와 같이 배열로 바꿔주자.
+
 ```js
 function extent(nums: number[]) {
     let result: number[] | null = null;
@@ -1009,6 +652,7 @@ const span = max - min;
 
 - 객체도 마찬가지다.
 - 아래와 같이 birth의 경우 place와 date를 받으려고 한다.
+
 ```js
 interface Person {
     name: string;
@@ -1039,6 +683,7 @@ cosnt alanT: Person = {
 
 - 만약 기존 interface를 수정할 수 없는 환경이라면?
 - 잘게 쪼개주고 union type으로 만들어야 한다.
+
 ```js
 interface Name {
     name: string;
@@ -1071,7 +716,6 @@ interface State {
 ```
 
 - 위의 interface에는 아래와 같은 함수가 나올 수 밖에 없다.
-
 
 ```js
 function rednerPage(state: State) {
@@ -1107,7 +751,6 @@ async function changePage(state: State, newPage: string) {
     - 새 페이지에 오류가 뜰 수도 있다. 아니면
     - 응답이 오는 순서에 따라 두번쨰 페이지가 아닌 첫번쨰 페이지로 전환될 수 있다
 - 그럼 이제 type을 유효하게 나눠보자.
-
 
 ```js
 interface RequestPending {
@@ -1160,6 +803,7 @@ async function changePage(state: State, newPage: string) {
 
 - 또 다른 예시를 들어보자.
 - 아래처럼 union을 합친 interface를 만들었다면, 뭔가 type 설계가 잘못 된 것이다.
+
 ```js
 interface Layer {
     layout: FillLayout | LineLayout | PointLayout;
@@ -1168,6 +812,7 @@ interface Layer {
 ```
 
 - 여러 interface의 union으로 type을 지정해야 한다.
+
 ```js
 interface FillLayer {
     layout: FillLayout;
@@ -1185,6 +830,7 @@ type Layer = FillLayer | LineLayer | PointLayer;
 ```
 
 - 만약 runtime에서도 interface 정보를 활용하고 싶다면 tagged union으로 만들면 된다.
+
 ```js
 interface FillLayer {
     kind: 'fill';
@@ -1218,9 +864,9 @@ function drawLayer(layer: Layer) {
 
 ```js
 interface LngLat {
-      lng: number;
-      lat: number;
-    }
+    lng: number;
+    lat: number;
+}
 
 type LngLatLike = LngLat | {lon: number; lat: number; } | [number, number];
 
@@ -1249,6 +895,7 @@ interface CamerOptions {
 ## <span style="color:#802548">_좋은 type- string 보다 구체적인 type을 사용하자._</span>
 - string type은 어떤 값이 들어올 지 모르는 문자열에 대해서만 활용하자.
 - 만약 들어올 값이 정해져 있다면, literal type을 활용해 구체화 하자.
+
 ```js
 interface Album {
     artist: string;
@@ -1282,6 +929,7 @@ const album: Album = {
 
 - 함수에 특히 parameter를 string으로 주는 것은 좋지 않다.
 - 아래와 같은 함수가 있다고 해보자.
+
 ```js
 function pluck(records, key) {
     records.map(r => r[key])
@@ -1289,6 +937,7 @@ function pluck(records, key) {
 ```
 
 - 해당 함수를 아래와 같이 바꿀 수있다.
+
 ```js
 function pluck(records: any[], key: string): any[] {
     return records.map(r => r[key]);
@@ -1300,6 +949,7 @@ function pluck(records: any[], key: string): any[] {
 - T[keyof T]면 T[string], T[Date], T[RecordingType]이 가능하다.
 - 이중 T[string]의 경우, 해당하는 key가 없어 undefined를 return할 수 있다. 
 - 따라서 (string | undefined)[]로 나온 것이다.
+
 ```js
 function pluck<T>(records: T[], key: keyof T): T[keyof T] {
     return records.map(r => r[key])
@@ -1312,6 +962,7 @@ const releaseDates = pluck(albums, 'releaseDate')// type이 (string | undefined)
 - 그럼 K는 절대로 아무런 문자열 key를 받을 수 없게 된다.
 - 무조건 T interface 안에 있는 key를 받아오게 되므로 undefined는 사라진다.
 - 더불어 key가 잘못되면 오류도 잡을 수 있다.
+
 ```js
 function pluck<T, K extends keyof T>(records: T[], key: K): T[K][] {
     return records.map(r => r[key])
@@ -1324,6 +975,7 @@ pluck(albums, 'recordingDate'); //error. recordingDate property is not a type of
 ## <span style="color:#802548">_any 지양- parameter로서 any를 최소화 적용하라_</span>
 - any는 기본적으로 최소화해야 한다.
 - 아래처럼 x에 any type으로 선언하면 안 된다.
+
 ```js
 function f1() {
     const x: any = expresssionReturningFoo();
@@ -1332,6 +984,7 @@ function f1() {
 ```
 
 - 호출되는 parameter를 직접 넣을 때 any로 바꿔줘야 한다.
+
 ```js
 function f2() {
     const x = expressionReturningFoo();
@@ -1341,6 +994,7 @@ function f2() {
 
 - 객체도 마찬가지다.
 - 아래같이 전체 객체를 any로 감싸면 type정보가 다 사라진다.
+
 ```js
 const config: Config = {
     a: 1,
@@ -1352,6 +1006,7 @@ const config: Config = {
 ```
 
 - 모르는 부분만 any 단언을 해준다.
+
 ```js
 const config: Config = {
     a: 1,
@@ -1366,6 +1021,7 @@ const config: Config = {
   - 그냥 any가 아니라 any[]와 같이 써주자.
 - any로 쓰면 length를 return할 때 number가 아니라 any type이 된다.
     - any[]로 쓰면 length를 return할 때 number type이 된다.
+
 ```js
 function getLengthBad(array: any) {
     return array.length; //any type
@@ -1382,6 +1038,7 @@ function getLengthBad(array: any[]) {
 
 - 객체를 정의할 때도 마차간지다.
 - 만약 value를 모른다면, 그냥 any로 쓰지 말자.
+
 ```js
 function hasTwelveLetterKey(o: any) {
     for (const key in o) {
@@ -1394,6 +1051,7 @@ function hasTwelveLetterKey(o: any) {
 ```
 
 - 아래와 같이 object 형태를 명시해주자.
+
 ```js
 function hasTwelveLetterKey(o: {[key: string]: any}) {
     for (const key in o) {
@@ -1408,6 +1066,7 @@ function hasTwelveLetterKey(o: {[key: string]: any}) {
 
 - 위의 type은 object와 동일하다.
 - 다만 object type으로는 속성에 접근할 수가 없다.
+
 ```js
 function hasTwelveLetterKey(o: object) {
     for (const key in o) {
@@ -1421,6 +1080,7 @@ function hasTwelveLetterKey(o: object) {
 ```
 
 - 객체로 속성에 접근할 필요가 있다면, 위처럼 {[key: string]: any}나 unknown을 쓰자.
+
 ```js
 function hasTwelveLetterKey(o: unknown) {
     for (const key in o) {
@@ -1438,6 +1098,7 @@ function hasTwelveLetterKey(o: unknown) {
 - any를 쓰면 잉여 속성 체크가 발동하지 않는다.
   - 그러니 모른다면 차라리 unknown으로 하자.
   - 그럼 타입 단언으로 원하는 객체로 바꿀 수 있다.
+
 ```js
 function parseYAML(yaml: string): any {
     .....
@@ -1455,6 +1116,7 @@ alert(book.title);  //type check 통과. 그러나 runtime에서 error 뜸.
 
 
 - 그럼 호출하는 쪽에서 원하는 타입으로 바꿔줄 수 있다.
+
 ```js
 interface Book {
     name: string;
@@ -1471,6 +1133,7 @@ alert(book.title);  //error. Book 형식에는 title 속성이 없습니다.
 - generics를 이용하는 경우도 있다.
 - 하지만 호출하는 쪽이 아니라 정의하는 쪽에서 강제하는 것이라 쓰지 말자
 - 사용자가 원하는 객체로 바꿀 수 있게 해주는 쪽이 바람직하다.
+
 ```js
 function safeParseYAML<T>(yaml: string): T {
     return parseYAML(yaml);
@@ -1479,6 +1142,7 @@ function safeParseYAML<T>(yaml: string): T {
 
 - parameter를 unknown으로 받을 때 타입을 고정시키는 것은 꼭 타입 단언만 있지 않다.
 - 아래와 같이 helper, instanceof를 사용할 수도 있다.
+
 ```js
 function isBook(val: unknown): val is Book {
     return (
@@ -1504,6 +1168,7 @@ function processValue(val: unknonw) {
 - 변수를 암시적 any로 쓰는 것도 매우 안 좋다.
 - 아래같이 쓰면 any[]이 된다.
 - 그런데 값을 넣으면 type이 계속 확장된다.
+
 ```js
 const array = [];   //any[] type
 array.push('a');    //string[] type
@@ -1512,6 +1177,7 @@ array.push(1);      //(string | number)[] type
 
 
 - 이건 매우 좋지 않다. 배열을 사용할 때는 처음부터 type을 명시하고 사용하자.
+
 ```js
 const list: number[] = [];
 list.push('11')     //error.  rgument of type 'string' is not assignable to parameter of type 'number'.
@@ -1519,6 +1185,7 @@ list.push('11')     //error.  rgument of type 'string' is not assignable to para
 
 
 - 분기문에서도 암시적 any의 진화가 일어난다.
+
 ```js
 let val = null; // any type
 try {
@@ -1531,6 +1198,7 @@ val; //number | undefined
 ```
 
 - 따라서 선언만 할 때도 type을 명시하자.
+
 ```js
 let val: number;    // number;
 try {
@@ -1543,6 +1211,7 @@ val;                // number
 
 ## <span style="color:#802548">_any 지양- any가 쓰인 곳 찾아내기_</span>
 - any가 project의 어디에 쓰였는지 알 수 있는 방법으로 type-coverage package가 있다.
+
 ```
 npm i type-coverage
 npx type-coverage --detail
@@ -1552,6 +1221,7 @@ npx type-coverage --detail
 
 ## <span style="color:#802548">_function parameter this binding_</span>
 - class 내에서 this를 쓰는 경우, 아래와 같이 보통 bind를 쓴다.
+
 ```js
 class ResetButton {
     constructor() {
@@ -1568,22 +1238,6 @@ class ResetButton {
 }
 ```
 
-- 아니면 화살표함수를 쓴다.
-```js
-class ResetButton {
-    constructor() {
-        this.onClick = this.onClick(this);
-    }
-
-    render() {
-        return makeButton({text: 'Reset', onClick: this.onClick});
-    }
-
-    onClick = () => {
-        alert(`Reset ${this}`);
-    }
-}
-```
 
 - 아니면 좀 옛날 방식으론 대리변수를 쓴다.
 ```js
@@ -1602,6 +1256,7 @@ class ResetButton {
 ```
 
 - 그런데 parameter의 경우가 문제다. 여기서 this를 쓰려하면 문제가 발생한다.
+
 ```js
 function addKeyListener(el: HTMLElement, fn: (e: KeyboardEvent) => void) {
     el.addEventListener('keydown', e => {
@@ -1618,6 +1273,7 @@ addKeyListener(element,function(e) {
 - 그 경우, this를 함수 정의에 포함시키고, call로 부른다. 
 - call()은 this를 첫번째 parameter로 받는다. 여기서 this의 type을 지정해준다.
 - 또한 callback함수의 첫번쨰 parameter와 원함수의 첫번쨰 parameter의 type은 동일해야 한다.
+
 ```js
 function addKeyListener(el: HTMLElement, fn: (this: HTMLElement, e: KeyboardEvent) => void) {
     el.addEventListener('keydown', e => {
@@ -1633,6 +1289,7 @@ addKeyListener(element,function(e) {
 - 이 경우, 화살표 함수를 사용하기 어렵다는 단점이 있다.
 - listener들은 뭔가 return 하는 경우가 없어 void인데, 화살표함수는 상위 컨텍스트에 this를 binding한다.
 - 그런데 innerHTML이 상위 컨텍스트에 없기 때문에 오류가 난다.
+
 ```js
 function addKeyListener(el: HTMLElement, fn: (this: HTMLElement, e: KeyboardEvent) => void) {
     el.addEventListener('keydown', e => {
@@ -1688,58 +1345,137 @@ const ArrowKeys = {
 } as const
 ```
 
+## <span style="color:#802548">object형 conditional statement</span>
+- 만약 요구사항이 계속 바뀌어 추가될 거 같다면 object로 변경하여 관리할 수도 있다.
+- 그럼 if문이나 switch문을 늘리지 않고 객체의 property만 늘려나가면 된다.
 
-## <span style="color:#802548">_try catch 시 error 다루기_</span>
+```javascript
+function getUserType(type){
+	const USER_TYPE = {
+		ADMIN: '관리자',
+		INSTRUCTOR: '강사',
+		STUDENT: '수강생'
+	}
 
-- 에러를 다룰 때 error는 unknown type이다.
-- if문으로 걸러도 {} type이 되기 때문에 property가 없다.
+	return USER_TYPE[type] ?? '해당 없음';
+}
+
+const userType = getUserType("ADMIN");
+```
+
+- 객체도 따로 파일로 빼서 관리한다면 전체 소스코드를 수정할 필요 없이 해당 객체의 property만 수정하면 전체 코드에 적용된다.
+
+
+```javascript
+import USER_TYPE from './constants./...'; //USER_TYPE을 바꿔주면 import하는 모든 js에 적용
+function getUserType(type){
+	return USER_TYPE[type] ?? USER_TYPE.UN
+}
+```
+
+- if문을 제거해보자.
 
 ```js
-try {
-     
-} catch( error) {
-    if (error) {
-        error.message; //property message does not exist on type '{}'
+function executePayment(paymentType) {
+    if (paymentType === "KAKAO_PAYMENT") {
+        return '카카오 결제 처리';
+    } else if (paymentType === "NAVER_PAYMENT") {
+        return '네이버 결제 처리';
+    } else if (paymentType === "COUPANG_PAYMENT") {
+        return '쿠팡 결제 처리';
+    } else if (paymentType === "PAYCO_PAYMENT") {
+        return '페이코 결제 처리';
+    } else if (paymentType === "APPLE_PAYMENT") {
+        return '애플 결제 처리'
     }
 }
 ```
 
-
-- error를 if문에서 Error로 바꿔도 어차피 까먹는다.
-
+- 복잡한 else if 문을 아래처럼 바꿔준다.
 ```js
-try {
+const paymentMap = {
+    "KAKAO_PAYMENT" : "카카오 결제처리",
+    "NAVER_PAYMENT" : "쿠팡 결제 처리",
+    "PAYCO_PATYMENT" : "페이코 결제 처리",
+    "APPLE_PAYMENT" : '애플 결제 처리'
+}
 
-} catch (error) {
-    if( error as Error) {
-        error.message; //error is of type 'unknown'
-    }
+function executePayment(paymentType) {
+    return paymentType[paymentType]
 }
 ```
 
-
-- 그럴 땐 변수로 만들어 놔야 한다.
-- type assertion은 변수에 적용해야만 타입이 assertion한 type으로 유지된다.
+- 함수를 실행한다고 해도 동일하게 적용가능하다.
 
 ```js
-try {
-
-} catch( error) {
-    const err = error as Error;
-    if (err) {
-        err.message; //no error
+function executePayment(paymentType) {
+    if (paymentType === "KAKAO_PAYMENT") {
+        payOnKakao();
+    } else if (paymentType === "NAVER_PAYMENT") {
+        sendLog();
+        payOnNaver();
+    } else if (paymentType === "COUPANG_PAYMENT") {
+        sendLog();
+        payOnCouPang();
+    } else if (paymentType === "PAYCO_PAYMENT") {
+        sendLog();
+        payOnPayco();
+    } else if (paymentType === "APPLE_PAYMENT") {
+        sendLog();
+        payOnApple();
     }
 }
+executePayment("APPLE_PAYMENT");
 ```
 
-- as를 안 쓰는 게 더 좋다.
+- 아래처럼 사용하면 된다.
 
 ```js
-try {
-
-} catch ( error) {
-    if ( error instanceof Error) {
-        error.message;
-    }
+// 1. 결제 맵의 구조를 정의하는 interface
+interface PaymentMap {
+    KAKAO_PAYMENT: () => void;
+    NAVER_PAYMENT: () => void;
+    COUPANG_PAYMENT: () => void;
+    PAYCO_PAYMENT: () => void;
+    APPLE_PAYMENT: () => void;
 }
+
+// 2. 인터페이스를 적용한 실제 결제 매핑 객체
+const payment_map: PaymentMap = {
+    KAKAO_PAYMENT() {
+        payOnKakao();
+    },
+    NAVER_PAYMENT() {
+        sendLog();
+        payOnNaver();
+    },
+    COUPANG_PAYMENT() {
+        sendLog();
+        payOnCouPang();  
+    }, 
+    PAYCO_PAYMENT() {
+        sendLog();
+        payOnPayco();
+    }, 
+    APPLE_PAYMENT() {
+        sendLog();
+        payOnApple();
+    }
+};
+
+// 3. keyof를 사용하여 PaymentMap의 key들만 허용하는 타입 정의
+// 'KAKAO_PAYMENT' | 'NAVER_PAYMENT' | ... 타입을 가지게 됩니다.
+type PaymentType = keyof PaymentMap;
+
+// 4. 파라미터 타입을 string 대신 PaymentType으로 명시
+function executePayment(paymentType: PaymentType) {
+    // 기존 코드의 오타수정: paymentMap -> payment_map
+    payment_map[paymentType](); 
+}
+
+// 올바른 호출 (컴파일 성공)
+executePayment('KAKAO_PAYMENT');
+
+// 잘못된 호출 (컴파일 에러 발생: 'SAMSUNG_PAYMENT' 형식의 인수는 'PaymentType' 형식의 매개변수에 할당될 수 없습니다.)
+// executePayment('SAMSUNG_PAYMENT');
 ```

@@ -1,172 +1,3 @@
-## <span style="color:#802548">property manipulation prevention</span>
-- 생성 이후에 객체의 property 조작을 막으려면 특정한 method를 써야한다.
-- 보통 객체조작이 불가능하게 바꿀 때는 lodash library의 deepFreeze()를 사용하는 것이 추천된다.
-- 직접 구현도 가능하다. 아래는 인터넷에서 가져온 deepFreeze의 구현 사례다. 
-- 구현에 쓰인 method가 궁금하다면 JS의 prototype에 대해서 알아보도록 하자.
-
-```javascript
-function deepFreeze(target) {
-  if (target === null || typeof target !== 'object') {
-    return;
-  }
-  Object.keys(target).forEach((key) => {
-    Object.defineProperty(target, key, {
-      value: target[key],
-      writable: false,
-      enumerable: true,
-    });
-    deepFreeze(target[key]);
-  });
-
-  Object.seal(target);
-}
-```
-
-- 객체의 property 조작을 막는 이유 중 하나는 enum처럼 활용하기 위해서이다.
-- 아래와 같이 얼려서 조작 불가능하게 만들어 enum으로 쓸 수 있다.
-
-- 그럼 too long이 console에 찍히는 것을 볼 수 있다.
-
-
-```javascript
-const BANNER_LENGTH = Object.freeze({
-    MIN: 1,
-	MAX: 5,
-});
-const bannerName       = "GENESIS"
-const bannerNameLength = bannerName.length;
-if (bannerNameLength > BANNER_LENGTH.MAX) {
-    console.log('too long')
-}
-```
-
-- typescript에서는 더 간단하게 만들 수 있다. 이 외에도 ts에서는 enum, const enum을 사용할 수 있다.
-
-```javascript
-const TICKET_PRICE = {
-  ADULT: 10_000,
-  CHILD: 5_000,
-  ELDER: 7_000,
-} as const;
-```
-- JS에서는 지원되지 않는다. Unexpected identifier 'as' error가 뜬다.
-
-
-## <span style="color:#802548">object형 conditional statement</span>
-- 만약 요구사항이 계속 바뀌어 추가될 거 같다면 object로 변경하여 관리할 수도 있다.
-- 그럼 if문이나 switch문을 늘리지 않고 객체의 property만 늘려나가면 된다.
-
-```javascript
-function getUserType(type){
-	const USER_TYPE = {
-		ADMIN: '관리자',
-		INSTRUCTOR: '강사',
-		STUDENT: '수강생'
-	}
-
-	return USER_TYPE[type] ?? '해당 없음';
-}
-
-const userType = getUserType("ADMIN");
-```
-
-- 객체도 따로 파일로 빼서 관리한다면 전체 소스코드를 수정할 필요 없이 해당 객체의 property만 수정하면 전체 코드에 적용된다.
-
-
-```javascript
-import USER_TYPE from './constants./...'; //USER_TYPE을 바꿔주면 import하는 모든 js에 적용
-function getUserType(type){
-	return USER_TYPE[type] ?? USER_TYPE.UN
-}
-```
-
-- if문을 제거해보자.
-
-```js
-function executePayment(paymentType) {
-    if (paymentType === "KAKAO_PAYMENT") {
-        return '카카오 결제 처리';
-    } else if (paymentType === "NAVER_PAYMENT") {
-        return '네이버 결제 처리';
-    } else if (paymentType === "COUPANG_PAYMENT") {
-        return '쿠팡 결제 처리';
-    } else if (paymentType === "PAYCO_PAYMENT") {
-        return '페이코 결제 처리';
-    } else if (paymentType === "APPLE_PAYMENT") {
-        return '애플 결제 처리'
-    }
-}
-```
-
-- 복잡한 else if 문을 아래처럼 바꿔준다.
-```js
-const paymentMap = {
-    "KAKAO_PAYMENT" : "카카오 결제처리",
-    "NAVER_PAYMENT" : "쿠팡 결제 처리",
-    "PAYCO_PATYMENT" : "페이코 결제 처리",
-    "APPLE_PAYMENT" : '애플 결제 처리'
-}
-
-function executePayment(paymentType) {
-    return paymentType[paymentType]
-}
-```
-
-- 함수를 실행한다고 해도 동일하게 적용가능하다.
-
-```js
-function executePayment(paymentType) {
-    if (paymentType === "KAKAO_PAYMENT") {
-        payOnKakao();
-    } else if (paymentType === "NAVER_PAYMENT") {
-        sendLog();
-        payOnNaver();
-    } else if (paymentType === "COUPANG_PAYMENT") {
-        sendLog();
-        payOnCouPang();
-    } else if (paymentType === "PAYCO_PAYMENT") {
-        sendLog();
-        payOnPayco();
-    } else if (paymentType === "APPLE_PAYMENT") {
-        sendLog();
-        payOnApple();
-    }
-}
-executePayment("APPLE_PAYMENT");
-```
-
-- 아래처럼 사용하면 된다.
-
-```js
-const payment_map = {
-    KAKAO_PAYMENT() {
-        payOnKakao();
-    },
-    NAVER_PAYMENT() {
-        sendLog();
-        payOnNaver();
-    },
-    COUPANG_PAYMENT() {
-        sendLog();
-        payOnCouPang();  
-    }, 
-    PAYCO_PAYMENT() {
-        sendLog();
-        payOnPayco();
-    }, 
-    APPLE_PAYMENT() {
-        sendLog();
-        payOnApple();
-    }
-}
-
-function executePayment(paymentType) {
-    paymentMap[paymentType](); //반환이 함수니까 함수를 호출한 것.
-}
-
-executePayment('KAKAO_PAYMENT');
-```
-
 ## <span style="color:#802548">고차함수로 loop statement 대체하기</span>
 - 반복분에는 for문과 while문이 있다.
 - 자주 쓰게 되는 것은 for문이다.
@@ -264,7 +95,6 @@ for (let index = 0; index < validGrades.length; index++) {
 
 - 고차함수를 활용하자.
 
-
 ```js
 const validGrades = [];
 const positiveGrades = grades.filter( el => el >= 0 && e. <=100);
@@ -274,17 +104,16 @@ newgrades.foreach( el => console.log(el));
 
 - method chaining을 사용해보자.
 
-
 ```js
 const validGrades = grades.filter( el => el >= 0 && e. <=100);
-                            .map( el => Math.floor(el) + '점'); // 이걸 2개의 map으로 나눴다는 게 중요
+                            .map( el => Math.floor(el) + '점'); 
                             .foreach( el => console.log(el));
 ```
 
 
 - 이제는 로직에 이름을 부여했다.
 - 로직에 이름을 주니 이해하기가 쉽다.
-
+- 이해하기 쉽게 SRP를 따라서 map도 2개로 나눠준다.
 
 ```js
 const validScore = el => el >= 0 && e. <=100;
@@ -293,14 +122,38 @@ const plusSuffix = el => el + '점';
 const print = el => console.log(el);
 
 const validGrades = grades.filter(validScore)
-                            .map(toInteger)
+                            .map(toInteger) // 이걸 2개의 map으로 나눴다는 게 중요
                             .map(plusSuffix)
                             .foreach(print);
 ```
 
 
+# <span style="color:#802548">_고차함수로 event parameter 대체하기_</span>
+- 이를 이용하면 event를 이용한 handler를 쓸 때도 parameter를 번잡하게 쓸 필요가 없다.
+- 아래는 일반 함수 정의다.
 
-# <span style="color:#802548">_비동기는 foreach에서 쓰면 안 된다._</span>
+```js
+const handler = (e,id) => {
+    console.log(`${id} 클릭함 ${e.offsetX}`);
+}
+
+document.addEventListener('click',(e) => handler(e,'frongt'));
+```
+
+
+- 잃반 함수 정의가 아니라, 함수를 return하는 함수를 정의한다.
+
+
+```js
+const handler = id => e => {
+     console.log(`${id} 클릭함 ${e.offsetX}`);
+}
+
+document.addEventListener('click', handler('frongt'));
+```
+
+
+# <span style="color:#802548">_fetch는 foreach에서 쓰면 안 된다._</span>
 - 같은 반복문이어도 foreach와 for of문은 결과가 다르다.
 - 아래 같이 for of 문을 쓰면 순서를 기다려 진행된다.
 
@@ -324,6 +177,7 @@ const urls = [1,2,5,10];
 2요청 끝
 */
 ```
+
 - 반면에 foreach를 쓰면 한꺼번에 병렬로 fetch가 실행된다.
 - map도 마찬가지다. 따라서 map과 foreach에서는 절대 비동기를 쓰면 안 된다.
 
@@ -671,7 +525,7 @@ async function notifyOrderSucccess(orderList) {
 }
 
 function orderCoffee(el, orderList) {
-    if(!el || Array.isArray(orderList)) { // early return
+    if(!el || !Array.isArray(orderList)) { // early return
         return;
     }
 
@@ -679,19 +533,47 @@ function orderCoffee(el, orderList) {
 }
 ```
 
+- Promise는 기본 아래와 같은 형태다.
+
+```js
+return new Promise((resolve, reject) => {
+    // 실행할 비동기 로직
+    if (성공) {
+        resolve(결과값); // 완료 알림
+    } else {
+        reject(에러값);  // 실패 알림
+    }
+});
+
+```
+
+- setTimeou의 resolve()도 사실은 안에서 비동기 로직이 수행된 뒤, resolve()를 호출하는 형태이므로 위의 로직과 동일하다.
+- 그게 setTimeout이라는 비동기 함수로 한 번 더 묶여있는 것만 다르다.
+
+```js
+// 가장 표준적인 기본 syntax
+return new Promise((resolve, reject) => {
+    // 1. 여기에 비동기 작업을 작성합니다.
+    setTimeout(() => {
+        // 2. 작업이 성공적으로 끝나면 resolve를 호출합니다.
+        resolve(); 
+    }, time);
+});
+```
+
 # <span style="color:#802548">_callback 함수는 함수 정의를 넣는 것이지, call하는 게 아니다._</span>
 - 왜 그냥 notifyOrderSucccess(orderList)는 안될까?
 - 아래의 구문은, 이미 만들어진 함수를 call하는 것이라 eventListener로 등록되는 데 그치지 않고 즉시 실행된다. 그래서 문제인 것이다.
 
 ```js
- el.addEventListener('click', notifyOrderSucccess(orderList))
+el.addEventListener('click', notifyOrderSucccess(orderList))
  ```
 
 - 내가 eventListenr에 주어야 하는 것은 함수의 선언식, 표현식이다. 이미 만들어진 함수가 아니다.
 - 즉 callback함수를 정의해줘야 하는 것이지, 이미 만들어진 함수를 호출하라는 게 아니다.
 
 ```js
- el.addEventListener('click', function() {
+el.addEventListener('click', function() {
     notifyOrderSucccess(orderList)
 });
 
@@ -721,96 +603,7 @@ el.addEventListener('click', notifyOrderSucccess()); //함수를 call했다. 이
 ```
 
 
-- 아래처럼 notifyOrderSucccess(parameter)를 바로 eventListener에 넣어주려면 아래와 같이 return을 함수로 하면 된다.
-
-```js
-function delay(time) { //setTimeout을 한줄로 간단하게 나눠주기 위한 함수..
-    return new Promise((resolve) => setTimeout(()=> resolve(),time)); // () => resolve()는 익명함수를 정의한 것과 동일하다. 다시말해 time만큼이 지나면 그냥 resolve()가 된다. 완료된다는 의미다.
-}
-
-const notifyOrderSucccess = async (orderList) => () => {
-    await delay(2000);
-    orderList.forEach((order) => document.querySelector('#log').textContent += `${order}가 완료됐습니다.<br/>`); // for문을 한줄로 줄이기 위한 고차함수
-}
-
-function orderCoffee(el, orderList) {
-    if(!el || Array.isArray(orderList)) { // early return
-        return;
-    }
-
-    el.addEventListener('click', notifyOrderSucccess(orderList)) //parameter를 전달해줄 때는 그냥 notifyOrderSuccess(orderList)로 전달해줄 수 없다. 그러면 함수가 바로 실행된다. 
-}
-```
-
-- 아래는 함수 선언 방식으로 짰을 때다. 해당 방식에서는 async를 notifyOrderSuccess에 넣으면 안되고, return할 function에 넣어야 한다.
-
-```js
-function delay(time) { //setTimeout을 한줄로 간단하게 나눠주기 위한 함수..
-    return new Promise((resolve) => setTimeout(()=> resolve(),time)); // () => resolve()는 익명함수를 정의한 것과 동일하다. 다시말해 time만큼이 지나면 그냥 resolve()가 된다. 완료된다는 의미다.
-}
-
-function notifyOrderSucccess(orderList) {
-
-    return async function() {
-        await delay(2000);
-        orderList.forEach((order) => document.querySelector('#log').textContent += `${order}가 완료됐습니다.<br/>`); // for문을 한줄로 줄이기 위한 고차함수
-    }
-    
-}
-
-function orderCoffee(el, orderList) {
-    if(!el || Array.isArray(orderList)) { // early return
-        return;
-    }
-
-    el.addEventListener('click', notifyOrderSucccess(orderList)) //parameter를 전달해줄 때는 그냥 notifyOrderSuccess(orderList)로 전달해줄 수 없다. 그러면 함수가 바로 실행된다. 
-}
-```
-
-# <span style="color:#802548">_함수를 return하는 화살표 함수_</span>
-- 이를 이용하면 event를 이용한 handler를 쓸 때도 parameter를 번잡하게 쓸 필요가 없다.
-- 아래는 일반 함수 정의다.
-
-```js
-const handler = (e,id) => {
-    console.log(`${id} 클릭함 ${e.offsetX}`);
-}
-
-document.addEventListener('click',(e) => handler(e,'frongt'));
-```
-
-
-- 잃반 함수 정의가 아니라, 함수를 return하는 함수를 정의한다.
-
-
-```js
-const handler = id => e => {
-     console.log(`${id} 클릭함 ${e.offsetX}`);
-}
-
-document.addEventListener('click', handler('frongt'));
-```
-
 # <span style="color:#802548">_배열이나 객체를 활용하자._</span>
-- 이 경우, 기본 값을 주는 게 재활용성에 방해가 될 수 있다.
-- 만약 다른 사람은 기본체를 바탕으로 하고 싶었다면 아래 함수를 활용할 수가 없다.
-
-```js
-function setPreferedFont(font) {
-    if (font) {
-        return font;
-    }
-
-    return Font.Arial;
-}
-
-function setPreferedFont(font) {
-    if (font) {
-        return font;
-    }
-}
-```
-
 - 지나치게 좁은 경우의 상정은 재사용성은 해친다.
 - 이미지를 하나만 return하고 싶어서 아래와 같이 if문을 넣었다.
 - 하지만 이후에 이미지를 여러개 return해야 한다면?
@@ -839,7 +632,7 @@ function getImages() {
 }
 ```
 
-# <span style="color:#802548">_기본값은 함부로 달면 안 된다._</span>
+# <span style="color:#802548">_기본값을 달기보다는 예외처리 함수를 만들자._</span>
 - 값이 없으면 null이나 error를 반환해야 한다.
 - age가 없는 경우 0으로 처리해보자.
 - 당장은 문제가 없지만 그 함수를 가지고 2차로 함수를 만들면 문제가 있다.
@@ -890,70 +683,4 @@ function getAvgAge(userList) {
 
     return averageAge /*sumOfAge / length 혹시 0이면 0으로 나눠 error가 나므로 그 처리를 위에서 해준다.*/ 
 }
-```
-
-
-
-
-
-
-
-
-# <span style="color:#802548">_strategy pattern_</span>
-- 전략이 바뀌어도 getDialogues()는 바뀌지 않아도 된다.
-
-```js
-const Units = {
-    캐리어() {
-        return 'Carrier has arrived'
-    },
-    다크템플러() {
-        return 'Adun Toridas'
-    },
-    커세어() {
-        return 'It is a good day to die!'
-    }
-}
-
-const getDialogues = (unitName) => {
-    return Units[unitName]();
-}
-```
-
-- 실제 예시로는 chart가 있다.
-- 도넛 차트, 꺾은선 차트 등...필요한 걸 골라야 할 것이다.
-- 그 때는 각각 차트를 만들 수도 있다.
-
-- 통합적으로 컨트롤이 안된다.
-
-
-```js
-const chart = new BarChart();
-chart.render(data);
-
-const char2 = new DonutChart();
-chart.render(data);
-
-const chart3 = new LineChart();
-chart.render(data);
-```
-
-- Chart라는 껍데기를 만들어주고, 그 안에 넣는 strategy만 바꾼다.
-- 근데 strategy가 많지 않다면 굳이 안 써도 될거 같다.
-
-
-```js
-class Chart {
-    constructor(strategy) {
-        this.chartType = strategy;
-    }
-    render(data) {
-        this.chartType.render(data);
-    }
-}
-cosnt chart = new Chart(new BarChart());
-chart.render(data);
-
-chart = new Chart(new DonutChart());
-chart.render(data);
 ```
