@@ -68,6 +68,7 @@ show parameter db_file_multiblock_read_count
 ```
 
 - 그럼 아래와 같이 multiblock 기준이 나온다.
+
 ```
 NAME                                TYPE          VALUE
 db_file_multiblock_read_count      integer       16
@@ -78,6 +79,7 @@ db_file_multiblock_read_count      integer       16
   - 8Kb x 128이면 딱 1MB다.
   - 물론 8KB가 아니라 16KB 기준으로는 64로 설정하는 게 최대일 것이다.
   - 만약 OS가 2MB라면 8KB 기준 256으로 설정해도 된다.
+
 ```sql
 alter session set db_file_multiblock_read_count = 128;
 ```
@@ -87,6 +89,7 @@ alter session set db_file_multiblock_read_count = 128;
 - 익스텐트 맵을 통해 각 익스텐트의 첫 번쨰 데이터 블록 DBA(데이터블록주소)를 알 수 있다.
 - 익스텐트는 연속된 데이터 블록 집합이다. 따라서 첫 번째 데이터 블록 뒤에 연속해서 저장된 블록을 읽으면 된다.
 - 각 인전합 익스텐트끼리는 보통 서로 다른 테이블일 확률이 높다. DB가 파일 경합을 줄이기 위해 데이터를 여러 파일에 분산 저장하기 때문이다.
+
 ```
 SEGMENT     |TABLESPACE_NAME     |EXTENT_ID        |FILE_ID        |BLOCK_ID       |BLOCKS
 TABLE        USERS               |0                |1              |1              |4
@@ -104,6 +107,7 @@ TABLE        USERS               |8                |5              |17          
 - 특정 레코드 하나를 읽는 건 불가능하다. 반드시 블록 단위로 읽게 된다.
 - index 또한 마찬가지로 index only scan을 제외하면 데이터 블록을 읽게 된다.
 - 아래는 table scan시의 예시다.
+
 ```
 TABLE 세그먼트
 EMP 테이블    Salary 테이블 ........ 
@@ -141,6 +145,7 @@ EMPNO     ENAME     MGR     JOB         SAL     DEPTNO
 - column 단위로는 당연히 읽을 수 없다. 그런데 문제는 record 단위로도 읽을 수 없다는 점이다.
 - 무조건 block 단위로 읽어야 한다. 보통 block은 8KB다(VALUE가 8192).
 - 아래를 통해 확인 가능한데 보통 8KB다. 2,4,16,32KB 중 선택가능하다.
+
 ```sql
 show parameter block_size
 ```
@@ -162,6 +167,7 @@ show parameter block_size
 ```sql
 show sga
 ```
+
 - 캐시에서 블록을 찾으면 프로세스가 I/O call을 할 필요가 없다.
   - process가 멈추지 않기 때문에 속도가 그만큼 빨라진다.
   - 버퍼캐시는 공유메모리이므로, 버퍼캐시에 놓으면 해당 블록을 원래는 disk I/O로 읽어야하는 다른 process도 이득을 본다.

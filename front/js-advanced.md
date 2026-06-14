@@ -1,3 +1,616 @@
+## <span style="color:#802548">_spread, destructuring문법- object_</span>
+- spread는 하나로 뭉쳐 있는 여러 값의 집합을 펼쳐서 개별 값의 목록으로 만든다.
+- destructuring은 값을 각 변수에 할당한다. 
+- iterable 객체만 spread 문법을 활용할 수 있다. destructuring은 객체면 사용 가능하다.
+- 객체 리터럴로 선언한 객체는 iterable이 아니다. string, array, set, map 등이 iterable이다.
+- iterable 객체가 되는 조건이 궁금하다면 iterable protocol에 관한 정보를 찾아보면 된다.
+
+
+```javascript
+console.log(...[1,2,3]); //1,2,3
+console.log(...'hello');//h e l l o
+console.log(...new Map([['a','1'],['b','2']])); // ['a','1'], ['b','2']
+console.log(...new Set([1,2,3])); //1 2 3
+
+console.log(...{a:1, b:2}); //error. Found non-callable @@iterator
+```
+
+- ES6에서는 해당 문법을 사용하여 property에 접근할 수 있다.
+- 변수를 할당할 때는 key를 기준으로 한다.
+
+
+```javascript
+const user = {
+    firstName: 'JaeWon',
+    lastName: 'Heo'
+}
+const {lastName, firstName} = user; //key를 기준으로 하기에, 순서를 뒤바꾸는 것은 아무 의미 없다. 아무 의미 없기에 바꿔 써도 상관 없다.
+console.log(firstName, lastName) //JaeWon Heo
+
+
+//past
+var user = {
+    firstName: 'JaeWon',
+    lastName: 'Lee'
+}
+
+var firstName = user.firstName;
+var lastName = user['lastName'];
+console.log(firstName, lastName);
+```
+
+- 배열과 마찬가지로 기본값 설정도 가능하다.
+- 왼쪽과 오른쪽이 = 와 : 로 기호가 다른 것에 주의하자.
+
+```javascript
+const {firstName = 'JaeWon', lastName} = {firstName, lastName : 'Heo'};
+console.log(firstName, lastName) //JaeWon Heo
+```
+
+
+- 아래와 같이 별칭을 줄 수도 있다.
+- 여기서는 기본값을 주는 게 아니라서 = 대신 :를 사용한다.
+
+```javascript
+const {lastName: ln, firstName: fn} = {firstName, lastName};
+console.log(fn,ln) //JaeWon Heo
+```
+
+- 함수의 parameter로 들어갈 때도 비구조화 할당이 가능하다.
+
+
+```javascript
+function printTodo({content, completed}){
+    console.log(`할일 ${content} ${completed ? '완료' : '비완료'} 상태입니다.`);
+}
+printTodo({id:1, content: 'HTML', completed:true}); //할일 HTML 완료 상태입니다.
+```
+
+- nested property를 parameter로 하여 가져올 때도 비구조화 할당으로 가져올 수 있다.
+
+
+```javascript
+const cats = {
+  title: "Cats",
+  director: "Tom Hooper",
+  releaseYear: 2019,
+  boxOffice: {
+    budget: 95_000_000,
+    grossUS: 27_166_770,
+    grossWorldwide: 73_833_348,
+  },
+};
+
+function getProfit({ boxOffice: { grossWorldwide, budget } }) {
+  return grossWorldwide - budget;
+}
+```
+
+- 비구조화 할당을 이용해서 아래와 같이 필수값은 받도록 검사할 수 있다.
+- 필수값을 넘기지 않았다면 error를 던져주면 개발자가 더 안전하게 해당 함수를 사용할 수 있다.
+
+
+```javascript
+function createCar(name,{brand,color,type}){ 
+    if(!name){
+        throw new Error("name은 필수값입니다.");
+    }
+    return {
+        name,
+        brand,
+        color,
+        type 
+    }
+}
+
+createCar('GENESIS',{});
+createCar('GENESIS',{brand: 'Hyundai'});
+```
+
+- 중첩 객체의 property를 가져올 때는 위의 중첩된 객체를 parameter로 분해할 때와 동일하게 가져올 수 있다.
+
+
+```javascript
+const user = {
+    name: 'Lee',
+    address: {
+        zipCode: '03068',
+        city: 'Seoul'
+    }
+}
+
+const {address:{city}} = user;
+console.log(city) //Seoul
+```
+
+- spread와 destructuring은 같이 사용가능하다.
+
+
+```javascript
+const {x, ...rest} = {x: 1, y: 2, z: 3};
+console.log(x, rest); //1 {y:2, z:3}
+```
+
+## <span style="color:#802548">_spread, destructuring문법- array_</span>
+- 비구조화 할당을 활용하면 아래와 같이 간결하게 받아올 수 있다.
+
+```javascript
+const arr = [1,2,3];
+const [one,two,three] = arr;
+console.log(one,two,three); // 1 2 3
+
+//past
+var arr = [1,2,3];
+var one = arr[0];
+var two = arr[1];
+var three = arr[2];
+```
+
+
+- 배열을 받는 것도 아래와 같이 구조분해할당을 이용할 수 있다.
+
+```javascript
+function operateTime(inputs, operators, is){//배열의 index로 접근
+	inputs[0].split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+
+	inputs[1].split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+}
+
+function operateTime(inputs, operators, is){//구조 분해 할당으로 접근
+	const [firstInput,secondInput] = inputs
+	
+	firstInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+
+	secondeInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+}
+
+function operateTime([firstInput, secondeInput], operators, is){//parameter에 구조분해할당으로 넣기
+	firstInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+
+	secondeInput.split('').forEach((num) =>{
+		cy.get('.digit').contains(num).click();
+	})
+}
+```
+
+- index를 처리하지 않아도 배열을 구조분해할당하면 된다.
+- 차례로 0번쨰, 1번쨰, 2번쨰 index로 인식된다.
+
+```javascript
+function clickGroupButton(){
+	const confirmButton = document.getElementsByTagNam('button')[0];
+	const cancelButton = document.getElementsByTagNam('button')[1];
+	const resetButton = document.getElementsByTagNam('button')[2];
+}
+
+function clickGroupButton(){
+	const [confirmButton, cancelButton, resetButton] = document.getElementsByTagNam('button');
+}
+```
+
+- 배열을 구조분해 할당으로 받아오는 또다른 예시다.
+
+```javascript
+function formatDate(targetDate){
+	const date = targetDate.toISOString().split('T').[0];
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+
+function formatDate(targetDate){
+	const [date] = targetDate.toISOString().split('T');
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+
+function head(arr){
+	return arr[0] ?? '' //배열에 요소가 없는데 [0]같이 index에 접근하면 error가 나니까 기본값 셋팅
+}
+
+function formatDate(targetDate){
+	const date = head(targetDate.toISOString().split('T'));
+
+	const [year, month, day] = date.split('-');
+
+	return `${year}년 ${month}월 ${day}일`;
+}
+```
+
+- 객체의 일부인 배열도 당연히 destructuring이 가능하다.
+
+```javascript
+const orders = ['First', 'Second', 'Third'];
+
+const st = orders[0];
+const rd = orders[2];
+console.log(st); //First
+console.log(rd); //Third
+
+const [st1, , rd1] = orders;
+console.log(st1); //First
+console.log(rd1); //Third
+
+const {0:st2, 2:rd2} = orders;
+console.log(st2); //First
+console.log(rd2);  //Third
+```
+
+
+## <span style="color:#802548">_spread와 destructuring을 이용해 임시객체 없애기_</span>
+- 그저 반환만 하는 경우가 있다고 해보자.
+- 그럼 임시변수를 쓰지 않고 아래와 같이 바로 return하게 바꿀 수 있다.
+
+```javascript
+function getElements(){
+	const obj = {};
+	obj.title=document.querySelector(".text");
+
+	return obj;
+}
+
+function getElements(){
+	const obj = {
+		title : document.querySelector(".text")
+	};
+
+	return obj;
+}
+
+function getElements(){
+	return {
+		title : document.querySelector(".text")
+	};
+}
+```
+
+- 임시 객체를 없애는 다른 예시다.
+
+```javascript
+function getDateTime(targetDate){
+	let month = targetDate.getMonth();
+	let day = targetDate.getDate();
+	let hour = targetDate.Hours();
+
+	month = month >= 10 ? month : '0' + month;
+	day = day >= 10 ? day : '0' + day;
+	hour = hour >= 10 ? hour : '0' + hour;
+
+	return {
+		month,
+		day,
+		hour
+	};
+}
+
+function getDateTime(targetDate){
+	return {
+		month: month >= 10 ? month : '0' + month,
+		day: day >= 10 ? day : '0' + day,
+		hour: hour >= 10 ? hour : '0' + hour
+	};
+}
+```
+
+- overloading을 활용해 유연한 코드를 만들 수도 있다.
+- 위에는 argument가 있지만, 여기는 없다. 없으면 기본으로 현재일자가 들어간다.
+
+```js
+function getDateTime(){
+	const currentDateTime = getDateTime(new Date());
+
+	return {
+		month: currentDateTime.month + '분 전',
+		day: currentDateTime.day + '일 전',
+		hour: currentDateTime.hour + '초 전',
+	}
+
+}
+
+function getDateTime(){
+	const currentDateTime = getDateTime(new Date());
+
+	return {
+		month: computedKrDate(currentDateTime.month),
+		day: currentDateTime.day + '일 전',
+		hour: currentDateTime.hour + '초 전',
+	}
+
+}
+```
+
+## <span style="color:#802548">_엔간하면 객체는 새로 복사하기_</span>
+- Node는 document 내의 모든 객체다.
+- elements는 tag에 둘러 싸인 객체다.
+- html, body, main, table, thead, th 모두 node다.
+- NodeList는 일반 배열로 형변환해주는 게 좋다.
+
+```javascript
+const arr = document.querySelectorAll('a'); //NodeList라서 배열의 method는 사용불가. entries(), forEach(), item(), keys(), values()만 존재
+const arrFromNode = [...arr];//일반 배열이라서 배열의 method 사용가능.
+```
+
+- 불변값으로 return해주는 것도 매우 좋은 선택이다.
+- 그럴 때 destructuring이나 spread를 이용한다.
+
+```javascript
+const obj = { one: 1};
+function changeObj(targetObj) { //객체는 원시형처럼 바꾼다고 하면 바뀌어 버림.
+	targetObj.one = 100;
+
+	return targetObj;
+}
+changeObj(obj); 
+console.log(obj); // {one: 100}
+
+function makeNewObj(targetObj) { //새로운 객체를 반환하게 변경
+	return {...targetObj, one: 100};
+}
+
+makeNewObj(obj); //{one: 100}
+console.log(obj); //{one: 1}
+```
+
+
+## <span style="color:#802548">객체의 property로서의 fucntion - method</span>
+- 아래에 썼던 예시에서 getCompanyName이 바로 method다.
+- 일반함수의 경우는 this가 window, 화살표 함수의 경우에는 this가 자기 자신이다.
+
+```javascript
+const obj = {
+  name : 'company',
+  getCompanyName: function(someFunc) {
+    someFunc
+  }
+}
+
+const obj = {
+  name : 'company',
+  getCompanyName: (someFunc) => someFunc
+}
+```
+
+- method는 아래와 같이 간결하게 쓸 수도 있다.
+- 이를 concise method라고 한다.
+- 이 경우는 화살표 함수처럼, this가 자기 자신이다.
+
+```javascript
+const obj = {
+  name : 'company',
+  getCompanyName(someFunc) {
+    someFunc
+  }
+}
+```
+
+- method를 변수명에 할당해 일반함수로 만들어 호출할 수도 있다.
+- 다만 이는 this와 연관되어 bug를 야기할 수 있다. 
+- consie method의 경우, 분리해서 따로 만들면 일반 함수가 되어 this가 window를 가리키기 때문이다.
+
+
+```javascript
+const person = {
+    name: 'Lee',
+    getName(){
+        return this.name;
+    }
+}
+
+const getName = person.getName;
+console.log(getName()) // 일반 브라우저에선 ''. codepen에서 test하면 CodePen
+```
+
+## <span style="color:#802548">this</span>
+- this binding이란 식별자와 값을 연결하는 과정이다. 
+- this라는 식별자와 this가 가리킬 객체의 메모리 주소를 binding하는 것이다.
+- this binding은 일반함수, 메서드, 생성자함수, call-apply-bind라는 4가지 맥락에 따라 의미가 다르다.
+- 일반함수의 경우 scope에 관계없이 무조건 this가 window에 binding된다.
+
+```javascript
+var value = 1;
+
+const obj = {
+    value: 100,
+    function foo(){
+      console.log("foo's this: ", this); //method 호출. 객체 자기자신
+      console.log("foo's this.value: ", this.value) // 100
+
+      function bar(){
+          console.log("bar's this: ", this); //window
+          console.log("bar's this: ", this.value); //window, 1
+      }
+      
+      bar(); //일반함수로 호출됐으면 어디서든 window.
+    }
+}
+
+obj.foo();
+```
+
+- property의 method도 비동기 callback안이라면 this가 window에 binding된다.
+- settimeout은 비동기콜백이므로, this가 window다.
+
+```javascript
+var value = 1;
+const obj = {
+    value: 100,
+    foo(){
+        console.log("foo's this: ", this);
+        
+        setTimeout(function(){
+            console.log("callback's this: ",this); // window
+            console.log("callback's this.value: ", this.value) //1
+        },100);
+    }
+}
+
+obj.foo();
+```
+
+- callback 함수를 상위 스코프에 binding하려면 아래와 같은 방법으로 가능하다.
+
+```javascript
+var value = 1;
+const obj = {
+    value: 100,
+    foo(){
+        const that = this; //this를 다른 변수에 할당
+
+        setTimeout(function(){
+             console.log("callback's this: ",that); // obj
+            console.log("callback's this.value: ", that.value) //100
+        },100);
+    }
+}
+
+obj.foo();
+```
+
+- 상위스코프에 연동하기 위해, apply, bind, call 등의 함수를 사용할 수도 있다.
+
+```javascript
+var value = 1; // var는 전역프로퍼티에 들어가게 됨
+const obj = {
+    value: 100,
+    foo(){
+        setTimeout(function(){
+            console.log("callback's this.value: ", this.value) //100
+        }.bind(this),100);
+    }
+}
+
+obj.foo();
+```
+
+- 또 다른 방법으로는 화살표함수를 사용하는 것이다.
+
+
+```javascript
+var value = 1; // var는 전역프로퍼티에 들어가게 됨
+const obj = {
+    value: 100,
+    foo(){
+        setTimeout(() => console.log(this.value), 100);
+    }
+}
+
+obj.foo();
+```
+
+- 참고로 프로퍼티에 규정할 함수 호출의 경우, 일반 함수처럼 쓰지 않는 게 좋다.
+- 변수명에 할당하는 일반 함수로 바뀌게 되면 this가 window에 binding되는 것으로 바뀐다.
+
+```javascript
+const person = {
+    name: 'Lee',
+    getName(){
+        return this.name;
+    }
+}
+
+console.log(person.getName()) // person객체의 name을 참조한다.
+
+const getName = person.getName; //일반 함수화됨
+console.log(getName()) // window객체의 name을 참조한다.
+```
+
+## <span style="color:#802548">live와 static </span>
+- 요소 노드의 static 상태는 attribute노드가 관리한다
+- 요소 노드의 live 상태는 DOM property가 관리한다.
+- 둘을 바꿔보면 차이점을 느낄 수 있다. 아래는 attribute노드를 바꾼 것이다.
+- DOM property를 바꿔도 attribute node의 값은 변하지 않는다. 둘은 각자 개별로 관리된다는 의미이다.
+
+```html
+<!DOCTYPE html>
+<html>
+    <body>
+        <input id="user" type="text" value="car">
+    </body>
+    <script>
+        const $input = document.getElementById('user');
+
+        $input.oninput = () => {
+            console.log('value 프로퍼티 값', $input.value);
+        }
+
+        $input.value = 'foo';
+        console.log('value 어트리뷰트 값', $input.getAttribute('value')); 
+        // car. foo로 나오지 않음.
+    </script>
+</html>
+```
+
+- DOM을 가져오는 특정 method의 경우, live상태를 바꿀 수 있는 객체를 반환한다. 이 경우, 주의하여 다룰 필요가 있다.
+- 아래 예시를 살펴보자. 의도한 것은 className이 전부 txt-red가 되는 것인데, 실제로 그렇지 않게 되는 버그가 발생한다.
+
+- DOM property를 바꾸는 순간, getElementsByClassName()의 반환 값인 HTMLCollection이 실시간으로 변동해 for문의 index가 엉키게 된다.
+- 1번이 txt-red로 바뀌면, 그 다음 2번이 바뀌어야 하겠지만, live객체라서 2번이 1번자리인 [0]으로 내려오기 때문이다.
+- [1]이었어야 할 2번이 [0]이 되어 아래와 같은 방식으로는 접근이 불가능하다.
+
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      .txt-blue { color: blue; }
+      .txt-red { color: red; }
+    </style>
+  </head>
+    <body>
+        <ul class="list">  
+          <li class="txt-blue">1번</li>  
+          <li class="txt-blue">2번</li>  
+          <li class="txt-blue">3번</li>
+        </ul>  
+        <script>
+           const $li = document.getElementsByClassName('txt-blue'); 
+           for (let i = 0; i < $li.length; i++) {  
+              $li[i].className = 'txt-red';
+           }
+        </script>
+        </body>
+</html>
+```
+
+- 이러한 버그를 예방하려면 for문을 역순으로 끝에서부터 도는 것이 좋다.
+- 아니면 배열로 만들어 live 상태가 바뀌지 않게끔 방지한 뒤 className을 바꾸면 된다.
+
+
+```javascript
+for(let i = $li.length -1; i >= 0; i--){
+  $li[i].className = 'txt-red';
+}
+
+[...$li].forEach(item => { 
+    $li[i].className = 'txt-red';
+})
+```
+
+- 그러한 종류가 아래처럼 존재한다.
+- 이 것들을 다룰 때는 반드시 복사해주자. 아니면 querySelectorAll()를 쓰는 것을 추천한다.
+
+```
+HTMLCollectiondocument.getElementsByClassName()
+document.getElementsByTagName()
+element.childrenNodeList
+element.childNodes
+NamedNodeMapelement.attributes
+```
+
 ## <span style="color:#802548">고차함수로 loop statement 대체하기</span>
 - 반복분에는 for문과 while문이 있다.
 - 자주 쓰게 되는 것은 for문이다.
@@ -128,7 +741,7 @@ const validGrades = grades.filter(validScore)
 ```
 
 
-# <span style="color:#802548">_고차함수로 event parameter 대체하기_</span>
+## <span style="color:#802548">_고차함수로 event parameter 대체하기_</span>
 - 이를 이용하면 event를 이용한 handler를 쓸 때도 parameter를 번잡하게 쓸 필요가 없다.
 - 아래는 일반 함수 정의다.
 
@@ -152,61 +765,6 @@ const handler = id => e => {
 document.addEventListener('click', handler('frongt'));
 ```
 
-
-# <span style="color:#802548">_fetch는 foreach에서 쓰면 안 된다._</span>
-- 같은 반복문이어도 foreach와 for of문은 결과가 다르다.
-- 아래 같이 for of 문을 쓰면 순서를 기다려 진행된다.
-
-```js
-const baseURL = "https://jsonplaceholder.typicode.com/todos";
-const urls = [1,2,5,10];
-
-(async function() {
-    for (let url of urls) {
-        console.log(`${url}요청 시작~`);
-        const res = await fetch(baseURL + url);
-        const result = await res.json();
-        console.log(`${url}요청 끝`);
-    }
-    console.log("전체 요청 끝");
-})();
-/*
-1 요청 시작~
-1요청 끝~
-2요청 시작~ 
-2요청 끝
-*/
-```
-
-- 반면에 foreach를 쓰면 한꺼번에 병렬로 fetch가 실행된다.
-- map도 마찬가지다. 따라서 map과 foreach에서는 절대 비동기를 쓰면 안 된다.
-
-```js
-const baseURL = "https://jsonplaceholder.typicode.com/todos";
-const urls = [1,2,5,10];
-
-(async function() {
-    urls.foreach(async (url) => {
-        console.log(`${url}요청 시작~`);
-        const res = await fetch(baseURL + url);
-        const result = await res.json();
-        console.log(`${url}요청 끝`);
-    }) 
-    console.log("전체 요청 끝");
-})();
-/*
-1요청 시작~
-2요청 시작~
-5요청 시작~
-10요청 시작~
-전체 요청 끝~
-
-1 요청 끝~
-10요청 끝~
-5요청 끝~
-2요청 끝~
-*/
-```
 
 ## <span style="color:#802548">setTimeout</span>
 
@@ -473,7 +1031,7 @@ try {
 ```
 
 
-# <span style="color:#802548">_if문 줄이기_</span>
+# <span style="color:#802548">_setTimeoue을 Promise로 만들기_</span>
 - refactoring해보자. 아래는 원본이다.
 
 ```js
@@ -533,34 +1091,6 @@ function orderCoffee(el, orderList) {
 }
 ```
 
-- Promise는 기본 아래와 같은 형태다.
-
-```js
-return new Promise((resolve, reject) => {
-    // 실행할 비동기 로직
-    if (성공) {
-        resolve(결과값); // 완료 알림
-    } else {
-        reject(에러값);  // 실패 알림
-    }
-});
-
-```
-
-- setTimeou의 resolve()도 사실은 안에서 비동기 로직이 수행된 뒤, resolve()를 호출하는 형태이므로 위의 로직과 동일하다.
-- 그게 setTimeout이라는 비동기 함수로 한 번 더 묶여있는 것만 다르다.
-
-```js
-// 가장 표준적인 기본 syntax
-return new Promise((resolve, reject) => {
-    // 1. 여기에 비동기 작업을 작성합니다.
-    setTimeout(() => {
-        // 2. 작업이 성공적으로 끝나면 resolve를 호출합니다.
-        resolve(); 
-    }, time);
-});
-```
-
 # <span style="color:#802548">_callback 함수는 함수 정의를 넣는 것이지, call하는 게 아니다._</span>
 - 왜 그냥 notifyOrderSucccess(orderList)는 안될까?
 - 아래의 구문은, 이미 만들어진 함수를 call하는 것이라 eventListener로 등록되는 데 그치지 않고 즉시 실행된다. 그래서 문제인 것이다.
@@ -603,84 +1133,3 @@ el.addEventListener('click', notifyOrderSucccess()); //함수를 call했다. 이
 ```
 
 
-# <span style="color:#802548">_배열이나 객체를 활용하자._</span>
-- 지나치게 좁은 경우의 상정은 재사용성은 해친다.
-- 이미지를 하나만 return하고 싶어서 아래와 같이 if문을 넣었다.
-- 하지만 이후에 이미지를 여러개 return해야 한다면?
-- 그런 경우도 생각한다면 배열에 push해서 배열을 return하는 게 낫다.
-- 성능은 조금안좋다고 해도 말이다.
-- 섣부른 최적화보단 재사용성이 높게 만들자.
-
-
-```js
-function getImage() {
-    for (section in sections) {
-        if (section.containsImage()) {
-            return section.image;
-        }
-    }
-}
-
-
-function getImages() {
-    const images = [];
-    for (const section of sections) {
-        images.push(section.image);
-    }
-
-    return images;
-}
-```
-
-# <span style="color:#802548">_기본값을 달기보다는 예외처리 함수를 만들자._</span>
-- 값이 없으면 null이나 error를 반환해야 한다.
-- age가 없는 경우 0으로 처리해보자.
-- 당장은 문제가 없지만 그 함수를 가지고 2차로 함수를 만들면 문제가 있다.
-- 나이가 없는 사람은 0으로 처리되어 평균이 극히 낮아진다.
-- 오류가 나면 어디서 오류가 났는 지 찾기가 매우 힘들다.
-- 이럴 땐 나이가 0이면 filter를 하던가 해야된다.
-
-```js
-function getAge() {
-    if (!this.age) {
-        return 0;
-    }
-
-    return this.age;
-}
-
-function getAvgAge(userList) {
-    const sumOfAge = userList.reduce((acc,cur) => acc + cur.getAge(), 0)
-    /*for (const user in userList) {
-        sumOfAge +=parseInt(user.getAge())
-    }*/
-
-    return sumOfAge / userList.length
-}
-```
-
-- 아니면 아래와 같이 그냥 null을 return해버릴 수도 있다.
-
-
-```js
-function getAge() {
-    if (!this.age) {
-        return null;
-    }
-
-    return this.age;
-}
-
-function getAvgAge(userList) {
-    const sumOfAge = userList.reduce((acc,cur) => (cur ? acc + cur.getAge() : acc), 0);
-    const length =  userList.reduce((acc,cur) => (cur ? acc + 1 : acc), 0);
-    
-    /*for (const user in userList) {
-        sumOfAge +=parseInt(user.getAge())
-    }*/
-
-    const averageAge = length > 0 ? sumOfAge / length : 0;
-
-    return averageAge /*sumOfAge / length 혹시 0이면 0으로 나눠 error가 나므로 그 처리를 위에서 해준다.*/ 
-}
-```
