@@ -1132,3 +1132,57 @@ select brand, sale_date, price,
     end
 from Stocks S2;
 ```
+
+- 물론 sort by를 생략한다고 해서 아래와 같이 복잡하게 쓴다면 성능이 좋지 않을 것이다.
+- 해당 장비구분코드에 맞는 equipment_no와 최종change_date, 순번을 알아오기 위한 코드인데, 꽤나 복잡하다.
+
+```sql
+SELECT equipment_no, 장비명, 상태코드
+      ,(SELECT MAX(change_date)
+        FROM change_history
+        WHERE equipment_no = P.equipment_no) 최종change_date
+      ,(SELECT MAX(change_history_order)
+        FROM change_history
+        WHERE equipment_no = P.equipment_no
+        AND change_date = (SELECT MAX(change_date)
+                        FROM change_history
+                        WHERE equipment_no = P.equipment_no)) 최종change_history_order
+FROM 장비 P
+WHERE 장비구분코드 = 'A001';
+```
+
+- 위의 쿼리를 아래와 같이 간단하게 쓸 수도 있다.
+- 그러나 MAX에 change_date와 change_history_order을 모두 쑤셔넣으면 기존에 index로 되어있던 sort by 연산이 박살난다.
+- 따라서 sort by연산이 추가된다. index column을 가공한 결과는 나쁘다.
+```sql
+SELECT equipment_no, 장비명, 상태코드
+      ,SUBSTR(최종이력, 1, 8) 최종change_date
+      ,SUBSTR(최종이력, 9) 최종change_history_order
+FROM (
+  SELECT equipment_no, 장비명, 상태코드
+        ,(SELECT MAX(change_date || change_history_order)
+          FROM change_history
+          WHERE equipment_no = P.equipment_no) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+
+- 이럴 땐 hint를 활용해서 풀어야한다.
+- 인덱스를 역순으로 써서 MAX와 동일한 효과를 낸다.
+- 또한 첫번째 레코드에서 멈춰서 더 scan하지 않게 ROWNUM <=1 조건을 달아준다.
+```sql
+SELECT equipment_no, 장비명
+      ,SUBSTR(최종이력, 1, 8) 최종change_date
+      ,SUBSTR(최종이력,9) 최종change_history_order
+FROM (
+  SELECT equipment_no, 장비명, (SELECT /*+ INDEX_DESC(X change_history_PK) */
+    change_date || change_history_order
+    FROM change_history X
+    WHERE equipment_no = P.equipment_no
+    AND ROWNUM <= 1) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```

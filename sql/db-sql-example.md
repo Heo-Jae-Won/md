@@ -111,6 +111,7 @@ where cusno = (
 ```
 
 - where exists로 검색해야하는 양이 적다면, where exists가 효율성은 더 좋다.
+
 ```sql
 select cusno, grdc
 from entry en
