@@ -1186,3 +1186,233 @@ FROM (
   WHERE 장비구분코드 = 'A001'
 )
 ```
+
+## <span style="color:#802548">_이력조회_</span>
+- 이력조회에 first row stopkey나 top n stopkey 알고리즘을 이용하는 게 필요하다.
+- 아래와 같이 장비 table이 있다고 해보자.
+  - equipment_no PK
+  - 장비명
+  - 장비구분코드
+  - 상태코드
+  - 최종change_date
+- 상태변경 이력 table은 아래와 같다.
+  - equipment_no PK1
+  - change_date PK2
+  - change_history_order PK3
+  - 상태코드
+  - 메모
+- 가장 단순하게 이력데이터를 조회해보자.
+- 스칼라 서브쿼리에서 equipment_no와 change_date가 쓰이는데, 선두컬럼이기에 first row stopkey 알고리즘이 발동한다.
+```sql
+SELECT equipment_no, 장비명, 상태코드,
+    (SELECT MAX(change_date)
+    FROM change_history
+    WHERE equipment_no = P.equipment_no) 최종change_date
+FROM 장비 P
+WHERE 장비구분코드 = 'A001'
+```
+
+- 위의 기능에서 최종change_history_order도 가져오게 추가되었다.
+- inline view에서 최종change_date와 최종change_history_order을 겹쳐 가져오려 한다.
+- 그런 시도는 좋지만, 그때문에 index 컬럼이 가공돼 index access조건으로 타지 못하게 됐다.
+```sql
+SELECT equipment_no, 장비명, 상태코드
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUMBER(SUBSTR(최종이력, 9,4)) 최종change_history_order
+FROM (
+  SELECT equipment_no, 장비명, 상태코드
+  , (SELECT MAX(H.change_date || LPAD(H.change_history_order, 4))
+        FROM change_history H
+        WHERE equipment_no = P.equipment_no) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+    )
+```
+
+- 따라서 아래와 같은 쿼리로 바꿔주는 게 낫다.
+- 스칼라 서브쿼리가 많아서 비효율적일 거 같지만 index access로 작동하는 게 더 빠르다.
+```sql
+SELECT equipment_no, 장비명, 상태코드
+      ,(SELECT MAX(H.change_date)
+        FROM change_history H
+        WHERE equipment_no = P.equipment_no) 최종change_date
+      ,(SELECT MAX(H.change_history_order)
+        FROM change_history H
+        WHERE equipment_no = P.equipment_no
+        AND change_date = (SELECT MAX(H.change_date)
+                        FROM change_history H
+                        WHERE equipment_no = P.equipment_no)) 최종change_history_order
+FROM 장비 P
+WHERE 장비구분코드 = 'A001'
+```
+
+- 그런데 최종change_history_order에다가 또 다른 field도 가져와야 한다면?
+- 최종상태코드를 가져오려면 아래와 같이 길어진다.
+- 다음은 더 길어질 것이다.
+```sql
+SELECT equipment_no, 장비명, 상태코드
+      ,(SELECT MAX(H.change_date)
+        FROM change_history H
+        WHERE equipment_no = P.equipment_no) 최종change_date
+      ,(SELECT MAX(H1.change_history_order)
+        FROM change_history H1
+        WHERE equipment_no = P.equipment_no
+        AND change_date = (SELECT MAX(H2.change_date)
+                        FROM change_history H2
+                        WHERE equipment_no = P.equipment_no)) 최종change_history_order
+      ,(SELECT H1.상태코드
+        FROM change_history H1
+        WHERE equipment_no = P.equipment_no
+        AND change_date = (SELECT MAX(H2.change_date)
+                        FROM change_history H2
+                        WHERE equipment_no = P.equipment_no)
+        AND change_history_order = (SELECT MAX(H3.change_history_order)
+                        FROM change_history H3
+                        WHERE equipment_no = P.equipment_no
+                        AND change_date = (SELECT MAX(H4.change_date)
+                                        FROM change_history H4
+                                        WHERE equipment_no = P.equipment_no))) 최종상태코드
+FROM 장비 P
+WHERE 장비구분코드 = 'A001'
+```                                        
+
+
+- 단순한 쿼리를 위해 전통적으로는 아래와 같이 썼다.
+- INDEX_DESC라 인덱스를 역순으로 읽는것이고, 첫 레코드에서 바로 멈춘다.
+- 다만 아래와 같은 방법은 index 구성이 완벽해야 한다.
+```sql
+SELECT equipment_no, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUMBER(SUBSTR(최종이력, 9, 4)) 최종change_history_order
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+  SELECT equipment_no, 장비명
+        , (SELECT /*+ INDEX_DESC(X change_history_PK) */
+                  change_date || LPAD(change_history_order, 4) || 상태코드
+            FROM change_history X
+            WHERE equipment_no = P.equipment_no 
+            AND ROWNUM <=1) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+- 11g에서는 아래와 같이 쓰면 된다.
+- WHERE equipment_no =P.equipment_no가 서브쿼리로 들어가있다.
+- 그러나 실제로는 inline view로 들어가서 조건절이 작동한다.
+- prdicated pushing이다.
+```sql
+SELECT equipment_no, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUMBER(SUBSTR(최종이력, 9, 4)) 최종change_history_order
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+  SELECT equipment_no, 장비명
+        , (SELECT change_date || LPAD(change_history_order, 4) || 상태코드
+            FROM (SELECT equipment_no, change_date, change_history_order, 상태코드
+                  FROM change_history 
+                  ORDER BY change_date DESC, change_history_order DESC) /**11g에서 가능한 방식*/
+            WHERE equipment_no = P.equipment_no 
+            AND ROWNUM <=1 ) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+- 12c에서는 아래와 같이 쓰면 된다.
+```sql
+SELECT equipment_no, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUMBER(SUBSTR(최종이력, 9, 4)) 최종change_history_order
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+  SELECT equipment_no, 장비명
+        , (SELECT change_date || LPAD(change_history_order, 4) || 상태코드
+            FROM (SELECT equipment_no, change_date, change_history_order, 상태코드
+                  FROM change_history 
+                  ORDER BY change_date DESC, change_history_order DESC
+                  WHERE equipment_no = P.equipment_no)     /**12c에서 가능한 방식*/
+            AND ROWNUM <=1 ) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+- 이력 조회를 하는 서브쿼리에 윈도우 함수를 사용할 수 있다.
+- 하지만 top n stopkey가 작동하지 않는다.
+- 따라서 index로 sort를 생략하는 경우는 절대 사용하면 안 된다.
+- 아래는 쿼리를 모르는 사람들이 짜는 anti 패턴이다.
+
+```sql
+SELECT equipment_no, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUBMER(SUBSTR(최종이력, 9,4)) 최종change_history_order
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+  SELECT equipment_no, 장비명
+        , (SELECT change_date || LPAD(change_history_order, 4) || 상태코드
+        FROM (SELECT change_date, change_history_order, 상태코드
+                    , ROW_NUMBER() OVER (ORDER BY change_date DESC, change_history_order DESC) NO
+              FROM change_history
+              WHERE equipment_no = P.equipment_no)
+        WHERE NO = 1) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+)
+```
+
+- 12c의 row limit기능을 써도 사실 위와 같은 window 함수를 쓰는 것이다.
+- 따라서 stopkey 알고리즘이 발동하지 않는다.
+
+```sql
+SELECT equipment_no, 장비명
+      , SUBSTR(최종이력, 1, 8) 최종change_date
+      , TO_NUBMER(SUBSTR(최종이력, 9,4)) 최종change_history_order
+      , SUBSTR(최종이력, 13) 최종상태코드
+FROM (
+  SELECT equipment_no, 장비명
+        , (SELECT change_date || LPAD(change_history_order, 4) || 상태코드
+  FROM change_history
+  WHERE equipment_no = P.equipment_no
+  ORDER BY change_date DESC, change_history_order DESC
+  FETCH FIRST 1 ROWS ONLY) 최종이력
+  FROM 장비 P
+  WHERE 장비구분코드 = 'A001'
+);
+```
+
+
+- 페이징 처리에 활용할 때 윈도우 함수를 쓰기도 한다.
+- 하지만 쓰지 않는 경우도 자주 발생한다. 따라서 index/index_desc hint를 자주 써야 한다.
+- sort 생략 가능한 index가 없으면 top n stopkey가 아니라 top n sort가 작동해버린다.
+```sql
+SELECT change_date, change_history_order, 상태코드
+FROM (
+  SELECT change_date, change_history_order, 상태코드
+        , ROW_NUBMER() OVER(ORDER BY change_date, change_history_order) NO
+  FROM change_history
+  WHERE equipment_no = :eqp_no)
+WHERE NO BETWEEN 1 AND 10;
+```
+
+- equipment_no가 특정번호일 때는 index 조회가 효과적이다.
+- 하지만 전체에 관해 조회할 때는 index를 쓰면 random access에 따른 손해가 크다.
+- 이럴 땐 window function을 쓰는 게 더 나은 선택이다.
+```sql
+SELECT P.equipment_no, P.장비명
+      , H.change_date AS 최종change_date
+      , H.change_history_order AS 최종change_history_order
+      , H.상태코드 AS 최종상태코드
+FROM 장비 P
+      , (SELECT equipment_no, change_date, change_history_order, 상태코드
+              , ROW_NUMBER() OVER(PARTITION BY equipment_no
+                                  ORDER BY change_date DESC, change_history_order DESC) RNUM
+        FROM change_history) H
+WHERE H.equipment_no = P.equipment_no
+AND H.RNUM = 1;
+```
+
+
+<img src="/image/window-function.jpg" />
+
+

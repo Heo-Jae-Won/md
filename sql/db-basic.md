@@ -1376,3 +1376,32 @@ SELECT *
 - 점포 ID만으로 검색하지 않고, 주문일도 함께 입력하게 바꿔서 선택률을 낮춰 index 성능을 높인다.
 - 기간 검색을 1개월 단위로만 하여 partition을 설정해준다.
 - 특정 쿼리를 위해 필요한 데이터를 긁어 모은 table을 만든다. 농좆의 스크래핑이다. 데이터 마트라고 한다.
+
+
+- join에서 index를 나타내는 것은 무조건 왼쪽에 쓰자.
+- 아래 sql을 보자.
+- 해당 sql을 보고 index를 PRA_HST_STC_N1 table에 (SALE_ORG_ID, STRD_GRP_ID, STRD_ID, STC_DT)로 만들려 했다면 잘못 이해한 것이다.
+- 일단 전부 a를 왼쪽에 배치한거부터 매우 잘못되었다.
+
+```sql
+SELECT * 
+FROM PRA_HST_STC a, ODM_TRMS b
+WHERE a.SALE_ORG_ID =:sale_org_id
+AND a.STRD_GRP_ID = b.STRD_GRP_ID
+AND a.STRD_ID = b.STRD_ID
+ORDER BY a.STC_DT desc
+```
+
+- index가 걸리는 join 조건절임을 나타내기 위해 b를 왼쪽으로 옮겨줘야 한다.
+- 그럼 index를 어떻게 만들어야할 지 확실하게 보인다. 
+  - PRA_HST_STC table에 (SALE_ORG_ID, STC_DT)로 index를 만들어줘야 한다.
+  - ODM_TRMS table에 (STRD_GRD_ID,STRD_ID)로 index를 만들어줘야 한다. 
+
+```sql
+SELECT *
+FROM PRA_HST_STC a, ODM_TRMS b
+WHERE a.SALE_ORG_ID = :sale_org_id
+AND b.STRD_GRP_ID = a.STRD_GRP_ID
+AND b.STRD_ID = a.STRD_ID
+ORDER BY a.STC_DT desc
+``` 
