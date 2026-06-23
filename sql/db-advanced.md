@@ -1722,7 +1722,7 @@ CREATE INDEX target_x1 on target(ename);
 ```sql
 SET TIMING ON;
 
-INSERT /*+ append */ into target
+INSERT into target
 SELECT * FROM source;
 
 commit;
@@ -1743,7 +1743,7 @@ ALTER SESSION SET skip_unusable_indexes = true;
 ```sql
 SET TIMING ON;
 
-INSERT /*+ append */ into target
+INSERT  into target
 SELECT * FROM source;
 
 commit;
@@ -1758,6 +1758,49 @@ ALTER TABLE target MODIFY CONSTRAINT target_pk enable NOVALIDATE;
 ALTER INDEX target_x1 rebuild;                                    -
 ```
 
+- for even more faster
+
+```
+no logging to table
+convert index to unusable state
+use direct path I/O
+recreate index with no logging mode
+convert logging mode to nologging
+```
+
+- for real sql, like below
+
+```sql
+ALTER TABLE taregt_t nologging;
+
+ALTER INDEX target_t_x01 unusable;
+
+INSERT /*+ append   */ INTO target_t
+SELECT /*+ FULL(source_t) PARALLEL(source_t 4) */ * FROM source_t;
+
+ALTER INDEX target_t_x01 REBUILD nologging;
+
+ALTER TABLE target_t logging;
+ALTER INDEX target_t_x01 logging;
+```
+
+
+- for parttitioned table, process is like below
+- no diff except for MODIFY partition
+
+```sql
+ALTER TABLE taregt_t MODIFY partition p_201712 nologging;
+
+ALTER INDEX target_t_x01 MODIFY partition p_201712 unusable;
+
+INSERT /*+ append   */ INTO target_t
+SELECT /*+ FULL(source_t) PARALLEL(source_t 4) */ * FROM source_t WHERE dt BETWEEN '20171201' AND '20171231';
+
+ALTER INDEX target_t_x01 REBUILD partition p_201712 nologging;
+
+ALTER TABLE target_t MODIFY PARTITION p_201712 logging;
+ALTER INDEX target_t_x01 MODIFY partition p_201712 logging;
+```
 
 
 ## <span style="color:#802548">_update batch: multiple set - hash join hint - updatable join view - merge into_</span>
@@ -1927,7 +1970,7 @@ SET final_tranascation_date   = transaction_date
   , current_transaction_amount = transaction_amount;
 ```
 
-- for merge, 
+- for merge
 
 ```sql
 MERGE /*+ LEADING(t) USE_HASH(c) */ INTO customer c
@@ -1947,75 +1990,30 @@ UPDATE SET
     c.final_tranascation_date    = t.max_date,
     c.current_transaction_count  = t.t_count,
     c.current_transaction_amount = t.t_amt;
-
 ```
 
 
 
-## <span style="color:#802548">_direct path I/O를 이용한 데이터 삽입_</span>
-- 비파티션의 경우에는 index를 unusable 하는 방식을 사용한다.
-- 프로세스는 아래와 같다.
 
-```
-테이블을 nologging 모드로 전환
-2. index를 unusable 상태로 전환
-3. direct path I/O로 데이터 입력
-4. no logging 모드로 index 재생성
-5. nologging 모드를 logging모드로 전환
-```
-
-
-- sql로는 아래와 같다.
-
-```sql
-ALTER TABLE taregt_t nologging;
-
-ALTER INDEX target_t_x01 unusable;
-
-INSERT /*+ append   */ INTO target_t
-SELECT /*+ FULL(source_t) PARALLEL(source_t 4) */ * FROM source_t;
-
-ALTER INDEX target_t_x01 REBUILD nologging;
-
-ALTER TABLE target_t logging;
-ALTER INDEX target_t_x01 logging;
-```
-
-
-- partition의 경우, 보통 엔간하면 index를 unusable로 전환하지 않고 insert를 하지만, 조건이 만족된다면 unusable을 한다.
-  - table이 partitioned다.
-  - index가 local partition이다.
-- 프로세스는 아래와 같다.
-- 아까전과 크게 다른 게 거의 없다. 그저 작업이 파티션 단위로 이뤄지는 점만 다르다.
-
-```sql
-ALTER TABLE taregt_t MODIFY partition p_201712 nologging;
-
-ALTER INDEX target_t_x01 MODIFY partition p_201712 unusable;
-
-INSERT /*+ append   */ INTO target_t
-SELECT /*+ FULL(source_t) PARALLEL(source_t 4) */ * FROM source_t WHERE dt BETWEEN '20171201' AND '20171231';
-
-ALTER INDEX target_t_x01 REBUILD partition p_201712 nologging;
-
-ALTER TABLE target_t MODIFY PARTITION p_201712 logging;
-ALTER INDEX target_t_x01 MODIFY partition p_201712 logging;
-```
-
+## <span style="color:#802548">_partition_</span>
+- partition means storing data or index by certain column
+  - DML is occured in partition unit, so easy to manage
+  - select is done by partition unit, which means scan amount is not big number
+- table partition has 3 types
+  - range
+  - hash
+  - list
+- after table partition, we can choose index partition
+  - local
+  - global
+todo
 
 ## <span style="color:#802548">_range partition_</span>
-- 파티셔닝은 테이블 또는 index data를 특정 컬럼(파티션 키) 값에 따라 별도 segment에 나눠 저장하는 것을 의미한다.
-- 파티션이 좋은 이유는 아래와 같다.
-  - management_의 측면에서 파티션 단위로 백업, 추가 ,삭제 등이 일어나면 가용성이 높다.
-  - 성능의 측면에서 파티션 단위로 조회하고 경합하기 때문에 전체 table을 모두 조회하지 않는다.
-- 테이블 파티션의 종류는 3가지가 있다. 인덱스 파티션하고는 다르다.
-  - range
-  - 해쉬
-  - 리스트
-- range는 주로 날짜 컬럼을 기준으로 파티셔닝한다.
+- range is based mainly on date
+
 ```sql
-CREATE TABLE order (order번호 number , order일자 varchar2(8), ...)
-partition by range(order일자) (
+CREATE TABLE order (order_no number , order_date varchar2(8), ...)
+partition by range(order_date) (
   partition P2017_Q1 values less than ('20170401')
   partition P2017_Q2 values less than ('20170701')
   partition P2017_Q3 values less than ('20171001')
@@ -2023,9 +2021,19 @@ partition by range(order일자) (
 )
 ```
 
-- 파티션을 만들면 아래와 같은 이미지로 형성된다고 보면 된다.
-- 파티션이 있으면 원하는 파티션만 골라 읽을 수 있어 full scan의 성능이 크게 향상된다.
+- partition is created like below image
+- if partition exists, table full scan with column key would show higher performance
+
 <img src="/image/partition.jpg" />
+
+
+- but without column key scan, Scatter-Gather Index Scan happens 
+- like "WHERE CustomerID = 1234" that is not partition key, what happens ?
+  - Thread and Iterator Overhead: open, read, and close each individual partition one by one
+  - no sequential read-ahead operations: Partitioning breaks the data into physically separate files or storage areas
+  - Scatter-Gather CPU Cost
+
+
 
 - 실제 파티션의 성능 향상 원리가 파티션 pruning에 있다.
 - SQL 하드파싱이나 실행 시점에 조건절을 분석한다.
@@ -2092,9 +2100,9 @@ PARTITION BY list(지역분류) (
 
 
 ```sql
-CREATE INDEX order_X01 on order (order일자, order_amount) LOCAL
+CREATE INDEX order_X01 on order (order_date, order_amount) LOCAL
 
-CREATE INDEX order_X03 on order (order_amount, order일자) GLOBAL
+CREATE INDEX order_X03 on order (order_amount, order_date) GLOBAL
 PARTITION BY RANGE(order_amount) (
   PARTITION P_01 values less than (100000)
   PARTITION P_MX values less than (MAXVALUE)
@@ -2105,11 +2113,11 @@ CREATE INNDEX order_X04 on order (customer_id, 배송일자);
 
 - 인덱스 파티션과 관련해 중요한 제약은 아래와 같다.
 - unique index(주로 PK)를 파티셔닝하려면, 테이블 파티션 키가 모두 index 구성 컬럼이어야한다는 점이다.
-- 만약 PK index 키가 order번호인데, 파티션 키는 order일자라면?
-  - order번호가 123456인 order 레코드를 입력하려면, 중복값이 있는지 확인하려고 인덱스 파티션을 모두 탐색한다.
-  - order번호가 123456인 레코드는 어떤 파티션에든 입력될 수 있기 때문이다.
-  - 따라서 PK 인덱스 키를 (order일자, order번호)로 해줘야 한다.
-  - 게다가 레코드를 입력하고 커밋하기 전까지, 다른 트랜잭션이 같은 order번호로 다른 파티션에 입력하는 현상까지 막아야 한다.
+- 만약 PK index 키가 order_no인데, 파티션 키는 order_date라면?
+  - order_no가 123456인 order 레코드를 입력하려면, 중복값이 있는지 확인하려고 인덱스 파티션을 모두 탐색한다.
+  - order_no가 123456인 레코드는 어떤 파티션에든 입력될 수 있기 때문이다.
+  - 따라서 PK 인덱스 키를 (order_date, order_no)로 해줘야 한다.
+  - 게다가 레코드를 입력하고 커밋하기 전까지, 다른 트랜잭션이 같은 order_no로 다른 파티션에 입력하는 현상까지 막아야 한다.
   - 그러면 추가적인 lock 메커니즘까지 필요해서 느려진다.
 
 ## <span style="color:#802548">_파티션 exchange를 이용한 데이터 변경_</span>
