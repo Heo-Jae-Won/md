@@ -434,7 +434,7 @@ organization index;
         - database must constantly split and rearrange blocks to keep them sorted by salesman_id
 
 ```sql
-create table sales_performance (사번 varchar2(5), 일자 varchar2(8), .....) organization index;
+create table sales_performance (employee_no varchar2(5), regist_date varchar2(8), .....) organization index;
 create index(employee_no, regist_date) in sales_performance
 ```
 
@@ -480,14 +480,14 @@ create index(employee_no, regist_date) in sales_performance
 
 ```sql
 SELECT *
-FROM 월별customer별판매집계
-WHERE 판매월 LIKE '2019%'
-AND 판매구분 = 'B'
+FROM month_customer_sales_aggregate
+WHERE month_sales LIKE '2019%'
+AND sales_type = 'B'
 
 SELECT *
-FROM 월별customer별판매집계
-WHERE 판매월 BETWEEN '201901' and '201912'
-AND 판매구분 = 'B'
+FROM month_customer_sales_aggregate
+WHERE month_sales BETWEEN '201901' and '201912'
+AND sales_type = 'B'
 ```
 
 <img src="/image/between-like-difference.jpg" />
@@ -496,10 +496,10 @@ AND 판매구분 = 'B'
 - if u overuse like, u pay the price in performance
 
 ```sql
-SELECT customer_id, commodity_name, 지역코드, ...
-FROM 가입상품
-WHERE 회사코드 = :com
-AND 지역코드 LIKE :reg || '%'
+SELECT customer_id, commodity_name, province_code, ...
+FROM subscribed_commodity
+WHERE company_code = :com
+AND province_code LIKE :reg || '%'
 AND commodity_name LIKE :prod || '%'
 ```
 
@@ -509,15 +509,15 @@ AND commodity_name LIKE :prod || '%'
 - u can use dynamic sql in level of application code 
 
 ```sql
-SELECT * customer_id, commodity_name, 지역코드, ....
-FROM 가입상품
-WHERE 회사코드 = :com
-AND 지역코드 = :reg
+SELECT * customer_id, commodity_name, province_code, ....
+FROM subscribed_commodity
+WHERE company_code = :com
+AND province_code = :reg
 AND commodity_name LIKE :prod || '%'
 
-SELECT customer_id, commodity_name, 지역코드, ...
-FROM 가입상품
-WHERE 회사코드 = :com
+SELECT customer_id, commodity_name, province_code, ...
+FROM subscribed_commodity
+WHERE company_code = :com
 AND commodity_name LIKE :prod || '%'
 ```
 
@@ -934,6 +934,8 @@ end;
 
 
 ## <span style="color:#802548">_DB parallellism_</span>
+todo
+
 - in Db, there is parallellism system
   - it's about multi-proceesing one query using multiple CPU
 - it's used during Full scan  large index range scan
@@ -1449,7 +1451,7 @@ LEFT JOIN LATERAL (
            MAX(transaction_count) maximum_transaction
     FROM transaction
     WHERE transaction_date >= TRUNC(SYSDATE, 'mm')
-      AND customer_no = c.customer_no -- 밖에서 필터링된 신규 고객번호가 이 안으로 쏙 들어옵니다 (Push down)
+      AND customer_no = c.customer_no -- Push down
 ) t ON 1=1
 WHERE c.entry_date >= TRUNC(ADD_MONTHS(SYSDATE, -1), 'mm');
 ```
@@ -1537,7 +1539,7 @@ SELECT ST.case_no, ST.serinal_no ,ST.case_code, ST.observation_date
 FROM observation_progress ST, rescue RPT
 WHERE case_code = '0001'
 AND observation_date BETWEEN :V_TIMEEFROM || '000000' AND :V_TIMET0 || '235959'
-AND RPT.출동센터ID = :V_CNTR_ID
+AND RPT.callout_center_id = :V_CNTR_ID
 AND ST.case_no = PRT.case_no
 ORDER BY case_no, observation_date
 ```
@@ -1554,7 +1556,7 @@ WHERE case_code = '0001'
 AND observation_date BETWEEN :V_TIMEEFROM || '000000' AND :V_TIMET0 || '235959'
 AND NOT EXISTS (
               SELECT 'X' FROM rescue
-              WHERE 출동센터ID = :V_CNTR_ID
+              WHERE callout_center_id = :V_CNTR_ID
               AND case_no = ST.case_no
             ) 
 ORDER BY ST.case_no, ST.observation_date
@@ -1645,24 +1647,24 @@ alter session set sort_area_size = 524288;
 - max triggers a lot of disk I/O
 
 ```sql
-SELECT equipment_no, change_date, change_history_order, 상태코드, 메모
-FROM (SELECT equipment_no, change_date, change_history_order, 상태코드, 메모
-            , MAX(change_history_order) OVER(PARTITION BY equipment_no) 최종change_history_order
+SELECT equipment_no, change_date, change_history_order, status_code, comment
+FROM (SELECT equipment_no, change_date, change_history_order, status_code, comment
+            , MAX(change_history_order) OVER(PARTITION BY equipment_no) final_change_history_order
             FROM change_history
             WHERE change_date = :upd_dt)
-WHERE change_history_order = 최종change_history_order
+WHERE change_history_order = final_change_history_order
 ```
 
 
 - rank doesnt
 
 ```sql
-SELECT equipment_no, change_date, change_history_order, 상태코드, 메모
-FROM (SELECT equipment_no, change_date, change_history_order, 상태코드, 메모
-            , RANK(change_history_order) OVER(PARTITION BY equipment_no ORDER BY change_history_order DESC) 최종change_history_order
+SELECT equipment_no, change_date, change_history_order, status_code, comment
+FROM (SELECT equipment_no, change_date, change_history_order, status_code, comment
+            , RANK(change_history_order) OVER(PARTITION BY equipment_no ORDER BY change_history_order DESC) final_change_history_order
             FROM change_history
             WHERE change_date = :upd_dt)
-WHERE change_history_order = 최종change_history_order
+WHERE change_history_order = final_change_history_order
 ```
 
 
@@ -1694,7 +1696,7 @@ WHERE change_history_order = 최종change_history_order
 
 
 ## <span style="color:#802548">_batch strategy_</span>
-
+todo
 
 ## <span style="color:#802548">_insert batch: drop constraint - reactivating constraint_</span>
 - for batch program, index and data integrity constraint degrade DML performance
@@ -2006,7 +2008,9 @@ UPDATE SET
 - after table partition, we can choose index partition
   - local
   - global
-todo
+- global index is general index
+- even when parition is created and partition key is set, for scan performance, global index is needed either
+- and local partitioned index + global index is enough higher when performing delete rows by partition than general delete sql
 
 ## <span style="color:#802548">_range partition_</span>
 - range is based mainly on date
@@ -2026,7 +2030,6 @@ partition by range(order_date) (
 
 <img src="/image/partition.jpg" />
 
-
 - but without column key scan, Scatter-Gather Index Scan happens 
 - like "WHERE CustomerID = 1234" that is not partition key, what happens ?
   - Thread and Iterator Overhead: open, read, and close each individual partition one by one
@@ -2034,67 +2037,38 @@ partition by range(order_date) (
   - Scatter-Gather CPU Cost
 
 
-
-- 실제 파티션의 성능 향상 원리가 파티션 pruning에 있다.
-- SQL 하드파싱이나 실행 시점에 조건절을 분석한다.
-- 읽지 않아도 되는 파티션은 액세스 대상에서 제외해버린다.
-- 예를 들어보자.
-  - 1200만건의 25%를 index를 써서 조회하자니 full scan보다 느리다.
-  - 그렇다고 full scan하면 사이즈가 너무 커서 부담스럽다.
-  - 그럴 때 100만건 단위로 파티션을 나누면 일부 파티션만 읽으면 되기에 성능이 좋아진다.
-  - 특히 병렬처리와 같이 이뤄진다면 더더욱 성능이 좋다.
+- during SQL exeuction, optimizer analyse conditional clause 
+- during that process, partition that doesnt need is pruned
+- this is practical example
+  - 12m data scan with index that has 25% hit rate is slower than table full scan
+  - but full scan has high work load
+  - in this case, dividing partition can improve performance
+  - especially with parallellism
 
 <img src="/image/partition-fullscan.jpg" />
-
-
-## <span style="color:#802548">_hash partition_</span>
-- hash partition 은 PK처럼 변별력이 좋고 데이터 분포가 고른 컬럼을 파티션 기준으로 선정해야 한다.
-- 반드시 = 조건으로 풀려야 한다.
-
-
-## <span style="color:#802548">_list partition_</span>
-- 사용자가 정의한 그룹핑 기준에 따라 데이터를 분할한다.
-```sql
-CREATE TABLE 인터넷매물 (물건코드 varchar2(5), 지역분류 varchar2(4), ...)
-PARTITION BY list(지역분류) (
-  partition P_지역1 values ('서울')
-, partition P_지역2 values ('경기', '인천'
-, partition P_지역3 values ('부산', '대구', '대전', '광주')
-, partition P_기타 values (DEFAULT) 
-  )
-);
-```
-
-- 이 경우에는 될 수 있으면 값이 최대한 고르게 나오게끔 data를 유도하는 게 좋다.
-- 비즈니스 도메인용으로 쓰이는 테이블 파티션 종류다.
-  
-
 
 
 ## <span style="color:#802548">_index partition_</span>
 - 인덱스 파티션은 3가지로 나뉜다.
 - local partitioned index
-  - table partition과 index partition이 같은 경우다.
-  - index 만들면서 뒤에 LOCAL을 붙여주면 끝이다.
-  - 오라클이 자동 management_하며, table partition 구성을 변경해도 index 재생성 안해도 됨
-  - 변경작업이 매우 빠르게 끝나므로 피크시간대만 피하면 된다.
+  - index is belonged to table partition
+  - when table partition configuration is changed, no need for recreation of index
 
 <img src="/image/local-partitioned-index.jpg" />
 
 
 - global partitioned index
-  - table partition과 index partition이 다른 경우다.
-  - index 만들면서 뒤에 GLOBAL을 붙여주면 끝이다.
-  - 비파티션 테이블에도 사용가능하다.
-  - 테이블 구성이 바뀌는 순간 index를 재생성해줘야 한다.
+  - index is not belonged to table partition
+  - but we can specify range of index like > 100,000
+  - as table partition configuration is changed, need for recreation of index
 
 <img src="/image/global-partitioned-index.jpg" />
 
 
 - non-partitioned index
-  - 일반 create index 문이다.
-  - 테이블 파티션 구성을 바꾸는 순간 인덱스를 재생성해야한다.
-
+  - it's general index when no parition exists
+  - index is not belonged to table partition
+  - as table partition configuration is changed, need for recreation of index
 
 <img src="/image/global-non-partitioned-index.jpg" />
 
@@ -2108,159 +2082,175 @@ PARTITION BY RANGE(order_amount) (
   PARTITION P_MX values less than (MAXVALUE)
 )
 
-CREATE INNDEX order_X04 on order (customer_id, 배송일자);
+CREATE INNDEX order_X04 on order (customer_id, delivery_start_date);
 ```
 
-- 인덱스 파티션과 관련해 중요한 제약은 아래와 같다.
-- unique index(주로 PK)를 파티셔닝하려면, 테이블 파티션 키가 모두 index 구성 컬럼이어야한다는 점이다.
-- 만약 PK index 키가 order_no인데, 파티션 키는 order_date라면?
-  - order_no가 123456인 order 레코드를 입력하려면, 중복값이 있는지 확인하려고 인덱스 파티션을 모두 탐색한다.
-  - order_no가 123456인 레코드는 어떤 파티션에든 입력될 수 있기 때문이다.
-  - 따라서 PK 인덱스 키를 (order_date, order_no)로 해줘야 한다.
-  - 게다가 레코드를 입력하고 커밋하기 전까지, 다른 트랜잭션이 같은 order_no로 다른 파티션에 입력하는 현상까지 막아야 한다.
-  - 그러면 추가적인 lock 메커니즘까지 필요해서 느려진다.
+- for using table partition, there is something to be careful
+- if PK is order_no, but partition key is order_date ?
+  - to find out duplication, all index partition scan is needed
+  - in this case, u need to create index (order_date, order_no)
+    - if u need partition-first approach
+  - otherwise, u need to create index (order_no, order_date)
+    - this is general approach
 
-## <span style="color:#802548">_파티션 exchange를 이용한 데이터 변경_</span>
-- 테이블이 파티셔닝되어있고, 인덱스도 다행히 로컬 파티션이라면, 임시 테이블을 만들어 원본 파티션과 바꿔치기하기도 한다.
-- 만약 상태코드가 추가되면서 기존 상태코드도 바꾸기로 결정했다고 해보자.
-- 그럼 기존의 상태코드들을 모두 바꿔야 할 것이다. 그런데 그냥  update하기에는 index 구조 등 시간이 오래걸린다.
-- 따라서 만약 파티션 테이블이라면 미리 임시 파티션 테이블을 바꾼 상태코드로 복제해서 만든다. 
-- 프로세스는 아래와 같이 진행하면 된다.
+- we see that table partition needs careful usage
+- in real world, partition is used like below
+  - deleting mass data table like api log, financial log, sales report
+    - need to delete older than 6 months 
+    - Running a massive DELETE will lock the table and degrade performance
+    - ALTER TABLE logs DROP PARTITION p_2025_01; is enough
+
+
+
+## <span style="color:#802548">_data deleting using partition_</span>
+- except for above reasons, deleting data using parition has performance benefits
+- without partition, process becomes longer and heavy
+  - it's performed row by row 
+  - needs to delete extrat Metadata
+  - scattered index across several file
+
 ```
-1. 임시 테이블을 생성한다. 가능하면 nologging 모드
-2. transaction데이터를 읽어 임시 테이블에 insert하면서 상태코드 값을 수정한다.
-3. 임시 테이블에 원본 테이블과 같은 구조로 index를 insert한다. 가능하면 nologging 모드
-4. 2014년 12월 파티션과 임시 테이블을 exchange한다.
-5. 임시 테이블을 drop한다.
-6. 만약 nologging모드였다면, 파티션을 logging 모드로 전환한다.
+table record delete
+table record delete undo logging
+table record delete redo logging
+redo logging for undo logging
+index record delete
+index record delete undo logging
+index record delete undo logging
+redo logging for undo logging
 ```
 
+- but partition just needs drop
+- no need for unnecessasry things
+  - it's performed by file system, just deleting file
+  - just 1 table schmea metadata delete
+  - if local index partition, index is concentrated in 1 file
+  - if local + global index, then needs 2 version
+  - 3 version shows higher performance but it wakes up all CPU, so it can cause resource contention
 
-- sql로는 아래와 같다.
 ```sql
-1. CREATE TABLE transaction_t nologging as SELECT * FROM transaction WHERE 1 = 2;
+ALTER TABLE transaction DROP PARTITION p201412;
 
-2. INSERT /*+ append */ into transaction_t
-SELECT customer_no, transaction_date, transaction순번, (CASE WHEN 상태코드 <> 'ZZZ' THEN 'ZZZ' ELSE 상태코드 END) 상태코드
+ALTER TABLE orders 
+DROP PARTITION p_orders_202605 
+UPDATE INDEXES;
+
+ALTER TABLE customer_transactions 
+DROP PARTITION p_2026_m04 
+UPDATE INDEXES PARALLEL 4;
+```
+
+- if condition is complex ? 
+- create temp table like transaction_t and then replicate needed sdata
+- process is like below
+
+```sql
+CREATE TABLE transaction_t
+AS 
+SELECT *
+FROM transaction
+WHERE transaction_date < '20150101'
+AND status_code = 'ZZZ'
+
+ALTER TABLE transaction TRUNCATE PARTITION p201412;
+
+INSERT INTO transaction
+SELECT * FROM transaction_t;
+
+DROP TABLE transaction_t;
+```
+
+
+- however, partition drop or delete without service stop needs some condition
+  - parition key and query conditiona column is same 
+  - partition unit and query condition is same
+    - partition unit is 1 month and query condition is 1 month
+  - index is all local paritioned index and includes PK
+
+
+## <span style="color:#802548">_data change using partition_</span>
+- index change or add takes long time
+- but with parition, it takes not much time
+
+```sql
+CREATE TABLE transaction_t nologging as SELECT * FROM transaction WHERE 1 = 2;
+
+INSERT /*+ append */ into transaction_t
+SELECT customer_no, transaction_date, transaction순번, (CASE WHEN status_code <> 'ZZZ' THEN 'ZZZ' ELSE status_code END) status_code
 FROM transaction
 WHERE transaction_date < '20150101'
 
-1. CREATE UNIQUE INDEX transaction_t_pk on transaction_t (customer_no, transaction_date, transaction순번) nologging;
+CREATE UNIQUE INDEX transaction_t_pk on transaction_t (customer_no, transaction_date, transaction순번) nologging;
 CREATE INDEX transaction_t_x1 on transaction_t(transaction_date, customer_no) nologging;
-CREATE INDEX transaction_t_x2 on transaction_t(상태코드, transaction_date) nologging;
+CREATE INDEX transaction_t_x2 on transaction_t(status_code, transaction_date) nologging;
 
-1. ALTER TABLE transaction
+ALTER TABLE transaction
 EEXCHANGE PARTITION p201412 WITH TABLE transaction_t
 INCLUDING INDEXES WITHOUT validation;
 
-1. DROP TABLE transaction_t;
+DROP TABLE transaction_t;
 
-2. ALTER TABLE transaction MODIFY partition p201412 logging;
+ALTER TABLE transaction MODIFY partition p201412 logging;
 ALTER TABLE transaction_pk MODIFY partition p201412 logging;
 ALTER TABLE transaction_x1 MODIFY partition p201412 logging;
 ALTER TABLE transaction_x2 MODIFY partition p201412 logging;
 ```
 
+## <span style="color:#802548">_hash partition_</span>
+- hash partition is used when table's query basis is mainly not date
+- for this case, sequence object is used
+2. 해시 파티션 (Hash Partition)으로 전환 + 시퀀스 채번만약 날짜 기준의 대량 삭제 요건보다 비PK 컬럼(특히 특정 ID나 코드값) 기반의 동등 조회(=)가 압도적으로 중요하다면, Range 파티션을 과감히 포기하고 Hash 파티션으로 선회해야 합니다.채번 방식: 이때는 날짜를 붙일 필요가 없으므로, 다시 시퀀스 오브젝트(Sequence)를 사용하여 고유한 단일 ID로 PK를 채번합니다. (앞서 언급하신 CACHE 1000 옵션 적용)파티션 구성: 자주 조회하는 비PK 컬럼(예: USER_ID)을 해시 파티션 키로 지정합니다.효과: USER_ID = 'hong'으로 조회할 때, 오라클이 해시 함수를 돌려 데이터가 저장된 단 하나의 파티션만 콕 집어서 읽기 때문에 속도가 매우 빨라집니다.단점: 이 방식은 날짜 기준의 파티션 Drop이 불가능하므로, 오래된 데이터를 삭제할 때는 배치 프로그램을 돌려 나눠서 DELETE 해야 합니다.
 
-## <span style="color:#802548">_파티션 truncate를 이용한 데이터 삭제_</span>
-- 그냥 delete를 하면 굉장히 느리다.
-- 아래와 같은 기나긴 추가과정을 거쳐야 한다.
-```
-1. 테이블 레코드 삭제
-2. 테이블 레코드 삭제에 대한 undo logging
-3. 테이블 레코드 삭제에 대한 redo logging
-4. 인덱스 레코드 삭제
-5. 인덱스 레코드 삭제에 대한 undo logging
-6. 인덱스 레코드 삭제에 대한 redo logging
-7. undo에 대한 redo logging(2번과 5번)
-```
-
-
-
-- 따라서 partition drop이나 truncate를 하면 시간이 크게 단축된다.
-- 정말 간단한 경우는 아래와 같이 진행한다.
-```sql
-ALTER TABLE transaction DROP PARTITION p201412;
-```
-
-- 만약 조건절이 복잡하다면?
-- 임시 테이블(transaction_t)를 생성하고, 남길 데이터만 복제한다.
-- 프로세스는 아래와 같다.
-```
-1. 임시 테이블을 생성하고, 남길 데이터만 복제한다.
-2. 삭제 대상 테이블 파티션을 truncate한다.
-3. 임시 테이블에 복제해 둔 데이터를 원본 테이블에 입력한다.
-4. 임시 테이블을 drop한다.
-```
-
-- sql로는 아래와 같다.
-```sql
-1. CREATE TABLE transaction_t
-AS 
-SELECT *
-FROM transaction
-WHERE transaction_date < '20150101'
-AND 상태코드 = 'ZZZ'
-
-2. ALTER TABLE transaction TRUNCATE PARTITION p201412;
-
-3. INSERT INTO transaction
-SELECT * FROM transaction_t;
-
-4. DROP TABLE transaction_t;
-```
-
-
-- 서비스 중단 없이 파티션을 drop 또는 truncate하려면 아래 조건을 모두 만족해야 한다.
-  - 파티션키와 커팅 기준 컬럼일 일치
-    - 파티션 키와 조건절 컬럼이 모두 신청일자
-  - 파티션 단위와 커팅 주기가 일치
-    - 월단위 파티션을 월 주기로 조건절 걸음
-  - 인덱스가 모두 로컬 파티션 인덱스
-    - 파티션 키가 PK 구성에 포함되어야 함.
-
-
-
-
-
-## <span style="color:#802548">_채번방식에 따른 INSERT 성능 비교_</span>
-- 신규 데이터를 입력하려면 PK 중복을 방지하기 위한 채번이 선행되어야 한다.
-- PK를 채번하는 데는 4가지 방법이 있다.
+## <span style="color:#802548">_performance comparison of numbering ways_</span>
+- for single PK, to insert new data, numbering to prevent ducplicated row is essential
+- there is 4 ways to implement it
   - IDENETITY
-  - 채번 테이블
-  - 시퀀스 오브젝트
-  - MAX + 1 조회
-- IDENTITY는 12c 버전부터만 사용 가능하다.
-- 채번 테이블의 경우를 살펴보자.
-  - 결번이 없다.
-  - 복합 컬럼 PK를 만들 수 있다.
-  - 성능이 안 좋다.
-    - 채번 레코드를 변경하기 위한 row lock 경합
-    - 동시 INSERT가 심하면 채번 table data block 자체도 경합
-    - 그래서 잘 안 쓰인다.
-- 시퀀스 오브젝트를 살펴보자.
-  - IDENTITY 이전에 가장 널리 쓰이는 방식이다.
-  - 시퀀스 오브젝트는 오라클 내부에서 management_하는 채번 테이블이다.
-  - 단점으로는 채번 이후 롤백, instance 재가동, 삭제에 따라 결번이 생긴다는 점이다.
-  - 시퀀스는 비록 lock이 걸리지만 성능이 빠르다.
-  - 로우 캐시 lock
-    - 딕셔너리 정보(테이블, index, tablespace, data file, segment, extent, user, constraint, sequence, DB link)는 disk가 아닌 SGA에서 가져온다.
-    - SGA이기 때문에 공유되는 영역이라 접근 직렬화가 필요하다. 동시에 nextval이 호출되면 row cache에서 시퀀스 레코드를 변경한다.
-    - 시퀀스 레코드를 변경할 때 시퀀스 채번에 의한 로우 캐시 lock 경합을 줄이려면 해당 cache를 1000까지 늘리면 된다. 기본은 20이다.
-  - 시퀀스 캐시 lock
-    - 시퀀스 레코드를 변경할 때가 아니라 시퀀스 값을 얻어올 때도 lock이 필요하다.
-  - SV lock
-    - RAC 환경(이중화 같은 느낌)에선 sequence를 쓰려면 ORDER 옵션이 필요하다.
-    - ORDER 옵션을 사용하면 SV Lock으로 시퀀스 캐시에 대한 액세스를 직렬화한다.
-  - 
-- MAX + 1 조회를 살펴보자.
-  - 해당 방법은 시퀀스나 채번 테이블같이 별도 테이블이 필요 없다.
-  - PK가 복합컬럼일 때도 사용가능하다.
-  - 단점으론 다중 tranasction이 많아지면 성능이 급격히 나빠진다.
+    - same as sequence
+  - nubmering table
+    - it's from disk
+    - row lock by concurrent request for insert
+    - Undo/Redo Log needed
+  - sequence 
+    - db supoorted numbering table and it's from memory
+    - no row lock, fast latch
+    - bulk store sequence number
+  - MAX + 1 
+    - for complex PK (parent Id + sequential number) and Gapless Sequential Numbering (Tax_Invoice_No)
+    - it's mainly one time query max value and then + 1 in application level
+    - to prevent concurrency issue, below is common pattern
+
+    ```sql
+    --parent lock
+    SELECT invoice_id FROM Invoices WHERE invoice_id = 'INV-001' FOR UPDATE;
+    --child scan
+    SELECT NVL(MAX(item_seq), 0) FROM Invoice_Items WHERE invoice_id = 'INV-001';
+    --application level max + 1 code
+    ``` 
+
+    - under high pressure of concurrency, performance is degraded, cuz lock lasts long
+    - so it's used mainly for non-concurrency-high-pressure
 
 
-## <span style="color:#802548">_sequence보다 나은 채번 방식_</span>
-- 시퀀스보다 좋은 솔루션은 PK를 만들 때, 입력일시를 같이 붙이는 방식이다.
+## <span style="color:#802548">_better way to numbering_</span>
+- PK + date is better
+- but it reveals PK and entry date on url, which means low security
+- for that case, encryption is needed
+
+```text
+backend: concatenate 2 values with special character like - -> encrypt it -> send to front
+front: pass on data as it is to backend
+backend: decrypt and split
+```
+
+- if using redis, below is recommended
+- it shows very high performance cuz redis is in-memory db
+
+```text
+backend: pass on UUID data matched with own complex PK
+front: pass on UUID data as it is to backend
+backend: scan it from redis
+```
+
 - PK 구분속성에다가 입력일시를 같이 붙여주면 lock 이슈를 거의 해소할 수 있다.
 - PK를 (구분속성, 입력일시)와 같이 구성하는 것이다. 구분속성이 앞에 와야 한다.
   - 그럼 특히 파티션 단위로 데이터를 삭제할 때 굉장히 유용하다.
