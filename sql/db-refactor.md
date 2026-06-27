@@ -1440,3 +1440,131 @@ EXISTS는 해당 고객이 주문을 단 한 건이라도 했는지 확인하는
     - 1단계 (확인 즉시 패스): 컴퓨터가 고객 한 명을 잡고, 주문 테이블을 위에서부터 스캔합니다.
     - 2단계 (조기 종료): 그러다 그 고객의 주문이 딱 1건이라도 발견되는 순간, 뒤에 주문이 1만 건이 더 남아있어도 조사를 즉시 중단(Early Exit)하고 다음 고객으로 넘어갑니다.
 늘어난 데이터를 정렬하는 비용이 통째로 사라지기 때문에 EXISTS가 훨씬 빠릅니다.
+
+
+
+내부 동작 원리 (왜 빠를까?)DB 엔진은 orders 테이블의 인덱스를 타고 최신 주문 딱 10건만 먼저 뽑아냅니다.이제 화면에 내보낼 준비가 된 10개의 행에 대해서만 SELECT 절의 스칼라 서브쿼리가 실행됩니다.customers 테이블이 아무리 수천만 건에 달하는 대용량 테이블이더라도, 고작 10번만 인덱스로 콕콕 찔러서(Unique Index Scan) 이름을 가져오고 끝납니다.전체 쿼리는 거의 0.001초 만에 종료됩니다
+
+
+```sql
+SELECT o.order_id,
+       o.order_date,
+       o.amount,
+       -- 딱 10번만 실행되는 스칼라 서브쿼리 (매우 가볍고 빠름)
+       (SELECT c.name FROM customers c WHERE c.id = o.customer_id) AS customer_name
+FROM orders o
+WHERE o.order_date >= '2026-06-01'
+ORDER BY o.order_id DESC
+LIMIT 10; -- ★ 중요: 결과 행 수를 10건으로 엄격하게 제한
+```
+
+
+ 내부 동작 원리 (왜 느려질 수 있을까?)옵티마이저가 완벽하다면 이 쿼리도 10건만 먼저 자르고 조인하겠지만, 테이블 통계 정보가 조금만 꼬여도 옵티마이저는 다음과 같은 최악의 판단을 내릴 수 있습니다 [MySQL].대량 조인 먼저 수행: LIMIT 10 조건이 쿼리 맨 마지막에 있기 때문에, 옵티마이저는 6월 1일 이후 발생한 주문 수십만 건과 대용량 customers 테이블을 해시 조인(Hash Join)이나 대규모 루프 조인으로 통째로 먼저 합쳐버립니다.정렬 및 커팅: 두 테이블이 거대하게 합쳐진 가상 테이블을 가지고 ORDER BY로 정렬한 뒤, 그제야 맨 위의 10건만 남기고 나머지 수십만 건의 조인 결과를 버립니다.결과: 고작 10건 보여주려고 뒤에서 수십만 건의 조인 연산과 메모리(혹은 디스크 I/O)를 낭비하느라 쿼리가 몇 초 이상 버벅거리게 됩니다.
+
+
+```sql
+SELECT o.order_id,
+       o.order_date,
+       o.amount,
+       c.name AS customer_name
+FROM orders o
+LEFT JOIN customers c ON c.id = o.customer_id -- ⚠️ 여기서 문제가 생길 수 있음
+WHERE o.order_date >= '2026-06-01'
+ORDER BY o.order_id DESC
+LIMIT 10;
+```
+
+FROM절 서브쿼리(인라인 뷰)를 활용한 페이징 조인 튜닝 방식입니다.
+완벽한 데이터 압축: DB는 우선 가장 안쪽에 있는 서브쿼리(①번 블록)를 실행합니다. 인덱스를 타고 최신 주문 딱 10건만 가상 테이블(메모리)에 올립니다. 이 시점에서 데이터양은 100만 건에서 10건으로 압축됩니다.최소한의 조인 연산: 밖으로 나와서 customers 테이블과 조인을 시도할 때, 조인 대상이 고작 10건밖에 안 되기 때문에 customers 테이블이 1억 건이든 10억 건이든 상관없이 딱 10번만 인덱스로 콕 찔러서 이름을 가져옵니다.스칼라 서브쿼리와의 차이점 (유지보수의 절대적 우위): 만약 고객의 이름(name)뿐만 아니라 고객의 등급(grade), 연락처(phone) 등 여러 개의 컬럼을 한 번에 화면에 뿌려야 한다면, 스칼라 서브쿼리는 SELECT 절에 서브쿼리를 3개나 똑같이 적어야 해서 성능이 저하됩니다. 하지만 이 방식은 c.grade, c.phone을 SELECT 절에 그냥 적어주기만 하면 단 한 번의 조인으로 모두 가져올 수 있습니다.
+
+```sql
+SELECT o.order_id,
+       o.order_date,
+       o.amount,
+       c.name AS customer_name
+FROM (
+    -- ① [핵심] 주문 테이블에서 최신 데이터 딱 10건만 먼저 완벽하게 잘라냄
+    SELECT order_id, order_date, amount, customer_id
+    FROM orders
+    WHERE order_date >= '2026-06-01'
+    ORDER BY order_id DESC
+    LIMIT 10
+) o
+-- ② 딱 10건으로 줄어든 가벼운 결과셋을 가지고 고객 테이블과 조인함
+LEFT JOIN customers c ON c.id = o.customer_id;
+```
+
+
+성능과 확장성 면에서 "스칼라 서브쿼리는 아예 안 쓰고, 말씀하신 FROM 절 서브쿼리(인라인 뷰) 기반의 페이징 조인을 표준(Default)으로 삼는 것이 맞다"는 판단이 실무적으로 100% 옳습니다. 현대 대규모 시스템을 구축하는 많은 아키텍트와 시니어 개발자들이 실제로 그렇게 가이드를 주고 있습니다.
+
+
+
+- 상관서브쿼리를 쓴다면 아래와 같이 쓸 수 있다.
+- 해당 서브쿼리가 좋지 않은 이유는, SELECT를 구매 table에서 진행했지만, 서브쿼리를 만나서 한번 더 구매 table을 SCAN해야하기 때문이다.
+- 똑같은 TABLE을 두 번 scan하게 되는 것이다.
+- 또한 상관서브쿼리는 결합과 마찬가지로 데이터양에 따라 실행계획에 변동성이 높다.
+
+```sql
+select cust_id, seq, price
+	FROM 구매 R1
+    WHERE seq = (SELECT MIN(seq)
+					FROM 구매 R2
+                    WHERE R1.cust_id = R2.cust_id);
+```     
+
+```
+1	PRIMARY	R1		ALL					16	100.00	Using where
+2	DEPENDENT SUBQUERY	R2		ref	PRIMARY	PRIMARY	602	practice.R1.cust_id	4	100.00	Using index
+```
+
+- 따라서 상관서브쿼리가 아닌, window function을 쓰는 서브쿼리로 바꿔준다.
+- 실행계획도 안정적으로 바꾸고, table scan을 1회로 줄일 수 있다.
+
+```sql
+SELECT cust_id, seq, price
+FROM (SELECT cust_id, seq,price,
+		ROW_NUMBER() 
+			OVER(PARTITION BY cust_id
+					ORDER BY seq) AS row_seq
+		FROM 구매 ) WORK
+WHERE WORK.row_seq = 1;
+```
+
+
+```sql
+SELECT TMP_MIN.cust_id,
+        TMP_MIN.price - TMP_MAX.price AS diff
+FROM (SELECT R1.cust_id, R1.seq, R1.price
+        FROM 구매 R1
+            INNER JOIN
+                (SELECT cust_id, MIN(seq) AS min_seq
+                    FROM 구매
+                    GROUP BY cust_id) R2
+            ON R1.cust_id = R2.cust_id
+            AND R1.seq    = R2.min_seq) TMP_MIN
+        INNER JOIN
+            (SELECT R3.cust_id, R3.seq, R3.price
+                FROM 구매 R3
+                    INNER JOIN
+                        (SELECT cust_id, MAX(seq) AS min_seq
+                            FROM 구매
+                            GROUP BY cust_id) R4
+                    ON R3.cust_id = R4.cust_id
+                    AND R3.seq    = R4.min_seq) TMP_MAX
+        ON TMP_MIN.cust_id = TMP_MAX.cust_id;
+```
+
+```sql
+SELECT cust_id,
+        SUM(CASE WHEN min_seq = 1 THEN price ELSE 0 END)
+        - SUM(CASE WHEN max_seq = 1 THEN price ELSE 0 END) AS diff
+FROM (SELECT cust_id, price,
+            ROW_NUMBER() OVER(PARTITION BY cust_id
+                                ORDER BY seq) AS min_seq,
+            ROW_NUMBER() OVER(PARTITION BY cust_id
+                                ORDER BY seq DESC) AS max_seq
+        FROM 구매 ) WORK
+WHERE WORK.min_seq = 1
+    OR WORK.max_seq = 1
+GROUP BY cust_id;
+```

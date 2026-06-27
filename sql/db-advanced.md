@@ -1695,9 +1695,6 @@ WHERE change_history_order = final_change_history_order
 <img src="/image/dml-process.jpg" />
 
 
-## <span style="color:#802548">_batch strategy_</span>
-todo
-
 ## <span style="color:#802548">_insert batch: drop constraint - reactivating constraint_</span>
 - for batch program, index and data integrity constraint degrade DML performance
 - let's test without index and data integrity, how much it would become fast
@@ -2199,7 +2196,14 @@ ALTER TABLE transaction_x2 MODIFY partition p201412 logging;
 ## <span style="color:#802548">_hash partition_</span>
 - hash partition is used when table's query basis is mainly not date
 - for this case, sequence object is used
-2. 해시 파티션 (Hash Partition)으로 전환 + 시퀀스 채번만약 날짜 기준의 대량 삭제 요건보다 비PK 컬럼(특히 특정 ID나 코드값) 기반의 동등 조회(=)가 압도적으로 중요하다면, Range 파티션을 과감히 포기하고 Hash 파티션으로 선회해야 합니다.채번 방식: 이때는 날짜를 붙일 필요가 없으므로, 다시 시퀀스 오브젝트(Sequence)를 사용하여 고유한 단일 ID로 PK를 채번합니다. (앞서 언급하신 CACHE 1000 옵션 적용)파티션 구성: 자주 조회하는 비PK 컬럼(예: USER_ID)을 해시 파티션 키로 지정합니다.효과: USER_ID = 'hong'으로 조회할 때, 오라클이 해시 함수를 돌려 데이터가 저장된 단 하나의 파티션만 콕 집어서 읽기 때문에 속도가 매우 빨라집니다.단점: 이 방식은 날짜 기준의 파티션 Drop이 불가능하므로, 오래된 데이터를 삭제할 때는 배치 프로그램을 돌려 나눠서 DELETE 해야 합니다.
+- when non-PK column scan or non-date column scan is mainly executed, hash partition is needed
+  - for example, non-PK column is designated user_id
+  - when user_id = condition is interpreted, orcale specify that partition and read only within that partition
+  - but it's impossible to delete partition with date so needs delete batch
+
+  ## <span style="color:#802548">_batch strategy_</span>
+todo
+
 
 ## <span style="color:#802548">_performance comparison of numbering ways_</span>
 - for single PK, to insert new data, numbering to prevent ducplicated row is essential
@@ -2233,6 +2237,9 @@ ALTER TABLE transaction_x2 MODIFY partition p201412 logging;
 
 ## <span style="color:#802548">_better way to numbering_</span>
 - PK + date is better
+- (distinguishing trait + entry_date + random 4 number)
+  - distinguishing trait is set to head for fast partition delete
+  - 
 - but it reveals PK and entry date on url, which means low security
 - for that case, encryption is needed
 
@@ -2251,16 +2258,17 @@ front: pass on UUID data as it is to backend
 backend: scan it from redis
 ```
 
-- PK 구분속성에다가 입력일시를 같이 붙여주면 lock 이슈를 거의 해소할 수 있다.
-- PK를 (구분속성, 입력일시)와 같이 구성하는 것이다. 구분속성이 앞에 와야 한다.
-  - 그럼 특히 파티션 단위로 데이터를 삭제할 때 굉장히 유용하다.
-  - 특히 데이터가 빠르게 대량으로 쌓이는 환경이면 데이터 삭제하기가 쉬워야 한다.
-  - 삭제할 공간을 바로 시스템에 반납시켜야 DB를 scale-up하는 데 드는 비용이 적다.
-    - 그 떄 입력일시를 PK에 포함시키면 파티션키(입력일시)가 PK에 포함된다.
-    - 서비스 중단 없이 매우 빠르게 partition drop/truncate를 수행할수 있다는 의미다.
-  
 
 ## <span style="color:#802548">_INSERT가 빨라도 문제_</span>
+- 컴퓨터가 데이터를 저장할 때, 순서대로 늘어나는 '일련번호(1, 2, 3...)'나 '현재 시간'을 기준으로 인덱스(색인)를 만들면, 항상 맨 마지막 페이지(Right Growing)에만 새 데이터가 추가됩니다.
+- '버퍼 LOCK 경합'
+- RAC 환경(여러 대의 서버)에서는 왜 더 심각할까?
+- 1번 서버와 2번 서버가 동시에 데이터를 넣으려고 합니다.인덱스의 똑같은 마지막 페이지를 서로 수정하겠다고 메모리 소유권 카드(Current Block)를 네트워크를 통해 주고받으며 싸우게 됩니다. 이 과정에서 엄청난 속도 저하가 발생합니다.
+  - 복합 컬럼 인덱스 생성원리
+  - 인덱스를 순서대로 증가하는 값 하나만 쓰지 말고, 앞에 다른 값(예: 사용자 ID, 부서 코드 등)을 섞어서 만듭니다.결과: 순서대로 증가하더라도 앞에 붙은 값이 제각각이므로, 인덱스 장부의 한 곳이 아닌 여러 페이지로 흩어져서 저장됩니다.
+  - 인덱스 해시 파티셔닝 (Hash Partitioning)
+  - UUID
+
 - INSERT가 너무 빨라도 INDEX 경합이 생긴다. 특히 채번 과정이 없으면 INDEX BLOCK 경합이 나타난다.
 - INSERT 하는 row는 달라도, 같은 INDEX LEAF BLOCK을 갱신하려니 프로세스 간 버퍼 LOCK 경합이 발생한다.
 - 특히 순차적으로 값이 증가하는 일련번호, 입력일시 등의 단일컬럼 인덱스는 right growing이라서 이런 현상이 심하다.
@@ -2269,6 +2277,7 @@ backend: scan it from redis
   - 복합 컬럼에서는 거의 일어나지 않으니 복합 컬럼으로 만드는 것도 좋은 선택이다. 
   - 인덱스를 해쉬 파티셔닝한다.
   - 12c의 경우, global 시퀀스와 session sequence를 만든다.
+  
 ```sql
 CREATE sequence g_seq global;
 CREATE sequence s_seq session;
@@ -2277,7 +2286,10 @@ CREATE sequence s_seq session;
 - 글로벌 시퀀스는 커넥션 풀 프로세스가 DB에 접속하는 순간 호출된다.
 - 세션 시퀀스는 INSERT를 수행할 때 호출한다.
 - 따라서 아래와 같이 PK를 만들면 서로 다른 index leaf block에 값을 입력해 경합이 없다.
+
 ```sql
 INSERT INTO t(id, c1,c2) values
 (to_char(g_seq.currval, 'fm0000') || to_char(s_seq.nextval,'fm0000'), 'A', 'B')
 ```
+
+쉽게 말해, 이 기술은 전교생이 하나의 매점 창구에 줄 서던 것을 "반별로 전용 창구를 만들어 분산시키는 방법"입니다.g_seq (Global Sequence):DB 전체에서 공유되는 시퀀스입니다.웹 서버(WAS)나 커넥션 풀이 DB에 최초 접속(Login)할 때 딱 한 번만 번호를 받아 갑니다.예: 1번 작업 프로세스는 0001번 방, 2번 프로세스는 0002번 방을 배정받는 식입니다.s_seq (Session Sequence):Oracle 12c에서 처음 도입된 기능입니다. DB 전체가 아닌, 해당 세션(접속선) 안에서만 독립적으로 1, 2, 3... 번호를 올립니다.메모리 안에서만 돌기 때문에 번호를 딸 때 다른 프로세스와 싸우지 않아 속도가 극도로 빠릅니다.💡 결합했을 때 일어나는 마법이 두 값을 글자 그대로 이어 붙여서 PK(기본키)로 쓰면 다음과 같이 저장됩니다.1번 프로세스 (0001번 방): 00010001 → 00010002 → 000100032번 프로세스 (0002번 방): 00020001 → 00020002 → 00020003인덱스는 숫자의 크기 순서대로 정렬됩니다. 0001XXXX 데이터와 0002XXXX 데이터는 인덱스 장부 내에서 완전히 다른 페이지(Leaf Block)에 저장됩니다.따라서 동시에 수만 건의 INSERT가 몰려도 1번 프로세스와 2번 프로세스가 서로 부딪히지 않고 각자의 구역에 데이터를 초고속으로 집어넣을 수 있습니다.
