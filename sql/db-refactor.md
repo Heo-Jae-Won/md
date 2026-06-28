@@ -428,7 +428,9 @@ FROM Sales;
 
 - 上のSubqueryは3重複になるため、数知らずに内部でTable/Index Scanが行われてしまう
 - それを回避してたった1つのScanで済ませられるのがこのWindow Functionだ
-- しかも（Company, yaer)のIndexがある場合、ソートすら要らなくなる
+- しかも (Company, yaer) のIndexがある場合、ソートすら要らなくなる
+- ただ、Max Over関数は、中間年度が欠けている可能性に備えて RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING条件を使う
+- ROWS BETWEEN 1 PRECEDING AND 1 PRECEDINGでは年度に値がない場合に対応できない
 
 ```sql
 SELECT company,
@@ -438,8 +440,7 @@ SELECT company,
                             OVER (
                                     PARTITION BY company
                                     ORDER BY year
-                                    ROWS BETWEEN 1 PRECEDING
-                                    AND 1 PRECEDING
+                                    RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
                                 )
                 )
             WHEN 0 THEN '='
@@ -450,17 +451,13 @@ FROM Sales;
 ```
 
 - 上のMaxOver（）よりはLagという簡単なWindow Functionを使うと良い
+- 最適化がより優れている
 
 ```sql
 SELECT company,
         year,
         sale,
-        CASE SIGN(sale - lag(sale)
-                            OVER (
-                                    PARTITION BY company
-                                    ORDER BY year
-                                )
-                )
+        CASE SIGN(sale - lag(sale)　OVER (PARTITION BY company　ORDER BY year))
             WHEN 0 THEN '='
             WHEN 1 THEN '+'
             WHEN -1 THEN '-'
@@ -468,51 +465,74 @@ SELECT company,
 FROM Sales;
 ```
 
-
-
-- 상관 서브쿼리는 window 함수의 PARTITION BY와 ORDER BY와 같은 기능을 한다.
-- 그러나 employee_last_name능이 문제다. 실행계획이 변동한다는 것도 리스크다.
+- 要件が拡張されてしまい、直前の会社も取得することになった
+- そういう場合、Order Byの基準が変わる
+- CompanyをGroupにしてまとめても直前の会社はわからないためだ
+- Companyごとにでなく、むしろ全体を見てyearでソートして探す
 
 ```sql
 SELECT company,
-        year,
-        sale,
-        (SELECT company
-        FROM Sales S2
-        WHERE S1.company = S2.company
-        AND year = (SELECT MAX(year)
-                            FROM Sales S3
-                            WHERE S1.company = S3.company
-                            AND S1.year > S3.year)) AS pre_company,
-        (SELECT sale
-                FROM Sales S2
-        WHERE S1.company = S2.company
-        AND year = (SELECT MAX(year)
-                            FROM Sales S3
-                            WHERE S1.company = S3.company
-                            AND S1.year > S3.year)) AS pre_sale
-FROM Sales S1;
+       year,
+       sale,
+       LAG(company) OVER (ORDER BY year, company) AS pre_company,
+       LAG(sale)    OVER (ORDER BY year, company) AS pre_sale
+FROM Sales;
 ```
 
-- window function을 사용하면 아래와 같이 단순하게 바꿀 수 있다.
-- 왜 MAX를 사용해야 할까? MAX같은 집약함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
-  - 그러한 함수로는 count, max, min, avg, sum, rank, row_number, lag, lead 등이 있다.
+
+todo
+전체 탑 100
+limit order by
+
+그룹별 탑 100
+rank over()
+
+
+maxover
+- 모든 변경 이력을 화면에 한 줄도 빠짐없이 다 보여주면서, 동시에 "가장 최신 데이터와 지금 행의 값이 얼마나 차이 나는지" 비교 수치를 같이 보여주어야 할 때입니다.
+대량 데이터 환경에서 인덱스가 없을 때의 "최후의 보루"앞서 MAX() + 서브쿼리가 1등(가장 효율적)이라고 말씀드렸던 결정적인 전제 조건은 "복합 인덱스가 예쁘게 잘 걸려있을 때"였습니다.만약 운영 환경에서 인덱스를 전혀 만들 수 없는 통계성 테이블이거나 데이터가 수백만 건인데 인덱스가 없다면 어떻게 될까요?MAX() + 서브쿼리: 메인 쿼리 한 번, 서브 쿼리 한 번 테이블을 총 두 번 풀 스캔(Full Scan)해야 하므로 디스크 I/O가 2배로 듭니다.RANK() OVER(): 테이블은 한 번만 읽지만, 무식한 컴퓨터식 뇌 때문에 전체 정렬을 하다가 디스크 Temp가 터집니다.MAX() OVER(): 테이블을 딱 한 번만 읽으면서(Single Scan), 정렬도 안 하고 해시(Hash) 메모장으로만 풀기 때문에 인덱스가 없는 대량 데이터 환경에서는 성능 방어력 1위가 됩니다.
 
 ```sql
-SELECT company,
-        year,
-        sale,
-        MAX(company)
-            OVER (PARTITION BY company
-                ORDER BY year
-                ROWS BETWEEN 1 PRECEDING
-                        AND  1 PRECEDING) AS pre_company,
-        MAX(sale)
-            OVER (PARTITION BY company
-                    ORDER BY year
-                    ROWS BETWEEN 1 PRECEDING
-                            AND 1 PRECEDING) AS pre_sale
-FROM Sales;
+SELECT change_date, 
+       current_temperature,
+       -- 전체 데이터를 유지하면서 역대 최고 온도를 행마다 붙여줌
+       MAX(current_temperature) OVER(PARTITION BY equipment_no) as 역대최고온도,
+       -- 최고 온도와 현재 온도의 차이 계산
+       MAX(current_temperature) OVER(PARTITION BY equipment_no) - current_temperature as 최고온도와의차이
+FROM change_history
+WHERE equipment_no = 'EQ_001';
+```
+
+- "이력 데이터의 시작일과 종료일(유효기간) 채우기" 예시 쿼리입니다.
+
+```sql
+SELECT equipment_no,
+       상태코드,
+       start_date AS 시작일,
+       -- 내 바로 다음 행(1 FOLLOWING)부터 그다음 행(1 FOLLOWING)까지 중의 최대값
+       -- 즉, 바로 다음 1개 행의 날짜를 집계하여 가져옴
+       NVL(
+           MAX(start_date) OVER(
+               PARTITION BY equipment_no 
+               ORDER BY start_date
+               ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING
+           ) - 1,
+           TO_DATE('9999-12-31', 'YYYY-MM-DD')
+       ) AS 종료일
+FROM change_history;
+```
+
+```sql
+SELECT equipment_no,
+       상태코드,
+       start_date AS 시작일,
+       -- 바로 다음 행의 시작일을 가져와서 1일을 뺌 (오라클 기준 -1)
+       -- 만약 다음 행이 없다면(현재 진행 중인 최신 상태) '9999-12-31'로 채움
+       NVL(
+           LEAD(start_date) OVER(PARTITION BY equipment_no ORDER BY start_date) - 1, 
+           TO_DATE('9999-12-31', 'YYYY-MM-DD')
+       ) AS 종료일
+FROM change_history;
 ```
 
 
