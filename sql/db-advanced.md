@@ -646,6 +646,72 @@ X04: contract_id, DATA_ENTRY_DATE
 X05: contract_id, APPLICATION_DATE, INSURANCE_START_DATE, INSURANCE_END_DATE, DATA_ENTRY_DATE
 ```
 
+
+## <span style="color:#802548">_window function_</span>
+- for getting just one information, window function harms performance
+  - window function needs sorting same as sort by or group by
+  - but over(partition by/order by) usually doesnt fit with where clause condition so some indexes are ignored
+- therefore, another sorting is recommended
+- this uses top n stop key algorithms
+
+```sql
+SELECT equipment_no
+FROM (
+    SELECT equipment_no
+    FROM change_history
+    WHERE change_date = :upd_dt
+    AND equipment_no = :eq_no
+    ORDER BY change_history_order DESC
+)
+WHERE ROWNUM = 1;
+```
+
+- this is equivalent of above sql
+
+```sql
+SELECT equipment_no
+FROM change_history
+WHERE change_date = :upd_dt
+AND equipment_no = :eq_no
+ORDER BY change_history_order DESC
+FETCH FIRST 1 ROW ONLY;
+```
+
+- when window fucntion is needed ?
+- not only max value, but also another columns are needed
+- max over() function differs from with order by and no order by
+  - without order by, no need to sort
+    - just remember max value and update that max value is enough
+  - with order by, need sort operation 
+
+```sql
+SELECT equipment_no, change_date, change_history_order
+FROM (
+  SELECT equipment_no, change_date, change_history_order, 
+  MAX(change_history_order) OVER(PARTITION BY equipment_no) final_change_history_order 
+  FROM change_history 
+  WHERE change_date = :upd_dt
+)
+WHERE change_history_order = final_change_history_order
+```
+
+
+
+- rank over() always needs order by so always needs sort operation
+
+
+```sql
+SELECT equipment_no, change_date, change_history_order
+FROM (
+  SELECT equipment_no, change_date, change_history_order 
+  RANK(change_history_order) OVER(PARTITION BY equipment_no ORDER BY change_history_order DESC) final_change_history_order 
+  FROM change_history 
+  WHERE change_date = :upd_dt
+)
+WHERE change_history_order = final_change_history_order
+```
+
+
 ## <span style="color:#802548">_join_</span>
 - for web, a small amount of data is read, so still NL join using index is better
 - for batch, a big amount of data is read and updated, so Hash join using table scan is better
@@ -867,7 +933,7 @@ WHERE final_order_amount >= 20000
 - in this case, latch is not needed for sorting, which means high performance
 - merge join's flow is like below
   - sort
-  - merge
+  - merge'
 
 ```sql
 SELECT /*+ ordered use_merge(c) */
@@ -934,8 +1000,6 @@ end;
 
 
 ## <span style="color:#802548">_DB parallellism_</span>
-todo
-
 - in Db, there is parallellism system
   - it's about multi-proceesing one query using multiple CPU
 - it's used during Full scan  large index range scan
@@ -951,175 +1015,26 @@ Parallel:
   Thread3: 50m ~ 75m
   Thread4: 75m ~ 100m
 ```
+
 - hash join usually use parallellism
-  - it's full table scan
-  - it's CPU heavy
+  - hash join is full table scan
+  - hash join is CPU heavy
+  - so it uses parallellisms
 - but the problem is that, db parallelism doesnt have so much impact when data skew happens
-  - Thread1: 90%
-  - Thread2: 5%
-  - Thread3: 5%
-
-- Range partitioning (주의 필요)
-  - id 1~1000 → thread1
-  - 1001~2000 → thread2
-- 데이터 분포 문제 (가장 흔함)
-  - status = 'ACTIVE' 90%
-  - status = 'INACTIVE' 10%
-- join key skew
-- user_id = 1 (hot key)
-  - 9-4. 실무에서 skew 줄이는 방법
-  - better indexing
-- selectivity 개선
-
-2. composite key hashing
-hash(user_id + tenant_id)
-
-3. partitioning (물리 분산)
-range / hash partition
-
-4. query rewrite
-filter 먼저 줄이고 join
-
-5. avoid hot keys
-
-이게 가장 중요
-
-5. skew + parallel + hash join = 최악 조합
-
-이게 실무에서 제일 중요하다.
-
-상황
-user_id skew 있음
-join key skew 있음
-결과
-Thread1: hot key 80%
-Thread2: 10%
-Thread3: 10%
-문제
-한 thread만 계속 busy
-나머지는 idle
-memory grant는 전체 기준
-
-👉 “parallel인데 single thread보다 느림”
-
-parallel 좋은 경우
-- full scan
-- large aggregation
-- big hash join
-
-parallel 나쁜 경우
-- OLTP (small queries)
-- high skew data
-- nested loop 중심
-
-OLTP 셋팅
-MAXDOP = 1~4
-Cost threshold = 30~100
-RCSI = ON (많이)
-
-1. 배치 분리가 주는 진짜 이점
-OLTP DB
-- 짧은 SELECT / UPDATE
-- latency 중요
-
-Batch
-- 대량 scan / update / join
-
-분리하면:
-
-CPU 경쟁 제거
-lock 경쟁 감소
-IO 경쟁 감소
-parallelism 영향 제거
-
-👉 OLTP 안정성 크게 올라감
-
-(2) MAXDOP / parallel 정책 분리 가능
-
-OLTP → MAXDOP 1~4
-Batch → MAXDOP 8~16
-
-
-(3) 스케줄링 가능
-
-배치 = 새벽
-OLTP = 낮
-
-
---------
-
-(1) 데이터 동기화 문제
-
-어떻게 옮길까?
-
-replication
-CDC
-ETL
-dual write
-
-👉 항상 복잡도 증가
-
-
-(2) 데이터 지연 (lag)
-
-OLTP에서 변경
-→ Batch DB 반영까지 delay
-
-👉 실시간성이 깨짐
-
-(3) 운영 비용 증가
-DB 2개 운영
-backup 2개
-monitoring 2개
-장애 대응 2배
-
-
-(4) consistency 문제
-
-OLTP 기준 데이터 vs Batch 기준 데이터 다름
-
-
-3. 그래서 실무에서는 이렇게 나뉜다
-A. 중소 / 일반 서비스 (가장 많음)
-
-👉 DB 1개
-
-대신:
-
-RCSI ON
-chunk batch
-MAXDOP 조절
-index tuning
-
-B. 중간 규모
-
-👉 read replica 분리
-
-OLTP write → primary
-read / batch → replica
-
-
-C. 대형 시스템
-
-👉 완전 분리
-
-OLTP DB
-Batch / Analytics DB
-DW
-
-
-4. 핵심 판단 기준
-배치 분리하는 게 좋은 경우
-- 배치가 OLTP 성능을 실제로 죽이고 있음
-- CPU / IO contention 심함
-- batch window 길어짐
-- scale이 커짐 (수백만~수천만 row)
-
-굳이 분리 안 하는 경우
-- 아직 데이터 작음
-- 운영 복잡도 줄이는 게 중요
-- real-time consistency 필요
-
+  - Data Skew & Parallel Execution Problems
+    - id 1~1000 → thread1
+    - 1001~2000 → thread2
+  - Data distribution issues
+    - status = 'ACTIVE' 90%
+    - status = 'INACTIVE' 10%
+  - join key skew
+    - user_id = 1 (hot key)
+    - Thread 1: Handles 80% of the hot key data.
+    - Thread 2: Handles 10%.
+    - Thread 3: Handles 10%.
+- only one thread is busy, so parallellism becomes slower than single thread
+- (table full scan + large aggregation + hash join) combination is good presiquite for parallellism
+- (index + high skew data + NL) is bad 
 
 ## <span style="color:#802548">_nested subquery_</span>
 - recent optimizer proceeds query transformation 
@@ -2201,8 +2116,33 @@ ALTER TABLE transaction_x2 MODIFY partition p201412 logging;
   - when user_id = condition is interpreted, orcale specify that partition and read only within that partition
   - but it's impossible to delete partition with date so needs delete batch
 
-  ## <span style="color:#802548">_batch strategy_</span>
-todo
+
+## <span style="color:#802548">_batch strategy_</span>
+- chunk processing with 1 db
+  - for small app
+  - pros
+    - Zero data lag
+  - cons
+    - Single point of failure
+    - Risks locking tables during heavy processing
+- read replica 
+  - for Read-Heavy / Write-Light app, especially High User Traffic
+  - Cloud-Native Infrastructure
+  - pros
+    - Protects production app
+    - Scalable read performance
+  - cons
+    - Replication lag issues
+    - Write-back bottleneck: Final batch writes must still hit the primary DB
+- DB Segregation 
+  - for High Write-Heavy Operations
+  - The batch runs better on a data warehouse (OLAP) or NoSQL database.
+  - pros
+    - Absolute failure isolation
+    - Optimized data models
+  - cons
+    - Requires building and maintaining data sync workflows
+    - Harder to maintain data integrity across systems
 
 
 ## <span style="color:#802548">_performance comparison of numbering ways_</span>
@@ -2257,39 +2197,3 @@ backend: pass on UUID data matched with own complex PK
 front: pass on UUID data as it is to backend
 backend: scan it from redis
 ```
-
-
-## <span style="color:#802548">_INSERT가 빨라도 문제_</span>
-- 컴퓨터가 데이터를 저장할 때, 순서대로 늘어나는 '일련번호(1, 2, 3...)'나 '현재 시간'을 기준으로 인덱스(색인)를 만들면, 항상 맨 마지막 페이지(Right Growing)에만 새 데이터가 추가됩니다.
-- '버퍼 LOCK 경합'
-- RAC 환경(여러 대의 서버)에서는 왜 더 심각할까?
-- 1번 서버와 2번 서버가 동시에 데이터를 넣으려고 합니다.인덱스의 똑같은 마지막 페이지를 서로 수정하겠다고 메모리 소유권 카드(Current Block)를 네트워크를 통해 주고받으며 싸우게 됩니다. 이 과정에서 엄청난 속도 저하가 발생합니다.
-  - 복합 컬럼 인덱스 생성원리
-  - 인덱스를 순서대로 증가하는 값 하나만 쓰지 말고, 앞에 다른 값(예: 사용자 ID, 부서 코드 등)을 섞어서 만듭니다.결과: 순서대로 증가하더라도 앞에 붙은 값이 제각각이므로, 인덱스 장부의 한 곳이 아닌 여러 페이지로 흩어져서 저장됩니다.
-  - 인덱스 해시 파티셔닝 (Hash Partitioning)
-  - UUID
-
-- INSERT가 너무 빨라도 INDEX 경합이 생긴다. 특히 채번 과정이 없으면 INDEX BLOCK 경합이 나타난다.
-- INSERT 하는 row는 달라도, 같은 INDEX LEAF BLOCK을 갱신하려니 프로세스 간 버퍼 LOCK 경합이 발생한다.
-- 특히 순차적으로 값이 증가하는 일련번호, 입력일시 등의 단일컬럼 인덱스는 right growing이라서 이런 현상이 심하다.
-- 이러한 경우 RAC 환경에서는 특히나 더 심각한 성능 저하를 일으킨다. 여러 instance가 동시에 current block을 주고받으면 값을 입력해서다.
-- 해결방법으론 아래와 같다.
-  - 복합 컬럼에서는 거의 일어나지 않으니 복합 컬럼으로 만드는 것도 좋은 선택이다. 
-  - 인덱스를 해쉬 파티셔닝한다.
-  - 12c의 경우, global 시퀀스와 session sequence를 만든다.
-  
-```sql
-CREATE sequence g_seq global;
-CREATE sequence s_seq session;
-```
-
-- 글로벌 시퀀스는 커넥션 풀 프로세스가 DB에 접속하는 순간 호출된다.
-- 세션 시퀀스는 INSERT를 수행할 때 호출한다.
-- 따라서 아래와 같이 PK를 만들면 서로 다른 index leaf block에 값을 입력해 경합이 없다.
-
-```sql
-INSERT INTO t(id, c1,c2) values
-(to_char(g_seq.currval, 'fm0000') || to_char(s_seq.nextval,'fm0000'), 'A', 'B')
-```
-
-쉽게 말해, 이 기술은 전교생이 하나의 매점 창구에 줄 서던 것을 "반별로 전용 창구를 만들어 분산시키는 방법"입니다.g_seq (Global Sequence):DB 전체에서 공유되는 시퀀스입니다.웹 서버(WAS)나 커넥션 풀이 DB에 최초 접속(Login)할 때 딱 한 번만 번호를 받아 갑니다.예: 1번 작업 프로세스는 0001번 방, 2번 프로세스는 0002번 방을 배정받는 식입니다.s_seq (Session Sequence):Oracle 12c에서 처음 도입된 기능입니다. DB 전체가 아닌, 해당 세션(접속선) 안에서만 독립적으로 1, 2, 3... 번호를 올립니다.메모리 안에서만 돌기 때문에 번호를 딸 때 다른 프로세스와 싸우지 않아 속도가 극도로 빠릅니다.💡 결합했을 때 일어나는 마법이 두 값을 글자 그대로 이어 붙여서 PK(기본키)로 쓰면 다음과 같이 저장됩니다.1번 프로세스 (0001번 방): 00010001 → 00010002 → 000100032번 프로세스 (0002번 방): 00020001 → 00020002 → 00020003인덱스는 숫자의 크기 순서대로 정렬됩니다. 0001XXXX 데이터와 0002XXXX 데이터는 인덱스 장부 내에서 완전히 다른 페이지(Leaf Block)에 저장됩니다.따라서 동시에 수만 건의 INSERT가 몰려도 1번 프로세스와 2번 프로세스가 서로 부딪히지 않고 각자의 구역에 데이터를 초고속으로 집어넣을 수 있습니다.
