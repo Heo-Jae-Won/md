@@ -1,3 +1,7 @@
+## <span style="color:#802548">_集約を最小限にする_</span>
+- SUMが一番上のSELECTで行われているため、GROUP BYの対象が増えてしまう
+- 同じテーブルなのに、結合条件がちょっとだけ変わることでJOINを2回やっている
+
 ```sql
 select 
 a.SEQUENCE_NO
@@ -69,11 +73,9 @@ GROUP BY
 ```
 
 
-to
 
-- Single-Pass Aggregation: Uses your CASE WHEN pattern to scan CHANGE_INFO exactly once.
-- Scope Protection: The CHANGE_DATE <= {basisDate} clause prevents the subquery from reading unnecessary future history records.
-- Safe Output: Keeps your COALESCE handling to ensure NULL values show up cleanly as 0.
+- CASEーWHENを利用し、JOINを１つに減らす
+- SUMを使うテーブルであらかじめ集約を行い、大量のデータを対象に集約しないようにする
 
 ```sql
 SELECT
@@ -144,397 +146,183 @@ WHERE a.REVOKED = false
   AND a.VALID_DATE >= {basisDate};
 ```
 
-## <span style="color:#802548">_불필요한 서브쿼리 지우기-WHERE_</span>
-- 사원번호가 450,000보다 크고 최대연봉이 100,000보다 큰 사원을 조회해보자.
+## <span style="color:#802548">_WhereでSubQueryじゃんく、JOIN_</span>
+- Subqueryを使うと、WHERE employee_no > 450000の条件を満たす全ての行を対象にして Subqueryが発動する
+- つまり、100,000行だとすると、Indexがちゃんとせってされてない場合、100,000回のTableScanが発生してしまう
 
 ```sql
-SELECT 사원.사원번호, 사원.이름, 사원.성
-FROM 사원
-WHERE 사원번호 > 450000
-AND (SELECT MAX(연봉)
-      FROM 급여
-      WHERE 사원번호 = 사원.사원번호
+SELECT employee.employee_no, employee.employee_first_name, employee.employee_last_name
+FROM employee
+WHERE employee_no > 450000
+AND (SELECT MAX(salary)
+      FROM salary
+      WHERE employee_no = employee.employee_no
       ) > 100000;
 ```
 
-```
-| id | select_type         | table | type  | possible_keys | key      | ref                     | Extra       |
-|----|---------------------|-------|-------|---------------|----------|-------------------------|-------------|
-| 1  | PRIMARY             | 사원  | range | PRIMARY       | PRIMARY  | null                    | Using where |
-| 2  | DEPENDENT SUBQUERY  | 급여  | ref   | PRIMARY       | PRIMARY   | tuning.사원.사원번호     | null        |
-```
 
-- 실행계획을 보면 상관서브쿼리가 사용되었음을 알 수 있다. 실행계획을 살펴보면 아래와 같다.
-
-```
-1. FROM 절의 main table인 사원 테이블에 접근. 
-2. 접근 방식은 사원 테이블의 PK이며, range scan을 활용.
-3. 다음으로 급여 테이블에 접근
-4. 급여 테이블은 PK는 (사원번호, 시작일자)다. 시작일자가 아니라 사원번호로 조회하기 때문에 index를 타게 된다.
-```
-
-- 서브쿼리를 join으로 바꿔보자.
-- join으로 바꾸는 이유는 안정적인 실행계획을 만들기 위해서다.
+- そのため、Joinを使い、TableScanを1回にする
 
 ```sql
-SELECT 사원.사원번호, 사원.이름, 사원.성
-FROM 사원, 급여
-WHERE 사원.사원번호 > 450000
-AND 사원.사원번호 = 급여.사원번호
-GROUP BY 사원.사원번호
-HAVING MAX(급여.연봉) > 100000;
+SELECT employee.employee_no, employee.employee_first_name, employee.employee_last_name
+FROM employee
+INNER JOIN salary
+on employee.employee_no = salary.employee_no
+WHERE employee.employee_no > 450000
+GROUP BY employee.employee_no, employee.employee_first_name, employee.employee_last_name
+HAVING MAX(salary.salary) > 100000;
 ```
 
 
-## <span style="color:#802548">_불필요한 서브쿼리 지우기-FROM_</span>
-- 불필요한 서브쿼리는 from절에도 자주 나타난다.
-- A출입문으로 출입한 사원이 총 몇명인지 구해보자.
+## <span style="color:#802548">_FromでSubQueryじゃんく、Exists_</span>
+- Joinで結合の対象を減らす処理がない
+    - Aという人が100回のレコードがあるとき、Joinの対象が増えてしまう
+
 ```sql
-SELECT COUNT(DISTINCT 사원.사원번호) AS 데이터건수
-FROM 사원, (SELECT 사원번호
-            FROM 사원출입기록 기록
-            WHERE 출입문 = 'A'
-            ) 기록
-WHERE 사원.사원번호 = 기록.사원번호;
+SELECT COUNT(DISTINCT employee.employee_no) AS count
+FROM employee 
+INNER JOIN (
+    SELECT employee_no
+    FROM employee_entry_record
+    WHERE entrance_gate = 'A'
+) r 
+ON employee.employee_no = r.employee_no;
 ```
 
-- 사실 위의 sql문은 view-merging되어 아래와 같이 join으로 수행된다.
-```sql
-SELECT COUNT(DISTINCT 기록.사원번호) AS 데이터건수
-FROM 사원, 사원출입기록 기록
-WHERE 사원.사원번호 = 기록.사원번호
-AND 출입문 = 'A';
-```
+- 条件を満たすレコードがあるとき、直ちにEarly Stopを行うようにExistsを使う
+- Joinではないため、Bloat現象も起きない
+- 行が増えないため、つまりBloatがないため、Distinctが必要とされない
 
-- 그걸 아래와 같이 WHERE EXISTS로 바꿔주자.
-- DISTINCT는 필요가 없으니 지워준다. 사원번호는 어차피 PK라 DISTINCT가 필요가 없다.
 ```sql
-SELECT COUNT(1) AS 데이터건수
-FROM 사원
+SELECT COUNT(1) AS count
+FROM employee
 WHERE EXISTS (SELECT 1
-              FROM 사원출입기록 기록
-              WHERE 출입문 = 'A'
-              AND 기록.사원번호 = 사원.사원번호);
+              FROM employee_entry_record r
+              WHERE entrance_gate = 'A'
+              AND r.employee_no = employee.employee_no);
 ```              
 
-## <span style="color:#802548">_너무 많은 데이터를 가져오지 않게 indexed filtering을 거쳐라_</span>
-- 사원번호가 10,001번부터 10,100번까지인 사원들의 평균연봉과 최고연봉, 최저연봉을 구해보자.
+## <span style="color:#802548">_groupbyをするときは、必ずデータの量を減らす_</span>
+- このSQLでは、Salaryテーブル全体を対象にしてソートが行われる
+- あれは性能に悪い
+
 ```sql
-SELECT 사원.사원번호,
-      급여.평균연봉,
-      급여.최고연봉,
-      급여.최저연봉
-FROM 사원,
+SELECT employee.employee_no,
+      salary.average,
+      salary.maximum,
+      salary.minimum
+FROM employee,
     (
-      SELECT 사원번호,
-            ROUND(AVG(연봉),0) 평균연봉,
-            ROUND(MAX(연봉),0) 최고연봉,
-            ROUND(MIN(연봉),0) 최저연봉
-      FROM 급여
-      GROUP BY 사원번호
-      ) 급여
-WHERE 사원.사원번호 = 급여.사원번호
-AND 사원.사원번호 BETWEEN 10001 AND 10100;
+      SELECT employee_no,
+            ROUND(AVG(salary),0) average,
+            ROUND(MAX(salary),0) maximum,
+            ROUND(MIN(salary),0) minimum
+      FROM salary
+      GROUP BY employee_no
+      ) salary
+WHERE employee.employee_no = salary.employee_no
+AND employee.employee_no BETWEEN 10001 AND 10100;
 ```
 
-- index full scan을 수행하는데, GROUP BY를 동반합니다.
-- 조건절이 없는 GROUP BY로 너무 많은 데이터에 접근하지는 않는지 봐야 합니다.
-```
-| id | select_type | table      | type  | possible_keys      | key          | ref                    | Extra                       |
-|----|-------------|------------|-------|--------------------|--------------|------------------------|-----------------------------|
-| 1  | PRIMARY     | 사원       | range | PRIMARY            | PRIMARY      | null                   | Using where; Using index   |
-| 1  | PRIMARY     | <derived2> | ref   | <auto_key0>        | <auto_key0>  | tuning.사원.사원번호   |                             |
-| 2  | DERIVED     | 급여       | index | PRIMARY,I_사용여부  | PRIMARY      | null                   |                             |
-```
+- Group BYをしないように、Subqueryに変換する
 
-- GROUP BY를 바꿔서 서브쿼리로 만들고, index를 타게 설정합니다.
-- 조건절은 선택률이 매우낮을 떄, 즉 PK일 때 성능 향상 폭이 더 커진다.
-- 3번을 scan한다고 해도 별로 부담되지도 않는 scan이다.
 ```sql
-SELECT 사원.사원번호,
-( SELECT ROUND(AVG(연봉),0)
- FROM 급여 AS 급여1
- WHERE 사원번호 = 사원.사원번호
- ) AS 평균연봉,
- ( SELECT ROUND(MAX(연봉),0)
- FROM 급여 AS 급여2
- WHERE 사원번호 = 사원.사원번호
- ) AS 최고연봉,
- ( SELECT ROUND(MIN(연봉),0)
- FROM 급여 AS 급여3
- WHERE 사원번호 = 사원.사원번호
- ) AS 최저연봉
- FROM 사원
- WHERE 사원.사원번호 BETWEEN 10001 AND 10100;
+SELECT employee.employee_no,
+( SELECT ROUND(AVG(salary),0) FROM salary AS salary1 WHERE employee_no = employee.employee_no) AS average,
+( SELECT ROUND(MAX(salary),0)FROM salary AS salary2 WHERE employee_no = employee.employee_no) AS maximum,
+( SELECT ROUND(MIN(salary),0) FROM salary AS salary3 WHERE employee_no = employee.employee_no) AS minimum
+FROM employee
+WHERE employee.employee_no BETWEEN 10001 AND 10100;
  ```
 
 
-```
-| id | select_type         | table  | type  | possible_keys                    | key      | ref                   | Extra                        |
-|----|---------------------|--------|-------|----------------------------------|----------|-----------------------|------------------------------|
-| 1  | PRIMARY             | 사원   | range | PRIMARY,I_입사일자,I_성별_성      | PRIMARY  | null                  | Using where; Using index    |
-| 4  | DEPENDENT SUBQUERY | 급여3  | ref   | PRIMARY                          | PRIMARY  | tuning.사원.사원번호  |                              |
-| 3  | DEPENDENT SUBQUERY | 급여2  | ref   | PRIMARY                          | PRIMARY  | tuning.사원.사원번호  |                              |
-| 2  | DEPENDENT SUBQUERY | 급여1  | ref   | PRIMARY                          | PRIMARY  | tuning.사원.사원번호  |                              |
-```
+- ただし、Subqueryは行あたりにScanが発生してしまうため、Inner Joinに変換する
+- データベースのロジカル順序では On句がWhere句より早く読み込まれると知られているが、Optimizer最終的に判断する
+- この場合は、Whereをまず読んで１００件にしてからほかの作業を進めたほうが性能に優れるため、Optimizerの大半はそっちを選ぶ
 
-
-## <span style="color:#802548">_join을 깨고 서브쿼리를 써도 driving table은 작게 유지하자_</span>
-- 사원번호가 10,001번부터 50,000번 사이에 해당하는 데이터를 사원번호 기준으로 묶어 연봉 합계 기준으로 내림차순한다. 그중 150번째 데이터부터 10건의 데이터만 가져온다.
 ```sql
-SELECT 사원.사원번호, 사원.이름, 사원.성, 사원.입사일자
-FROM 사원, 급여
-WHERE 사원.사원번호 = 급여.사원번호
-AND 사원.사원번호 BETWEEN 10001 AND 50000
-GROUP BY 사원.사원번호
-ORDER BY SUM(급여.연봉) DESC
-LIMIT 150,10;
-```
-- 실행계획 자체는 큰 문제가 없다.
-- 그러나 문제는 join을 할 때 driven table이 너무 크다는 것이다.
-- 급여 table이 driven table인데, 2844047로 2백만 건이 넘는다.
-- 그럼 304,000 x 2,844,047 만큼 반복이 일어난다.
-```
-| id | select_type | table | type  | possible_keys                    | key      | ref                     | Extra                                         |
-|----|-------------|-------|-------|----------------------------------|----------|-------------------------|-----------------------------------------------|
-| 1  | SIMPLE      | 사원  | range | PRIMARY,I_입사일자,I_성별_성     | PRIMARY  | null                    | Using where; Using temporary; Using filesort |
-| 1  | SIMPLE      | 급여  | ref   | PRIMARY                          | PRIMARY  | tuning.사원.사원번호    |                                               |
+SELECT e.employee_no,
+       ROUND(AVG(s.salary), 0) AS average,
+       ROUND(MAX(s.salary), 0) AS maximum,
+       ROUND(MIN(s.salary), 0) AS minimum
+FROM employee e
+INNER JOIN salary s ON e.employee_no = s.employee_no
+WHERE e.employee_no BETWEEN 10001 AND 10100
+GROUP BY e.employee_no;
 ```
 
-- 이럴 떄는 서브쿼리를 써서라도 join될 컬럼의 갯수를 줄여야 한다.
-- FROM 테이블에 inline view를 만들었다. 이 inline view의 record는 10개밖에 안된다.
-- 10개의 record가 driving table이다. 1개의 record가 사원 테이블에 반복해 접근하며 이 과정이 반복된다.
-- 따라서 10 x 304,000 만큼 반복이 일어난다. 엄청나게 줄어든 것이다.
+- ただし、それをOptimizerにまかせるのじゃなく、Sqlとして強制させるために、InlineViewを使う
+- そうしたら、可読性も上がるので良い
+
 ```sql
-SELECT 사원.사원번호, 사원.이름, 사원.성, 사원.입사일자
-  FROM (SELECT 사원번호
-          FROM 급여
-          WHERE 사원번호 BETWEEN 10001 AND 50000
-          GROUP BY 사원번호
-          LIMIT 150,10) 급여,
-          사원
-  WHERE 사원.사원번호 = 급여.사원번호;
+SELECT e.employee_no,
+       s.average,
+       s.maximum,
+       s.minimum
+FROM employee e
+INNER JOIN (
+    -- Force the salary table to look up and aggregate ONLY the 100 IDs
+    SELECT employee_no,
+           ROUND(AVG(salary), 0) AS average,
+           ROUND(MAX(salary), 0) AS maximum,
+           ROUND(MIN(salary), 0) AS minimum
+    FROM salary
+    WHERE employee_no BETWEEN 10001 AND 10100
+    GROUP BY employee_no
+) s ON e.employee_no = s.employee_no;
 ```
 
 
-## <span style="color:#802548">_Join이 반드시 필요한지 의심하라_</span>
-- 사원 테이블에서 성별이 M이고, 사원번호가 300,000을 초과하는 사원번호를 출력해보자.
+## <span style="color:#802548">_Joinをするときは、必ずデータの量を減らす_</span>
+- 同じく、Joinをする際にもデータの量を減らすことが大事
+- 以下のようなSQLの場合、employeeのすべてのレコードを対象にしてOn句とマッチするsalaryテーブルのレコードを探す
+- もしemployeeが大量のデータを持ってるテーブルだったら、大変になる
+
 ```sql
-SELECT COUNT(사원번호) AS 카운트
+SELECT employee.employee_no, employee.employee_first_name, employee.employee_last_name, employee.entry_date
+FROM employee
+INNER JOIN salary
+ON employee.employee_no = salary.employee_no
+WHERE employee.employee_no BETWEEN 10001 AND 50000
+GROUP BY employee.employee_no
+ORDER BY SUM(salary.salary) DESC
+LIMIT 150, 10;
+```
+
+
+- こういうとき、InlineViewにしてDrivingテーブルのデータの量を減らす
+
+```sql
+SELECT employee.employee_no, employee.employee_first_name, employee.employee_last_name, employee.entry_date
 FROM (
-      SELECT 사원.사원번호, 관리자.부서번호
-      FROM (
-            SELECT *
-            FROM 사원
-            WHERE 사원번호 > 300000
-      ) 사원
-      LEFT JOIN 부서관리자 관리자
-      ON 사원.사원번호 = 관리자.사원번호
-) 서브쿼리;
-```
-- type이 range면 어쨌든 index range scan이다. 근데 ref는 null이라면 사원이 driving table임을 의미한다.
-- ref는 join을 수행할 때 driven table에 어떤 column으로 해당 테이블에 access하는 지를 알려준다.
-- driving table은 당연히 ref가 null일 수 밖에 없다.
-- driven table은 type이 ref가 떠야 최적화의 발을 뗀 것이다. ref관련이 아니면 특별한 경우를 제외하면 join 조건절에 문제가 있는 것이다.
-- type이 range이며 extra에 Using index가 있는 것은 index only scan이라는 뜻이다. 매우 좋은 index scan이다. 
-- 하지만 join자체가 필요없다면 무의미하다.
-```
-| id | select_type | table   | type  | possible_keys | key      | ref                    | Extra                    |
-|----|-------------|---------|-------|---------------|----------|------------------------|--------------------------|
-| 1  | SIMPLE      | 사원    | range | PRIMARY       | PRIMARY  | null                   | Using where; Using index |
-| 1  | SIMPLE      | 관리자  | ref   | PRIMARY       | PRIMARY  | tuning.사원.사원번호    | Using index              |
-```
-- FROM 절에서 JOIN을 하고 있다.
-- 이건 뭔가 필요 없는 정보가 들어갔다는 신호일 수 있다.
-- 아래와 똑같은 내용이니 바꿔주자.
-```sql
-SELECT COUNT(사원.사원번호)
-    FROM (
-          SELECT *
-          FROM 사원
-          WHERE 사원번호 > 300000
-    ) 사원
-    LEFT JOIN 부서관리자 관리자
-    ON 사원.사원번호 = 관리자.사원번호;
-```
-
-- 이제 제대로 tuning을 시작해보자.
-- join을 하게 되는 조건이 사원.사원번호 = 관리자.사원번호다.
-- 저 조건은 무의미하다. 그러니 아래와 같이 일반 쿼리문으로 바꿔주자.
-```sql
-SELECT COUNT(사원번호) AS 카운트
-FROM 사원
-WHERE 성별 = 'M'
-AND 사원번호 > 300000;
-```
-- where 조건이 성별과 PK로 두개다. 이같이 조건이 indexed column이 multiple일 때, optimizer가 skip scan을 실행하는 경우도 있다. 
-- 그건 extra를 보고 알 수 있다. using index for skip scan이라 떠있다.
-- 한 개의 index로는 커버될 수 없을 때, skip scan을 실행한다. 사원번호와 성별 모두 index 처리된 조건이라 그런 것이다.
-```
-index skip scan 조건
-1.인덱스가 SELECT 리스트의 모든 부분을 커버하는 경우. 즉, 커버링 인덱스가 적용되는 경우
-
-2.SELECT DISTINCT, SELECT ... GROUP BY 또는 단일 투플 SELECT 문인 경우
-
-3.MIN/MAX 함수를 제외한 모든 집계 함수가 DISTINCT를 포함하는 경우
-
-4.COUNT(*)가 사용되어선 안 됨
-
-5.부분 키(subkey)의 카디널리티(고유 값의 개수)가 전체 인덱스의 카디널리티보다 100배 작은 경우
-```
-```
-+----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
-| id | select_type | table     | partitions | type | possible_keys     | key       | key_len | ref   | rows | filtered | Extra                          |
-+----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
-|  1 | SIMPLE      | 사원      | NULL       | range| PRIMARY,I_성별_성 | I_성별_성  | NULL    | NULL  | NULL | NULL     | Using where; Using index for skip scan |
-+----+-------------+-----------+------------+------+-------------------+-----------+---------+-------+------+----------+--------------------------------+
-```
-- 그와 비슷하게 index_merge라는 type도 있는데, 여기는 각 indexed column의 조건을 통해 얻어온 결과값들이 겹치지 않을 때 자주 선택된다.
-- 흔하게 보기는 어렵다. 보통 결과값들은 겹치기 때문이다.
-```
-+----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
-| id | select_type | table     | partitions | type  | possible_keys | key     | key_len | ref   | rows | filtered | Extra                    |
-+----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
-|  1 | SIMPLE      | table1    | NULL       | index_merge   | index1,index2 | index1,index2 | NULL    | NULL |    NULL | Using intersect(index1,index2) |
-+----+-------------+-----------+------------+-------+---------------+---------+---------+-------+------+----------+--------------------------+
-```
-
-- 다른 예시를 보자.
-- 부서사원_매핑 테이블에도 해당 부서번호가 있는 경우에만, 부서 관리자가 소속된 부서번호를 조회해보자.
-- 두 테이블이 join을 했다. 따라서 둘 모두 type이 ref일 수는 없다. 
-- ref는 다른 테이블의 index에 대한 reference가 이미 있다는 전제하에 가능하기 때문에, 한 테이블은 반드시 index scan이 필요하다.
-- 따라서 한 테이블은 무조건 type이 index거나 range여야 한다.
-- 참고로 range도 index scan일 수밖에 없다. full scan은 index를 타지 않기 때문이다.
-```sql
-SELECT DISTINCT 매핑.부서번호
-FROM 부서관리자 관리자, 
-      부서사원_매핑 매핑
-WHERE 관리자.부서번호 = 매핑.부서번호
-ORDER BY 매핑.부서번호;
-```
-- type이 index인데 ref가 null인 것은 index full scan이라는 의미다.
-- type이 index인데 ref가 null이면서 extra가 Using index니까 여기서는 index only scan이다. index scan 중에는 가장 효율적이다.
-- index full scan은 어쨌든 table data에 접근이 필요하기 때문이다.
-```
-	id	select_type	    table		type	  possible_keys	     key		      ref 	                  Extra
-	1	  SIMPLE	        관리자	index	  I_부서번호	        I_부서번호		null	                  Using index; Using temporary; Using filesort
-	1	  SIMPLE	        매핑		ref	    PRIMARY,I_부서번호	I_부서번호		tuning.관리자.부서번호	 Using index
-```
-```
-When MySQL accesses table2 using an index from table1 to perform the join, it often categorizes this access method as "ref" in the execution plan. 
-```
-
-- 데이터를 가져오는 것은 세 가지 방식이 있다.
-```
-table scan. 무조건 full scan이다.
-index scan. index range scan이거나, index full scan이거나. index only scan이거나.
-index lookup. driven table의 join에서만 쓰는 driving table의 index를 reference 삼아 가져오기 
-```
-
-- index scan은 세부적으로 몇 개로 나뉜다.
-```
-index range scan
-index full scan
-index only scan(=covering index)
-Index Skip Scan(loose index scan)
-Index Merge Scan
-Index Condition Pushdown
-```
-```
-Table Scan with Indexed Lookup: One table is scanned (using a full table scan or index scan), while the other table uses an index to perform lookups based on values from the scanned table. In this case, the scanned table would have a type of "ALL" or "index" in the execution plan, while the other table could have a type of "ref."
-
-Indexed Lookup with Indexed Lookup: Both tables use indexes to perform lookups based on the join condition. This can happen when both tables have suitable indexes, and MySQL can perform indexed lookups efficiently on both sides of the join. In this case, both tables could have a type of "ref" in the execution plan.
-
-Table Scan with Table Scan: In some cases, MySQL might resort to full table scans for both tables if no suitable indexes exist or if the optimizer determines that scanning the entire table is more efficient than using available indexes. In this scenario, both tables could have a type of "ALL" in the execution plan.
-```
-
-- FROM 절에서 부서사원_매핑 table의 데이터를 가져올 때 부서번호 데이터를 미리 중복 제거한다. 이제 가벼워졌습니다.
-- 그리고 조건문도 더 가볍게 데이터의 존재여부만 판단합니다. WHERE EXISTS를 씁니다.
-```sql
-SELECT 매핑.부서번호
-FROM ( SELECT DISTINCT 부서번호
-        FROM 부서사원_매핑 매핑
-        ) 매핑
-WHERE EXISTS ( SELECT 1
-                FROM 부서관리자 관리자
-                WHERE 부서번호 = 매핑.부서번호)
-ORDER BY 매핑.부서번호;
-```
-```
-| id | select_type | table      | partitions | type  | possible_keys         | key          | key_len | ref                    | rows | filtered | Extra                                                  |
-|----|-------------|------------|------------|-------|-----------------------|--------------|---------|------------------------|------|----------|--------------------------------------------------------|
-| 1  | PRIMARY     | 관리자     |            | index | I_부서번호             | I_부서번호     | 12     |                        | 24   | 37.50    | Using index; Using temporary; Using filesort; LooseScan |
-| 1  | PRIMARY     | <derived2> |            | ref   | <auto_key0>           | <auto_key0>  | 12      | tuning.관리자.부서번호  | 2    | 100.00   | Using index                                            |
-| 2  | DERIVED     | 매핑       |            | range | PRIMARY,I_부서번호     | I_부서번호     | 12     |                        | 9    | 100.00   | Using index for group-by                               |
-```
-
-## <span style="color:#802548">_매칭_</span>
-- table과 table 간의 관계를 filtering 조건으로 걸고 싶다면?
-- 그럴 때 상수로 wherer column = "해당상수";로 하면 해당상수가 바뀌면 망한다.
-- 그러한 이유로 상관서브쿼리를 활용한 매칭을 실행한다. 구체적 예시를 살펴보자.
-
-- Address2 table에 있는 이름에 한해서 Address에서 이름을 찾게 한다. 이걸 상수로 했다면? 매번 바꿔야하니 끔찍했을 것이다.
-```sql
-SELECT name
-    FROM Address
-    WHERE name in (SELECT name FROM Address2)
-```
-
-- 매칭은 위와 같이 상관 서브쿼리와 같이 쓰이는 경우가 흔하다.
-- in보다는 exists가 성능이 더 좋은 경우가 많으니 가능하다면 exists를 활용해보자.
-```sql
-SELECT name
-FROM customers c
-WHERE EXISTS (
-    SELECT 1
-    FROM orders o
-    WHERE o.customer_id = c.customer_id
-    AND o.order_date > '2023-01-01' -- Change this to your desired date
-);
+    SELECT employee_no
+        FROM salary
+        WHERE employee_no BETWEEN 10001 AND 50000
+        GROUP BY employee_no
+        LIMIT 150,10
+    ) salary
+INNER JOIN employee
+ON employee.employee_no = salary.employee_no;
 ```
 
 
 ## <span style="color:#802548">_case-when_</span>
+- 以下のような要件があったと仮定してみましょう
 
-
-- 마찬가지로 UNION ALL만이 아니라 UNION도 줄일 수 있다.
-```sql
-SELECT prefecture, SUM(pop_men) AS pop_men, SUM(pop_wom) AS pop_wom
-FROM    ( 
-        SELECT prefecture, pop AS pop_men, null AS pop_wom
-            FROM Population
-            WHERE sex = '1'
-
-        UNION
-
-        SELECT prefecture, NULL AS pop_men, pop AS pop_wom
-            FROM Population
-            WHERE sex = '2'
-        ) TMP
-GROUP BY prefecture;
 ```
+1 team: Output employee_first_name
+2 teams: Output "Dual assignment"
+3+ teams: Output "Multiple assignments"
+```
+
+- Unionを使うのが一番実装しやすい
+- 一番先のQueryでMax（Team）になったのは、GROUPBYを使っているためだ
+- ただし、定数のStringには結果がいつでも同一に担保されるため、Maxが要らない
+- Columnは１つのレコードじゃなく、いろんなチームがある可能性があるため、Maxが要る
+- つまり、１：Nの場合があるからColumnにはMaxが必要だ
 
 ```sql
-select 
-        prefacture, 
-        SUM(CASE WHEN sex ='1' THEN pop ELSE 0 END) AS pop_men, 
-        SUM(CASE WHEN sex ='2' THEN pop ELSE 0 END) AS pop_wom
-FROM Population
-GROUP BY prefecture;
-```
-
-- CASE WHEN을 사용하는 또다른 예제를 살펴보자.
-- 요구조건은 아래와 같다.
-```
-소속팀이 1개라면 해당 직원은 팀의 이름을 그대로 출력한다
-소속팀이 2개라면 해당 직원은 2개 직무를 겸무라는 문자열을 출력한다
-소속팀이 3개이상이면 해당 직원은 3개이상을 겸무라는 문자열을 출력한다
-```
-
-- 절차지향으로 짠다면 아래와 같이 짤지도 모른다.
-```sql
-SELECT emp_name,
-        max(team) AS TEAM /* team이 아니라 max(team)인 이유는 바로 GROUP BY에 쓰인 column이 있기 때문이다. 집약구가 들어가면, 집약구에 있어야만 select에서 온전히 쓸 수 있다. 그게 아니면 MAX와 같이 집약 함수와 같이 써야 한다.*/
+SELECT emp_name, max(team) AS TEAM 
 FROM Employees
 GROUP BY emp_name
 HAVING COUNT(*) = 1
@@ -542,7 +330,7 @@ HAVING COUNT(*) = 1
 UNION
 
 SELECT emp_name,
-        '2개를 겸무' AS TEAM
+        'Dual assignment' AS TEAM
 FROM Employees
 GROUP BY emp_name
 HAVING COUNT(*) = 2
@@ -550,38 +338,29 @@ HAVING COUNT(*) = 2
 UNION
 
 SELECT emp_name,
-        '3개 이상을 겸무' AS TEAM
+        'Multiple assignments' AS TEAM
 FROM Employees
 GROUP BY emp_name
 HAVING COUNT(*) >= 3;
 ```
 
-- 매우 심각하게 부담이 가는 실행 계획이다. table full scan을 3번이나 한다. 줄여놓자.
-- 아래와 같이 바꿔보자.  안타깝게도 이건 불가능하다. 
-- emp_name으로 group을 나누지 않으면 relation인 Employees의 모든 row를 count하기 때문이다.
-```sql
-SELECT case when count(emp_name) = 1 then team
-		when count(emp_name) = 2 then '2개를 겸무'
-		when count(emp_name) >= 3 then '3개를 겸무' END AS team
-FROM Employees  
-```
+- ただし、Unionはテーブル読みが増えるため、Case-Whenを使って性能を改善する
+- COUNT(*)は COUNT(1)と同一で、COUNT (emp_name)と違ってNullも含めて数える
 
-
-- 아래와 같이 GROUP BY를 써줘야 한다. 그리고 GROUP By에 안 썼는데, select에 쓰려면 MAX와 같은 집약함수를 써야만 한다.
 ```sql
-SELECT 직원이름,   
+SELECT emp_name, 
         CASE 
-             WHEN COUNT(*) = 1 THEN MAX(team) /* select로 선택한 field가 한개이기 때문에 COUNT(*)는 emp_name이 몇개인지 세는 형태로 진행된다. 다만 COUNT (emp_name)과 다르게 null도 포함해 센다. COUNT(*)와 COUNT(1)은 동일 */
-             WHEN COUNT(*) = 2 THEN '2개를 겸무'
-             WHEN COUNT(*) = 3 THEN '3개를 겸무'
+             WHEN COUNT(*) = 1 THEN MAX(team) 
+             WHEN COUNT(*) = 2 THEN 'Dual assignment'
+             WHEN COUNT(*) = 3 THEN 'Multiple assignments'
         END AS team
 FROM Employees
-GROUP BY 직원이름;
+GROUP BY emp_name;
 ```
 
-- sum, count, avg, max, min가 표준 집약 함수다.
-- 이들을 이용해서 union으로는 합칠 수 없는 값을 합쳐서 나타낼 수 있다.
-- union은 field의 갯수가 다르면 합칠수가 없다.
+- Case-Whenはいろんな値を合わせて見せるときにも使える
+- 以下は実行ができないSQLだ
+
 ```sql
 SELECT id, data_1, data_2
 FROM NonAggTbl
@@ -604,21 +383,8 @@ AND data_type ='C'
 ```
 
 
-- 따라서 CASE WHEN을 사용해서 합친다.
-```sql
-SELECT id,
-        CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_1,
-        CASE WHEN data_type ='A' THEN data_2 ELSE NULL END AS data_2,
-        CASE WHEN data_type ='B' THEN data_3 ELSE NULL END AS data_3,
-        CASE WHEN data_type ='B' THEN data_4 ELSE NULL END AS data_4,
-        CASE WHEN data_type ='B' THEN data_5 ELSE NULL END AS data_5,
-        CASE WHEN data_type ='C' THEN data_6 ELSE NULL END AS data_6,
-FROM NonAggTbl
-GROUP BY id;
-```
+- CASEーWHENを使えば、実行できるようになる
 
-- 하지만 오류가 난다. GROUP BY에 data_1을 적어놓지 않았기 때문이다.
-- 그렇기에 MAX로 감싸준다.
 ```sql
 SELECT id,
         MAX(CASE WHEN data_type ='A' THEN data_1 ELSE NULL END AS data_1),
@@ -633,23 +399,26 @@ GROUP BY id;
 
 
 ## <span style="color:#802548">_window function_</span>
-- 이제 반복을 표현하는 다른 방법을 살펴보자.
-- 그럼 위의 sql보다 좀 더 복잡한 포장계는 어떻게 구성될까?
-- 흔한 방법 중에 서브쿼리 혹은 case-when + window function이 있다.
-- 직전회사명과 직전매상을 검색한다고 해보자. 서브쿼리로는 아래와 같다.
+- 会社で売り上げが発生した直前年度とその売り上げを探してと言われた
+- それでこういうSubqueryを作成した
 
 ```sql
 SELECT compnay,
         year,
         sale,
-        CASE SIGN(sale -(SELECT sale /** 직전 연도의 매상 선택 */
+        CASE SIGN(sale -(
+                            SELECT sale /** 直前年度の売上を選ぶ */
                             FROM Sales SL2
                             WHERE SL1.company = SL2.company
-                            AND SL2.year = /**직전 연도 선택 */
-                            (SELECT MAX(year)
+                            AND SL2.year = /**直前年度を選ぶ */
+                            (
+                                SELECT MAX(year)
                                 FROM Sales SL3
-                            WHERE SL1.company = SL3.company
-                            AND SL1.year > SL3.year )))
+                                WHERE SL1.company = SL3.company
+                                AND SL1.year > SL3.year 
+                            )
+                        )
+                    )
         WHEN 0 THEN = '='
         WHEN 1 THEN = '+'
         WHEN -1 THEN = '-'
@@ -657,19 +426,22 @@ SELECT compnay,
 FROM Sales;
 ```
 
-- 아래는 window function을 쓴 예시다.
-- 왜 MAX를 사용해야 할까? 사실 sql의 resultSet에 영향을 미치는 것은 없다.
-- 그저 MAX 같은 집약, 랭킹 등의 함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
-  - 그러한 함수로는 count, max, min, avg, sum, rank, row_number, lag, lead 등이 있다.
+- 上のSubqueryは3重複になるため、数知らずに内部でTable/Index Scanが行われてしまう
+- それを回避してたった1つのScanで済ませられるのがこのWindow Functionだ
+- しかも（Company, yaer)のIndexがある場合、ソートすら要らなくなる
+
 ```sql
 SELECT company,
         year,
         sale,
         CASE SIGN(sale - MAX(sale)
-                            OVER (PARTITION BY company
+                            OVER (
+                                    PARTITION BY company
                                     ORDER BY year
                                     ROWS BETWEEN 1 PRECEDING
-                                            AND 1 PRECEDING))
+                                    AND 1 PRECEDING
+                                )
+                )
             WHEN 0 THEN '='
             WHEN 1 THEN '+'
             WHEN -1 THEN '-'
@@ -677,15 +449,18 @@ SELECT company,
 FROM Sales;
 ```
 
-- 위의 함수는 lag를 사용하면 아래와 같이 간단하게 바뀐다.
+- 上のMaxOver（）よりはLagという簡単なWindow Functionを使うと良い
+
 ```sql
 SELECT company,
         year,
         sale,
         CASE SIGN(sale - lag(sale)
-                            OVER (PARTITION BY company
+                            OVER (
+                                    PARTITION BY company
                                     ORDER BY year
-                                    ))
+                                )
+                )
             WHEN 0 THEN '='
             WHEN 1 THEN '+'
             WHEN -1 THEN '-'
@@ -696,7 +471,8 @@ FROM Sales;
 
 
 - 상관 서브쿼리는 window 함수의 PARTITION BY와 ORDER BY와 같은 기능을 한다.
-- 그러나 성능이 문제다. 실행계획이 변동한다는 것도 리스크다.
+- 그러나 employee_last_name능이 문제다. 실행계획이 변동한다는 것도 리스크다.
+
 ```sql
 SELECT company,
         year,
@@ -721,6 +497,7 @@ FROM Sales S1;
 - window function을 사용하면 아래와 같이 단순하게 바꿀 수 있다.
 - 왜 MAX를 사용해야 할까? MAX같은 집약함수없이 OVER와 같은 winodw function을 사용하면 오류가 나기 때문이다.
   - 그러한 함수로는 count, max, min, avg, sum, rank, row_number, lag, lead 등이 있다.
+
 ```sql
 SELECT company,
         year,
@@ -742,6 +519,7 @@ FROM Sales;
 - 포장계 sql의 다른 예시를 살펴보자.
 - 우편번호가 가장 유사한 것을 얻어오는 SQL을 반복문으로 짜본다고 해보자.
 - 그럼 5번을 반복해야 할 것이다.
+
 ```sql
 SELECT pcode
 FROM Address
@@ -773,7 +551,7 @@ WHERE pcode = '2%';
 ```
 
 - select를 무려 7번이나 실행한다.
-- 이건 성능에 매우 좋지 않다. 특히 데이터가 커질수록 말이다.
+- 이건 employee_last_name능에 매우 좋지 않다. 특히 데이터가 커질수록 말이다.
 - 포장계로 바꿔주자.
 
 ```sql
@@ -796,6 +574,7 @@ WHERE CASE WHEN pcode = '20178' TEHN 0
 ```
 
 - table full scan을 두 번 떄리고 있다.
+
 ```
 Id          |Operation          |Name
 0           |SELECT SSTATEMENT  
@@ -807,6 +586,7 @@ Id          |Operation          |Name
 - SELECT 절에 index가 새겨진 field만 담았다면, 아래와 같은 실행계획이 나온다.
 - 이른바  Oracle에서INDEX FAST FULL SCAN이다.
 - 다만 이 접근은 select가 가져올 field가 모두 index가 있을 때만 사용가능하다.
+
 ```
 Id          |Operation              |Name
 0           |SELECT SSTATEMENT  
@@ -818,6 +598,7 @@ Id          |Operation              |Name
 
 
 - window function을 이용하면 table full scan을 한번으로 줄일 수 있다.
+
 ```sql
 SELECT pcode,
         district_name,
@@ -848,6 +629,7 @@ WHERE hit_code = min_code;
 - table full scan이 1회 줄어들었다. 다만 동시에 정렬이 추가로 사용됐다.
 - 하지만 table 크기가 크다면 table full scan을 줄이는 게 훨씬 나은 선택이다.
 - SELECT가 2개여도 table scan이 1회인 이유는 window function을 보고 optimizer가 최적화했기 때문이다.
+
 ```
 Id          |Operation              |Name
 0           |SELECT STATEMENT  
@@ -859,7 +641,7 @@ Id          |Operation              |Name
 
 ## <span style="color:#802548">_record에 순번 붙이기 심화_</span>
 - 중앙 값을 구하려고 한다면, 모집합을 상위와 하위로 분할한다.
-- 다만 아래 sql은 복잡해서 이해하기 어렵고, 성능도 나쁘다.
+- 다만 아래 sql은 복잡해서 이해하기 어렵고, employee_last_name능도 나쁘다.
 
 ```sql
 SELECT AVG(weight)
@@ -928,7 +710,7 @@ GROUP BY N1.num
 HAVING(N1.num + 1) < MIN(N2.num);
 ```
 
-- 위의 쿼리를 절차 지향으로 바꾸면 성능이 개선된다.
+- 위의 쿼리를 절차 지향으로 바꾸면 employee_last_name능이 개선된다.
 - 결합을 사용하지 않고, 테이블 스캔도 한번만 발생한다.
 ```sql
 SELECT num + 1 AS gap_start,
@@ -957,7 +739,7 @@ SELECT num + 1 AS gap_start,
 WHERE diff <> 1;
 ```
 
-- 테이블에 존재하는 시퀀스 구하기는 집합 지향이나, 절차 지향이나 모두 성능이 비슷하다.
+- 테이블에 존재하는 시퀀스 구하기는 집합 지향이나, 절차 지향이나 모두 employee_last_name능이 비슷하다.
 - 그러나 절차 지향으로 쓰면 쿼리가 너무 길어지므로 집합 지향으로 쓰자.
 ```sql
 SELECT MIN(num) AS low,
@@ -1133,7 +915,7 @@ select brand, sale_date, price,
 from Stocks S2;
 ```
 
-- 물론 sort by를 생략한다고 해서 아래와 같이 복잡하게 쓴다면 성능이 좋지 않을 것이다.
+- 물론 sort by를 생략한다고 해서 아래와 같이 복잡하게 쓴다면 employee_last_name능이 좋지 않을 것이다.
 - 해당 장비구분코드에 맞는 equipment_no와 최종change_date, 순번을 알아오기 위한 코드인데, 꽤나 복잡하다.
 
 ```sql
@@ -1279,7 +1061,7 @@ WHERE 장비구분코드 = 'A001'
 
 - 단순한 쿼리를 위해 전통적으로는 아래와 같이 썼다.
 - INDEX_DESC라 인덱스를 역순으로 읽는것이고, 첫 레코드에서 바로 멈춘다.
-- 다만 아래와 같은 방법은 index 구성이 완벽해야 한다.
+- 다만 아래와 같은 방법은 index 구employee_last_name이 완벽해야 한다.
 ```sql
 SELECT equipment_no, 장비명
       , SUBSTR(최종이력, 1, 8) 최종change_date
@@ -1426,7 +1208,7 @@ join하면 주문 수만큼 data가 늘어남.
 2. 주문 테이블 (o)주문ID: 101 / 고객ID: 1 (김철수가 첫 번째 주문)주문ID: 102 / 고객ID: 1 (김철수가 두 번째 주문)주문ID: 103 / 고객ID: 1 (김철수가 세 번째 주문)
 (아 고객ID는 1개인데 조인결과 3개로 늘어남)
 
-이러한 중복의 가능성을 없애려면 distinct가 필요한데, order by 연산추가됨
+이러한 중복의 가능employee_last_name을 없애려면 distinct가 필요한데, order by 연산추가됨
 따라서 exists를 사용
 
 SELECT c.고객ID, c.고객명 
@@ -1443,7 +1225,7 @@ EXISTS는 해당 고객이 주문을 단 한 건이라도 했는지 확인하는
 
 
 
-내부 동작 원리 (왜 빠를까?)DB 엔진은 orders 테이블의 인덱스를 타고 최신 주문 딱 10건만 먼저 뽑아냅니다.이제 화면에 내보낼 준비가 된 10개의 행에 대해서만 SELECT 절의 스칼라 서브쿼리가 실행됩니다.customers 테이블이 아무리 수천만 건에 달하는 대용량 테이블이더라도, 고작 10번만 인덱스로 콕콕 찔러서(Unique Index Scan) 이름을 가져오고 끝납니다.전체 쿼리는 거의 0.001초 만에 종료됩니다
+내부 동작 원리 (왜 빠를까?)DB 엔진은 orders 테이블의 인덱스를 타고 최신 주문 딱 10건만 먼저 뽑아냅니다.이제 화면에 내보낼 준비가 된 10개의 행에 대해서만 SELECT 절의 스칼라 서브쿼리가 실행됩니다.customers 테이블이 아무리 수천만 건에 달하는 대용량 테이블이더라도, 고작 10번만 인덱스로 콕콕 찔러서(Unique Index Scan) employee_first_name을 가져오고 끝납니다.전체 쿼리는 거의 0.001초 만에 종료됩니다
 
 
 ```sql
@@ -1475,7 +1257,7 @@ LIMIT 10;
 ```
 
 FROM절 서브쿼리(인라인 뷰)를 활용한 페이징 조인 튜닝 방식입니다.
-완벽한 데이터 압축: DB는 우선 가장 안쪽에 있는 서브쿼리(①번 블록)를 실행합니다. 인덱스를 타고 최신 주문 딱 10건만 가상 테이블(메모리)에 올립니다. 이 시점에서 데이터양은 100만 건에서 10건으로 압축됩니다.최소한의 조인 연산: 밖으로 나와서 customers 테이블과 조인을 시도할 때, 조인 대상이 고작 10건밖에 안 되기 때문에 customers 테이블이 1억 건이든 10억 건이든 상관없이 딱 10번만 인덱스로 콕 찔러서 이름을 가져옵니다.스칼라 서브쿼리와의 차이점 (유지보수의 절대적 우위): 만약 고객의 이름(name)뿐만 아니라 고객의 등급(grade), 연락처(phone) 등 여러 개의 컬럼을 한 번에 화면에 뿌려야 한다면, 스칼라 서브쿼리는 SELECT 절에 서브쿼리를 3개나 똑같이 적어야 해서 성능이 저하됩니다. 하지만 이 방식은 c.grade, c.phone을 SELECT 절에 그냥 적어주기만 하면 단 한 번의 조인으로 모두 가져올 수 있습니다.
+완벽한 데이터 압축: DB는 우선 가장 안쪽에 있는 서브쿼리(①번 블록)를 실행합니다. 인덱스를 타고 최신 주문 딱 10건만 가상 테이블(메모리)에 올립니다. 이 시점에서 데이터양은 100만 건에서 10건으로 압축됩니다.최소한의 조인 연산: 밖으로 나와서 customers 테이블과 조인을 시도할 때, 조인 대상이 고작 10건밖에 안 되기 때문에 customers 테이블이 1억 건이든 10억 건이든 상관없이 딱 10번만 인덱스로 콕 찔러서 employee_first_name을 가져옵니다.스칼라 서브쿼리와의 차이점 (유지보수의 절대적 우위): 만약 고객의 employee_first_name(name)뿐만 아니라 고객의 등급(grade), 연락처(phone) 등 여러 개의 컬럼을 한 번에 화면에 뿌려야 한다면, 스칼라 서브쿼리는 SELECT 절에 서브쿼리를 3개나 똑같이 적어야 해서 employee_last_name능이 저하됩니다. 하지만 이 방식은 c.grade, c.phone을 SELECT 절에 그냥 적어주기만 하면 단 한 번의 조인으로 모두 가져올 수 있습니다.
 
 ```sql
 SELECT o.order_id,
@@ -1495,14 +1277,14 @@ LEFT JOIN customers c ON c.id = o.customer_id;
 ```
 
 
-성능과 확장성 면에서 "스칼라 서브쿼리는 아예 안 쓰고, 말씀하신 FROM 절 서브쿼리(인라인 뷰) 기반의 페이징 조인을 표준(Default)으로 삼는 것이 맞다"는 판단이 실무적으로 100% 옳습니다. 현대 대규모 시스템을 구축하는 많은 아키텍트와 시니어 개발자들이 실제로 그렇게 가이드를 주고 있습니다.
+employee_last_name능과 확장employee_last_name 면에서 "스칼라 서브쿼리는 아예 안 쓰고, 말씀하신 FROM 절 서브쿼리(인라인 뷰) 기반의 페이징 조인을 표준(Default)으로 삼는 것이 맞다"는 판단이 실무적으로 100% 옳습니다. 현대 대규모 시스템을 구축하는 많은 아키텍트와 시니어 개발자들이 실제로 그렇게 가이드를 주고 있습니다.
 
 
 
 - 상관서브쿼리를 쓴다면 아래와 같이 쓸 수 있다.
 - 해당 서브쿼리가 좋지 않은 이유는, SELECT를 구매 table에서 진행했지만, 서브쿼리를 만나서 한번 더 구매 table을 SCAN해야하기 때문이다.
 - 똑같은 TABLE을 두 번 scan하게 되는 것이다.
-- 또한 상관서브쿼리는 결합과 마찬가지로 데이터양에 따라 실행계획에 변동성이 높다.
+- 또한 상관서브쿼리는 결합과 마찬가지로 데이터양에 따라 실행계획에 변동employee_last_name이 높다.
 
 ```sql
 select cust_id, seq, price
@@ -1567,4 +1349,199 @@ FROM (SELECT cust_id, price,
 WHERE WORK.min_seq = 1
     OR WORK.max_seq = 1
 GROUP BY cust_id;
+```
+
+
+## <span style="color:#802548">_대회 차수별 직전연도를 알려주세요!_</span>
+- 만약 아래와 같은 구조의 테이블이 있다고 해보자.
+```
+연도|       종류|       차수|       대회코드(pk)
+2023|         A|          1|        2023년 A대회 1차
+2023|         A|          2|        2023년 A대회 2차
+2023|         A|          3|        2023년 A대회 3차
+2022|         A|          1|        2022년 A대회 1차
+2022|         A|          2|        2022년 A대회 2차
+1999|         A|          1|        1999년 A대회 1차
+1999|         A|          2|        2023년 A대회 2차
+1999|         A|          3|        2023년 A대회 3차
+2023|         B|          1|        2023년 B대회 1차
+2023|         C|          1|        2023년 C대회 1차
+```
+
+- DDL로 우선 만들어주자.
+```
+CREATE TABLE `대회` (
+  `대회코드` varchar(200) NOT NULL,
+  `차수` varchar(45) DEFAULT NULL,
+  `종류` varchar(45) DEFAULT NULL,
+  `연도` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`대회코드`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3
+```
+
+- 여기서 전시즌의 연도를 보고싶다면 어떻게 쿼리문을 짜야할까?
+- A대회 3차가 2023년에 일어났고, 그전에는 1999년에 있었다면 1999년이 전시즌이다.
+- A대회 2차가 2023년에 일어났고, 그전에는 2022년에 있었다면 2022년이 전시즌이다.
+- B대회 1차가 2023년에 일어났고, 그전에는 없었다면 전시즌은 '없음'이다.
+```
+연도|       종류|       차수|            대회코드(pk)|          전시즌
+2023|         A|          1|        2023년 A대회 1차|           2022
+2023|         A|          2|        2023년 A대회 2차|           2022
+2023|         A|          3|        2023년 A대회 3차|           1999   
+2022|         A|          1|        2022년 A대회 1차|           1999
+2022|         A|          2|        2022년 A대회 2차|           1999
+1999|         A|          1|        1999년 A대회 1차|           없음
+1999|         A|          2|        2023년 A대회 2차|           없음
+1999|         A|          3|        2023년 A대회 3차|           없음
+2023|         B|          1|        2023년 B대회 1차|           없음
+2023|         C|          1|        2023년 C대회 1차|           없음
+```
+
+- 아래와 같이 짤 수 있다. null로 가져오고 싶다면 ELSE만 NULL로 써주면 된다.
+```sql
+SELECT
+    *,
+    CASE
+        WHEN EXISTS (
+            SELECT 1 
+            FROM 대회 t2 
+            WHERE t2.종류 = t1.종류 
+            AND t2.차수 = t1.차수 
+            AND t2.연도 < t1.연도
+        ) THEN (
+            SELECT MAX(연도)
+            FROM 대회 t2 
+            WHERE t2.종류 = t1.종류 
+            AND t2.차수 = t1.차수 
+            AND t2.연도 < t1.연도
+        )
+        ELSE '없음'
+    END AS '전시즌'
+FROM 대회 t1
+ORDER BY 연도 DESC, 종류, 차수;
+```
+
+- subquery로 바꾸면 아래와 같다. CASE WHEN을 쓰는 습관을 들이는 게 더 좋긴 하지만, 이 경우에는 아니다.
+- subquery가 더 직관적이면서 실행계획도 더 낫다.
+```sql
+SELECT
+    *,
+    (SELECT MAX(연도) 
+    FROM your_table t2 
+    WHERE t2.종류 = t1.종류 
+    AND t2.차수 = t1.차수 
+    AND t2.연도 < t1.연도) AS '전시즌'
+FROM your_table t1
+ORDER BY 연도 DESC, 종류, 차수;
+```
+
+- CASE WHEN일 때의 실행계획이다. 
+- 상관 서브쿼리가 2개나 있다.
+```
+1	PRIMARY	            t1		ALL					10	100.00	Using filesort
+3	DEPENDENT SUBQUERY	t2		ALL					10	10.00	Using where
+2	DEPENDENT SUBQUERY	t2		ALL					10	10.00	Using where
+```
+
+- 반면에 명시적으로 서브쿼리를 사용하는 경우다.
+- 상관 서브쿼리가 오히려 1개 줄었다. 성능이 더 좋아진 것이다.
+```
+1	PRIMARY	            t1		ALL					10	100.00	Using filesort
+2	DEPENDENT SUBQUERY	t2		ALL					10	10.00	Using where
+```
+
+
+## <span style="color:#802548">_해당 디바이스 아이디의 고객번호를 찾아주세요!_</span>
+- 서브쿼리를 아래와 같이 쓸 수 있다.
+
+```sql
+select cusno, grdc
+from entry
+where cusno = (
+    select cusno
+    from device
+    where devcId = #{devcId}
+)
+```
+
+- where exists로 검색해야하는 양이 적다면, where exists가 효율성은 더 좋다.
+
+```sql
+select cusno, grdc
+from entry en
+where exists (
+    select 1
+    from device de
+    where devcId = #{devcId}
+    and en.cusno = de.cusno
+)
+```
+
+- 만약 cusno가 entry와 device가 공유하는 컬럼이라면, join으로 가져올 수 있다.
+- 3개 중에는 join이 가장 효율적일 수도 있다.
+```sql
+select en.cusno, en.grdc
+from entry en
+inner join device de
+on en.cusno = de.cusno
+where de.devcId = #{devcId}
+```
+
+## <span style="color:#802548">_해당 디바이스아이디의 고객번호의 비밀번호 오류를 초기화할게요!_</span>
+
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE cusno = (
+    SELECT cusno
+    FROM device
+    WHERE deviceid = #(devcid)
+    AND devcuyn = 'y'
+);
+```
+
+- where exists로 바꾸면 아래와 같이 된다.
+- where exists를 쓰는 이유는 optimizer가 제대로 작동하지 않을 때 더 나은 방식이기 때문이다.
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE EXISTS (
+    SELECT 1
+    FROM device
+    WHERE device.deviceid = #(devcid)
+    AND device.devcuyn = 'y'
+    AND device.cusno = entry.cusno
+);
+```
+
+- devcuyn이 y인 deviceId는 한개 밖에 없다면, 맨 밑의 cusno 조건도 필요없다.
+- 하지만 저 조건을 넣어서 안 타던 index를 탈 수 있다면 넣는게 좋다.
+```sql
+UPDATE entry
+SET stl_pw_acm_err_nt = 0,
+    stl_pw_dd1_err_nt = 0
+WHERE EXISTS (
+    SELECT 1
+    FROM device
+    WHERE device.deviceid = #(devcid)
+    AND device.devcuyn = 'y'
+);
+```
+
+- 참고로 IN문도 WHERE EXIST로 바꿀 수 있다.
+```sql
+SELECT name
+    FROM Address
+    WHERE name in (SELECT name FROM Address2)
+```
+```sql
+SELECT name
+FROM Address AS A
+WHERE EXISTS (
+    SELECT 1
+    FROM Address2 AS A2
+    WHERE A.name = A2.name
+);
 ```
