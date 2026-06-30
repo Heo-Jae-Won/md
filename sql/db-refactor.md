@@ -1022,3 +1022,189 @@ FROM RankedPopups
 -- Discard any records exceeding the threshold restriction ceiling
 WHERE row_num <= 5;
 ```
+
+
+
+## <span style="color:#802548">_파일을 하나만 등록하고 여러곳에서 사용하는 query_</span>
+- 등록해 둔 배너 이미지, 내용을 3개의 다른 곳에서 사용할 수 있게 조회하는 쿼리
+```sql
+select RN as BNNR_DS,
+        BNNR_ST_DTM,
+        BNNR_ED_DTM
+        , CASE WHEN RN = 1
+            THEN '로그인 배너'
+            WHEN RN = 2 
+            THEN '메인 배너'
+            WHEN RN = 3
+            THEN '전체 메뉴 배너'
+            END AS BNNR_DS_NM,
+        BNNM,
+        CASE WHEN RN = 1
+            THEN  BNNR1_IMG_URL
+            WHEN RN = 2
+            THEN BNNR2_IMG_URL
+            WHEN RN = 3
+            THEN BNNR3_IMG_URL
+            END as BNNR_IMG_URL,
+        CASE WHEN RN = 1
+            THEN BNNR_CNTN1
+            WHEN RN = 2
+            THEN BNNR_CNTN2
+            WHEN RN = 3
+            THEN BNNR_CNTN3
+            END as BNNR_CNTN,
+        LK_URL, TYPE, APP_DSC
+        FROM BNNR_INF
+        inner join(select rownum RN from dual connect by rownum <= 3)
+        on to_char(sysdate, 'YYYYMMDDHH24MISS') BETWEEN BNNR_ST_DTM AND BNNR_ED_DTM
+```
+
+
+
+## <span style="color:#802548">_특정 값 먼저노출되게 정렬하는 query_</span>
+- 자기 회사 우선하여 가져오기(여기선 project1)
+```sql
+SELECT UP_C_ID,
+        COMN_C_ID,
+        COMN_CNM,
+        RMK_CNTN,
+        RMK_CNTN2,
+FROM (
+    SELECT UP_C_ID,
+            COMN_C_ID,
+            COMN_CNM,
+            RMK_CNTN1,
+            RMK_CNTN2,
+            CASE COMN_C_ID
+            WHEN 'B1_011' /*모 회사*/
+            THEN RMK_CNTN2 || '01'
+            WHEN 'B1_012'
+            THEN RMK_CNTN2 || '02'
+            WHEN 'B2_012'
+            THEN RMK_CNTN2 || '03'
+            ELSE RMK_CNTN2 || '99'
+            END AS ORDER_NO
+    FROM O_COMMON_CODE
+    WHERE UP_C_ID = 13
+    AND COMN_C_UYN = 'Y'
+) A
+ORDER BY ORDER_NO, COMN_CNM, COMN_C_ID, RMK_CNTN2
+```
+
+- 위에는 굳이 subquery를 썼는데, 사실 subquery를 쓸 필요가 별로 없다.
+- 아래와 같이 그냥 select 문에서 CASE WHEN을 써도 된다.
+```sql
+SELECT UP_C_ID,
+       COMN_C_ID,
+       COMN_CNM,
+       RMK_CNTN1,
+       RMK_CNTN2,
+       CASE COMN_C_ID
+           WHEN 'B1_011' THEN RMK_CNTN2 || '01'
+           WHEN 'B1_012' THEN RMK_CNTN2 || '02'
+           WHEN 'B2_012' THEN RMK_CNTN2 || '03'
+           ELSE RMK_CNTN2 || '99'
+       END AS ORDER_NO
+FROM O_COMMON_CODE
+WHERE UP_C_ID = 13
+  AND COMN_C_UYN = 'Y'
+ORDER BY ORDER_NO, COMN_CNM, COMN_C_ID, RMK_CNTN2;
+```
+
+
+
+## <span style="color:#802548">_서로 다른 내용 합치는 query refactoring_</span>
+- 아래 서브쿼리는 서브쿼리가 아주 깊다.
+- 안내
+```sql
+SELECT
+    DECODE(new_ds, 1, '안내', 2, '혜택') AS new_nm,
+    sub.*
+FROM
+    (
+        SELECT
+            '1' AS new_ds,
+            bbrd_sqno AS new_id,
+            CASE
+                WHEN (TO_CHAR(SYSDATE, 'yyyymmdd') - TO_CHAR(TO_DATE(rg_dtm, 'yyyymmddhh24miss'), 'yyyymmdd')) <= 7 THEN 'y'
+                ELSE 'n'
+            END AS new_yn
+        FROM
+            (
+                SELECT
+                    rg_dtm,
+                    bbrd_sqno
+                FROM
+                    board
+                WHERE
+                    bltn_yn = 'y'
+                    AND TO_CHAR(SYSDATE, 'yyyymmddhh24miss') <= ed_dtm
+                ORDER BY
+                    rg_dtm DESC NULLS LAST
+            )
+        WHERE
+            ROWNUM <= 1
+        UNION ALL
+        SELECT
+            '2' AS new_ds,
+            bbrd_sqno AS new_id,
+            CASE
+                WHEN (TO_CHAR(SYSDATE, 'yyyymmdd') - TO_CHAR(TO_DATE(req_dtm, 'yyyymmddhh24miss'), 'yyyymmdd')) <= 7 THEN 'y'
+                ELSE 'n'
+            END AS new_yn
+        FROM
+            (
+                SELECT
+                    req_dtm
+                FROM
+                    push
+                WHERE
+                    cusno = '10'
+                    AND del_yn = 'n'
+                ORDER BY
+                    req_dtm DESC NULLS LAST
+            )
+        WHERE
+            ROWNUM <= 1
+    ) sub;
+```
+
+- 위의 서브쿼리를 아래와 같이 window function을 이용해 단순하게 만들자.
+- 그리고 WITH까지 사용하면 매우 깔끔해진다.
+```java
+WITH board_cte AS (
+    SELECT
+        bbrd_sqno AS new_id,
+        TO_DATE(rg_dtm, 'yyyymmddhh24miss') AS rg_date,
+        ROW_NUMBER() OVER (ORDER BY rg_date DESC NULLS LAST) AS rn_board
+    FROM
+        board
+    WHERE
+        bltn_yn = 'y'
+        AND TO_CHAR(SYSDATE, 'yyyymmddhh24miss') <= ed_dtm
+),
+push_cte AS (
+    SELECT
+        bbrd_sqno AS new_id,
+        TO_DATE(req_dtm, 'yyyymmddhh24miss') AS req_date,
+        ROW_NUMBER() OVER (ORDER BY req_date DESC NULLS LAST) AS rn_push
+    FROM
+        push
+    WHERE
+        cusno = '10'
+        AND del_yn = 'n'
+)
+SELECT
+    DECODE(new_ds, 1, '안내', 2, '혜택') AS new_nm,
+    sub.*
+FROM
+    (
+        SELECT '1' AS new_ds, new_id, CASE WHEN rg_date >= SYSDATE - 7 THEN 'y' ELSE 'n' END AS new_yn
+        FROM board_cte WHERE rn_board = 1
+
+        UNION ALL
+
+        SELECT '2' AS new_ds, new_id, CASE WHEN req_date >= SYSDATE - 7 THEN 'y' ELSE 'n' END AS new_yn
+        FROM push_cte WHERE rn_push = 1
+    ) sub;
+```
